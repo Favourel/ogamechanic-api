@@ -23,7 +23,6 @@ cron_descriptor==2.0.6
 cryptography==45.0.5
 Django==4.2.23
 django-anymail==10.3
-django-auth-ldap==4.8.0
 django-axes==6.5.2
 django-celery-beat==2.8.1
 django-cors-headers==4.7.0
