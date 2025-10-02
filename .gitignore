@@ -58,6 +58,4 @@ ogamechanic-bbbb2-firebase-adminsdk-fbsvc-b5ecd1c17d.json
 
 *.md
 
-build.sh
 render-build.sh
-render.yaml

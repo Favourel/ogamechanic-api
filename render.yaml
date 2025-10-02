@@ -1,0 +1,271 @@
+services:
+  # PostgreSQL Database
+  - type: pserv
+    name: ogamechanic-db
+    plan: starter
+    databaseName: ogamechanic_prod
+    user: ogamechanic_user
+
+  # Redis Cache
+  - type: redis
+    name: ogamechanic-redis
+    plan: starter
+
+  # Web Service
+  - type: web
+    name: ogamechanic-web
+    env: python
+    plan: starter
+    buildCommand: ./build.sh
+    startCommand: gunicorn ogamechanic.wsgi:application --bind 0.0.0.0:$PORT
+    healthCheckPath: /api/health/
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: env
+        value: "prod"
+      - key: DJANGO_SETTINGS_MODULE
+        value: "ogamechanic.settings.prod"
+      - key: ALLOWED_HOSTS
+        value: "ogamechanic-web.onrender.com"
+      - key: X_API_KEY
+        generateValue: true
+      - key: CORS_ALLOWED_ORIGINS
+        value: "https://your-frontend-domain.com"
+      - key: FRONTEND_URL
+        value: "https://your-frontend-domain.com"
+      - key: EMAIL_HOST
+        value: "smtp.gmail.com"
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_PUBLIC_KEY
+        sync: false
+      - key: PAYSTACK_CALLBACK_URL
+        value: "https://ogamechanic-web.onrender.com/api/payments/callback/"
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: FIREBASE_CREDENTIALS_PATH
+        value: "/opt/render/project/src/ogamechanic-bbbb2-firebase-adminsdk-fbsvc-b5ecd1c17d.json"
+      - key: BASE_FARE
+        value: "500"
+      - key: PER_KM_RATE
+        value: "150"
+      - key: PER_MIN_RATE
+        value: "25"
+      - key: CACHE_TIMEOUT_SHORT
+        value: "300"
+      - key: CACHE_TIMEOUT_MEDIUM
+        value: "1800"
+      - key: CACHE_TIMEOUT_LONG
+        value: "3600"
+      - key: CACHE_TIMEOUT_VERY_LONG
+        value: "86400"
+    # Database connection
+    - key: DB_NAME
+      fromDatabase:
+        name: ogamechanic-db
+        property: database
+    - key: DB_USER
+      fromDatabase:
+        name: ogamechanic-db
+        property: user
+    - key: DB_PASSWORD
+      fromDatabase:
+        name: ogamechanic-db
+        property: password
+    - key: DB_HOST
+      fromDatabase:
+        name: ogamechanic-db
+        property: host
+    - key: DB_PORT
+      fromDatabase:
+        name: ogamechanic-db
+        property: port
+    # Redis connection
+    - key: REDIS_HOST
+      fromService:
+        type: redis
+        name: ogamechanic-redis
+        property: host
+    - key: REDIS_PORT
+      fromService:
+        type: redis
+        name: ogamechanic-redis
+        property: port
+    - key: REDIS_DB
+      value: "0"
+
+  # Celery Worker
+  - type: worker
+    name: ogamechanic-worker
+    env: python
+    plan: starter
+    buildCommand: ./build.sh
+    startCommand: celery -A ogamechanic worker --loglevel=info --concurrency=2
+    envVars:
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: ogamechanic-web
+          envVarKey: SECRET_KEY
+      - key: DEBUG
+        value: "False"
+      - key: env
+        value: "prod"
+      - key: DJANGO_SETTINGS_MODULE
+        value: "ogamechanic.settings.prod"
+      - key: X_API_KEY
+        fromService:
+          type: web
+          name: ogamechanic-web
+          envVarKey: X_API_KEY
+      - key: PAYSTACK_SECRET_KEY
+        fromService:
+          type: web
+          name: ogamechanic-web
+          envVarKey: PAYSTACK_SECRET_KEY
+      - key: PAYSTACK_PUBLIC_KEY
+        fromService:
+          type: web
+          name: ogamechanic-web
+          envVarKey: PAYSTACK_PUBLIC_KEY
+      - key: GOOGLE_MAPS_API_KEY
+        fromService:
+          type: web
+          name: ogamechanic-web
+          envVarKey: GOOGLE_MAPS_API_KEY
+      - key: FIREBASE_CREDENTIALS_PATH
+        value: "/opt/render/project/src/ogamechanic-bbbb2-firebase-adminsdk-fbsvc-b5ecd1c17d.json"
+      - key: BASE_FARE
+        value: "500"
+      - key: PER_KM_RATE
+        value: "150"
+      - key: PER_MIN_RATE
+        value: "25"
+      - key: EMAIL_HOST
+        value: "smtp.gmail.com"
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_HOST_USER
+        fromService:
+          type: web
+          name: ogamechanic-web
+          envVarKey: EMAIL_HOST_USER
+      - key: EMAIL_HOST_PASSWORD
+        fromService:
+          type: web
+          name: ogamechanic-web
+          envVarKey: EMAIL_HOST_PASSWORD
+      - key: DEFAULT_FROM_EMAIL
+        fromService:
+          type: web
+          name: ogamechanic-web
+          envVarKey: DEFAULT_FROM_EMAIL
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: ogamechanic-web
+          envVarKey: FRONTEND_URL
+    # Database connection
+    - key: DB_NAME
+      fromDatabase:
+        name: ogamechanic-db
+        property: database
+    - key: DB_USER
+      fromDatabase:
+        name: ogamechanic-db
+        property: user
+    - key: DB_PASSWORD
+      fromDatabase:
+        name: ogamechanic-db
+        property: password
+    - key: DB_HOST
+      fromDatabase:
+        name: ogamechanic-db
+        property: host
+    - key: DB_PORT
+      fromDatabase:
+        name: ogamechanic-db
+        property: port
+    # Redis connection
+    - key: REDIS_HOST
+      fromService:
+        type: redis
+        name: ogamechanic-redis
+        property: host
+    - key: REDIS_PORT
+      fromService:
+        type: redis
+        name: ogamechanic-redis
+        property: port
+    - key: REDIS_DB
+      value: "0"
+
+  # Celery Beat Scheduler
+  - type: worker
+    name: ogamechanic-beat
+    env: python
+    plan: starter
+    buildCommand: ./build.sh
+    startCommand: celery -A ogamechanic beat --loglevel=info
+    envVars:
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: ogamechanic-web
+          envVarKey: SECRET_KEY
+      - key: DEBUG
+        value: "False"
+      - key: env
+        value: "prod"
+      - key: DJANGO_SETTINGS_MODULE
+        value: "ogamechanic.settings.prod"
+      - key: X_API_KEY
+        fromService:
+          type: web
+          name: ogamechanic-web
+          envVarKey: X_API_KEY
+    # Database connection
+    - key: DB_NAME
+      fromDatabase:
+        name: ogamechanic-db
+        property: database
+    - key: DB_USER
+      fromDatabase:
+        name: ogamechanic-db
+        property: user
+    - key: DB_PASSWORD
+      fromDatabase:
+        name: ogamechanic-db
+        property: password
+    - key: DB_HOST
+      fromDatabase:
+        name: ogamechanic-db
+        property: host
+    - key: DB_PORT
+      fromDatabase:
+        name: ogamechanic-db
+        property: port
+    # Redis connection
+    - key: REDIS_HOST
+      fromService:
+        type: redis
+        name: ogamechanic-redis
+        property: host
+    - key: REDIS_PORT
+      fromService:
+        type: redis
+        name: ogamechanic-redis
+        property: port
+    - key: REDIS_DB
+      value: "0"
