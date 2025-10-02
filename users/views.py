@@ -3727,11 +3727,11 @@ class StepByStepRegistrationView(APIView):
                         "step_2_driver_sub_role": {
                              "sub_role": "driver"
                         },
-                        "step_2_driver_info": { "email": "driver@example.com", "phone_number": "08012345678", "city": "Lagos" }, 
-                        "step_2_merchant_mechanic": { "first_name": "Jane", "last_name": "Smith", "email": "jane@example.com", "phone_number": "08087654321" }, 
+                        "step_2_driver_info": {"email": "driver@example.com", "phone_number": "08012345678", "city": "Lagos" }, # noqa
+                        "step_2_merchant_mechanic": {"first_name": "Jane", "last_name": "Smith", "email": "jane@example.com", "phone_number": "08087654321" },  # noqa
                         "step_3": {
                             "email": "john@example.com", 
-                            "verification_code": "123456" }, 
+                            "verification_code": "123456" },  # noqa
                         "step_4_primary_user": {
                             "has_car": True, "car_make": "Toyota", 
                             "car_model": "Corolla", "car_year": 2020, 
@@ -3740,9 +3740,9 @@ class StepByStepRegistrationView(APIView):
                         # For step_4_driver, step_4_merchant, step_4_mechanic: # All image/file fields must be sent as file uploads in multipart/form-data # noqa 
                         "step_4_driver": {
                             "full_name": "John Driver", 
-                            "date_of_birth": "1990-01-01", "gender": "male", "address": "123 Street", "location": "Lagos", "license_number": "LIC123", "license_issue_date": "2015-01-01", "license_expiry_date": "2025-01-01", "license_front_image": "(file upload)", "license_back_image": "(file upload)", "vin": "VIN123", "vehicle_name": "Toyota", "plate_number": "ABC123", "vehicle_model": "Corolla", "vehicle_color": "Red", "vehicle_photo_front": "(file upload)", "vehicle_photo_back": "(file upload)", "vehicle_photo_right": "(file upload)", "vehicle_photo_left": "(file upload)", "bank_name": "GTBank", "account_number": "0123456789" }, 
-                        "step_4_merchant": { "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", "selfie": "(file upload)" }, "step_4_mechanic": { "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", "selfie": "(file upload)", "vehicle_make_ids": [1, 2], "expertise_details": [ { "vehicle_make_id": 1, "years_of_experience": 5, "certification_level": "advanced" }, { "vehicle_make_id": 2, "years_of_experience": 2, "certification_level": "basic" } ] }, 
-                        "step_5": { "password": "strongpassword", "confirm_password": "strongpassword" } 
+                            "date_of_birth": "1990-01-01", "gender": "male", "address": "123 Street", "location": "Lagos", "license_number": "LIC123", "license_issue_date": "2015-01-01", "license_expiry_date": "2025-01-01", "license_front_image": "(file upload)", "license_back_image": "(file upload)", "vin": "VIN123", "vehicle_name": "Toyota", "plate_number": "ABC123", "vehicle_model": "Corolla", "vehicle_color": "Red", "vehicle_photo_front": "(file upload)", "vehicle_photo_back": "(file upload)", "vehicle_photo_right": "(file upload)", "vehicle_photo_left": "(file upload)", "bank_name": "GTBank", "account_number": "0123456789" },  # noqa
+                        "step_4_merchant": { "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", "selfie": "(file upload)" }, "step_4_mechanic": { "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", "selfie": "(file upload)", "vehicle_make_ids": [1, 2], "expertise_details": [ { "vehicle_make_id": 1, "years_of_experience": 5, "certification_level": "advanced" }, { "vehicle_make_id": 2, "years_of_experience": 2, "certification_level": "basic" } ] },  # noqa
+                        "step_5": { "password": "strongpassword", "confirm_password": "strongpassword" }  # noqa
                     }
                 )
             },

@@ -21,6 +21,7 @@ class Category(models.Model):
 
 
 class Product(models.Model):
+    # Use uuid.uuid7 if available, else fallback to uuid4
     try:
         id = models.UUIDField(
             primary_key=True,
@@ -33,6 +34,7 @@ class Product(models.Model):
             default=uuid.uuid4,
             editable=False
         )
+
     merchant = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -42,13 +44,245 @@ class Product(models.Model):
         Category,
         on_delete=models.PROTECT,
         related_name='products',
-        null=True, blank=True
+        null=True,
+        blank=True
     )
-    name = models.CharField(max_length=255)
+
+    # Car Name / Listing Name
+    name = models.CharField(
+        max_length=255,
+        help_text="Short descriptive name, e.g., '2019 Toyota Corolla LE'"
+    )
+
+    # Make, Model, Year
+    from mechanics.models import VehicleMake
+
+    make = models.ForeignKey(
+        VehicleMake,
+        on_delete=models.PROTECT,
+        help_text="Car manufacturer, e.g., Toyota, Honda",
+        null=True,
+        blank=True,
+        related_name="products_by_make"
+    )
+    model = models.ForeignKey(
+        VehicleMake,
+        on_delete=models.PROTECT,
+        help_text="Car model, e.g., Camry, Civic",
+        null=True,
+        blank=True,
+        related_name="products_by_model"
+    )
+    year = models.PositiveIntegerField(
+        help_text="Year of manufacture, e.g., 2019",
+        null=True,
+        blank=True,
+    )
+
+    # Condition
+    CONDITION_CHOICES = [
+        ('new', 'New'),
+        ('used', 'Used'),
+        ('certified', 'Certified Pre-owned'),
+        ('other', 'Other'),
+    ]
+    condition = models.CharField(
+        max_length=16,
+        choices=CONDITION_CHOICES,
+        default='other'
+    )
+
+    # Body Type
+    BODY_TYPE_CHOICES = [
+        ('sedan', 'Sedan'),
+        ('suv', 'SUV'),
+        ('hatchback', 'Hatchback'),
+        ('coupe', 'Coupe'),
+        ('truck', 'Truck'),
+        ('van', 'Van'),
+        ('convertible', 'Convertible'),
+        ('wagon', 'Wagon'),
+        ('other', 'Other'),
+    ]
+    body_type = models.CharField(
+        max_length=16,
+        choices=BODY_TYPE_CHOICES,
+        default='other'
+    )
+
+    # Mileage / Odometer
+    mileage = models.PositiveIntegerField(
+        help_text="Mileage/Odometer reading",
+        null=True,
+        blank=True,
+    )
+    MILEAGE_UNIT_CHOICES = [
+        ('km', 'Kilometers'),
+        ('mi', 'Miles'),
+    ]
+    mileage_unit = models.CharField(
+        max_length=2,
+        choices=MILEAGE_UNIT_CHOICES,
+        default='km'
+    )
+
+    # Transmission
+    TRANSMISSION_CHOICES = [
+        ('automatic', 'Automatic'),
+        ('manual', 'Manual'),
+        ('cvt', 'CVT'),
+        ('semi-automatic', 'Semi-automatic'),
+        ('other', 'Other'),
+    ]
+    transmission = models.CharField(
+        max_length=16,
+        choices=TRANSMISSION_CHOICES,
+        default='other'
+    )
+
+    # Fuel Type
+    FUEL_TYPE_CHOICES = [
+        ('petrol', 'Petrol'),
+        ('diesel', 'Diesel'),
+        ('electric', 'Electric'),
+        ('hybrid', 'Hybrid'),
+        ('lpg', 'LPG'),
+        ('other', 'Other'),
+    ]
+    fuel_type = models.CharField(
+        max_length=16,
+        choices=FUEL_TYPE_CHOICES,
+        default='other'
+    )
+
+    # Engine Size / Power
+    engine_size = models.CharField(
+        max_length=32,
+        help_text="e.g., 2.0L, 150hp",
+        null=True,
+        blank=True,
+    )
+
+    # Color (Exterior & Interior)
+    exterior_color = models.CharField(
+        max_length=32,
+        help_text="Exterior color",
+        null=True,
+        blank=True,
+    )
+    interior_color = models.CharField(
+        max_length=32,
+        help_text="Interior color",
+        null=True,
+        blank=True,
+    )
+
+    # Number of Doors & Seats
+    number_of_doors = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+    )
+    number_of_seats = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+    )
+
+    # Features (Dropdowns/Booleans)
+    air_conditioning = models.BooleanField(
+        default=False,
+        help_text="Air Conditioning / Climate Control"
+    )
+    leather_seats = models.BooleanField(
+        default=False,
+        help_text="Leather Seats"
+    )
+    navigation_system = models.BooleanField(
+        default=False,
+        help_text="Navigation / Infotainment System"
+    )
+    bluetooth = models.BooleanField(
+        default=False,
+        help_text="Bluetooth / AUX / USB"
+    )
+    parking_sensors = models.BooleanField(
+        default=False,
+        help_text="Parking Sensors / Reverse Camera"
+    )
+    cruise_control = models.BooleanField(
+        default=False,
+        help_text="Cruise Control"
+    )
+    keyless_entry = models.BooleanField(
+        default=False,
+        help_text="Keyless Entry / Push Start"
+    )
+    sunroof = models.BooleanField(
+        default=False,
+        help_text="Sunroof / Panoramic Roof"
+    )
+    alloy_wheels = models.BooleanField(
+        default=False,
+        help_text="Alloy Wheels"
+    )
+    safety_features = models.TextField(
+        blank=True,
+        help_text="Comma-separated list of safety features (e.g., Airbags, ABS, Traction Control, Lane Assist, Blind Spot Monitor, etc.)" # noqa
+    )
+
+    # Description
     description = models.TextField(blank=True)
-    price = models.DecimalField(max_digits=12, decimal_places=2)
-    stock = models.PositiveIntegerField(default=0)
+
+    # Pricing & Availability
+    price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2
+    )
+    currency = models.CharField(
+        max_length=8,
+        default='NGN',
+        help_text="Currency code, e.g., NGN, USD"
+    )
+    negotiable = models.BooleanField(
+        default=False,
+        help_text="Is the price negotiable?"
+    )
+    discount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Discount amount, if any"
+    )
+    AVAILABILITY_CHOICES = [
+        ('in_stock', 'In stock'),
+        ('reserved', 'Reserved'),
+        ('sold', 'Sold'),
+    ]
+    availability = models.CharField(
+        max_length=16,
+        choices=AVAILABILITY_CHOICES,
+        default='in_stock'
+    )
+
+    # Stock (for multiple units, e.g., fleet sales)
+    stock = models.PositiveIntegerField(default=1)
+
+    # Rental Option (if applicable)
     is_rental = models.BooleanField(default=False)
+
+    # Pick-up / Delivery Option
+    DELIVERY_OPTION_CHOICES = [
+        ('pickup', 'Pick-up only'),
+        ('nationwide', 'Nationwide delivery'),
+        ('international', 'International shipping'),
+    ]
+    delivery_option = models.CharField(
+        max_length=16,
+        choices=DELIVERY_OPTION_CHOICES,
+        default='pickup'
+    )
+
+    # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -56,14 +290,21 @@ class Product(models.Model):
         indexes = [
             models.Index(fields=['merchant']),
             models.Index(fields=['name']),
-            models.Index(fields=['stock']),
+            models.Index(fields=['make']),
+            models.Index(fields=['model']),
+            models.Index(fields=['year']),
+            models.Index(fields=['condition']),
+            models.Index(fields=['body_type']),
+            models.Index(fields=['price']),
+            models.Index(fields=['availability']),
             models.Index(fields=['is_rental']),
+            models.Index(fields=['stock']),
             models.Index(fields=['created_at']),
         ]
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.name} by ({self.merchant.email})"
+        return f"{self.name} ({self.year} {self.make} {self.model}) by {self.merchant.email}" # noqa
 
 
 class ProductImage(models.Model):

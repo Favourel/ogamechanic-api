@@ -13,7 +13,7 @@ from .serializers import (
     OrderSerializer, CartSerializer, 
     ProductReviewSerializer, FollowMerchantSerializer,
     FollowMerchantListSerializer, FavoriteProductSerializer,
-    FavoriteProductListSerializer
+    FavoriteProductListSerializer, ProductImageSerializer
 )
 from ogamechanic.modules.utils import (
     api_response, get_incoming_request_checks, incoming_request_checks
@@ -207,6 +207,105 @@ class ProductListCreateView(APIView):
                 ),
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class ProductImageCreateView(APIView):
+    """
+    API endpoint to upload images for a product.
+    Only the merchant who owns the product can upload images.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="Upload Product Images",
+        operation_description="Upload one or more images for a product (merchant only).",
+        request_body=None,
+        responses={201: ProductImageSerializer(many=True)}
+    )
+    def post(self, request, product_id):
+        try:
+            product = Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Product not found.",
+                    status=False
+                ),
+                status=status.HTTP_404_NOT_FOUND
+            )
+        # Only the merchant who owns the product can upload images
+        if product.merchant != request.user:
+            return Response(
+                api_response(
+                    message="You do not have permission to upload images for this product.",
+                    status=False
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+        images = request.FILES.getlist('images')
+        if not images:
+            return Response(
+                api_response(
+                    message="No images provided.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        created_images = []
+        # Get the current max ordering for this product's images
+        max_ordering = product.images.aggregate(
+            max_ordering=models.Max('ordering'))['max_ordering'] or 0
+        for idx, image in enumerate(images):
+            product_image = ProductImage.objects.create(
+                product=product,
+                image=image,
+                ordering=max_ordering + idx
+            )
+            created_images.append(product_image)
+        serializer = ProductImageSerializer(created_images, many=True, context={'request': request})
+        return Response(
+            api_response(
+                message="Images uploaded successfully.",
+                status=True,
+                data=serializer.data
+            ),
+            status=status.HTTP_201_CREATED
+        )
+
+
+class ProductImageListView(APIView):
+    """
+    API endpoint to list all images for a product.
+    Publicly accessible.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="List Product Images",
+        operation_description="List all images for a given product.",
+        responses={200: ProductImageSerializer(many=True)}
+    )
+    def get(self, request, product_id):
+        try:
+            product = Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Product not found.",
+                    status=False
+                ),
+                status=status.HTTP_404_NOT_FOUND
+            )
+        images = product.images.all().order_by('ordering', 'id')
+        serializer = ProductImageSerializer(images, many=True, context={'request': request})
+        return Response(
+            api_response(
+                message="Product images retrieved successfully.",
+                status=True,
+                data=serializer.data
+            ),
+            status=status.HTTP_200_OK
+        )
 
 
 class ProductDetailView(APIView):

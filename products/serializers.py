@@ -36,32 +36,80 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
-    images = serializers.SerializerMethodField()
-    category = CategorySerializer(read_only=True)
+    images = serializers.SerializerMethodField(read_only=True)
+    category = serializers.SerializerMethodField(read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects.all(), source='category', write_only=True
     )
-    merchant = UserSerializer(read_only=True)
-    rating = serializers.SerializerMethodField()
-    merchant_rating = serializers.SerializerMethodField()
-    purchased_count = serializers.SerializerMethodField()
-    is_in_cart = serializers.SerializerMethodField()
-    is_in_favorite_list = serializers.SerializerMethodField()
+    merchant = serializers.SerializerMethodField(read_only=True)
+    rating = serializers.SerializerMethodField(read_only=True)
+    merchant_rating = serializers.SerializerMethodField(read_only=True)
+    purchased_count = serializers.SerializerMethodField(read_only=True)
+    is_in_cart = serializers.SerializerMethodField(read_only=True)
+    is_in_favorite_list = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Product
         fields = [
-            'id', 'merchant', 'category', 'category_id', 'name',
-            'description', 'price', 'is_rental', 'images',
-            'created_at', 'updated_at', 'rating', 
-            'merchant_rating', 'stock', 'purchased_count', 'is_in_cart',
-            'is_in_favorite_list'
+            'id',
+            'merchant',
+            'category',
+            'category_id',
+            'name',
+            'make',
+            'model',
+            'year',
+            'condition',
+            'body_type',
+            'mileage',
+            'mileage_unit',
+            'transmission',
+            'fuel_type',
+            'engine_size',
+            'exterior_color',
+            'interior_color',
+            'number_of_doors',
+            'number_of_seats',
+            'air_conditioning',
+            'leather_seats',
+            'navigation_system',
+            'bluetooth',
+            'parking_sensors',
+            'cruise_control',
+            'keyless_entry',
+            'sunroof',
+            'alloy_wheels',
+            'safety_features',
+            'description',
+            'price',
+            'currency',
+            'negotiable',
+            'discount',
+            'availability',
+            'stock',
+            'is_rental',
+            'delivery_option',
+            'images',
+            'created_at',
+            'updated_at',
+            'rating',
+            'merchant_rating',
+            'purchased_count',
+            'is_in_cart',
+            'is_in_favorite_list',
         ]
         read_only_fields = [
-            'id', 'merchant', 'images', 'created_at', 
-            'updated_at', 'category', 'stock', 
-            'purchased_count', 'merchant_rating', 'is_in_cart',
-            'is_in_favorite_list'
+            'id',
+            'merchant',
+            'images',
+            'created_at',
+            'updated_at',
+            'category',
+            'rating',
+            'merchant_rating',
+            'purchased_count',
+            'is_in_cart',
+            'is_in_favorite_list',
         ]
         ref_name = "ProductsProductSerializer"
 
@@ -69,26 +117,28 @@ class ProductSerializer(serializers.ModelSerializer):
         request = self.context.get('request', None)
         images = obj.images.all()
         serializer = ProductImageSerializer(
-            images, many=True, context={'request': request})
+            images, many=True, context={'request': request}
+        )
         return serializer.data
 
+    def get_category(self, obj):
+        return CategorySerializer(obj.category).data if obj.category else None
+
+    def get_merchant(self, obj):
+        return UserSerializer(obj.merchant).data if obj.merchant else None
+
     def get_rating(self, obj):
-        # Calculate average rating for the product
         reviews = obj.reviews.all()
         if not reviews.exists():
             return None
         avg = reviews.aggregate(avg_rating=Avg('rating'))['avg_rating']
-        # Optionally round to 1 decimal place
         return round(avg, 1) if avg is not None else None
 
     def get_merchant_rating(self, obj):
-        # Calculate average rating for all products of this merchant
         merchant = obj.merchant
         if not merchant:
             return None
-        # Get all products for this merchant
         products = Product.objects.filter(merchant=merchant)
-        # Get all reviews for these products
         reviews = ProductReview.objects.filter(product__in=products)
         if not reviews.exists():
             return None
@@ -96,44 +146,33 @@ class ProductSerializer(serializers.ModelSerializer):
         return round(avg, 1) if avg is not None else None
 
     def get_purchased_count(self, obj):
-        # Count the number of successfully purchased items for this product
-        # Assuming 'OrderItem' and 'Order' are imported and 'Order' has a 'status' field that marks successful purchases, e.g., 'paid' # noqa
-        return OrderItem.objects.filter(
-            product=obj,
-            order__status='paid'
-        ).aggregate(
-            total_purchased=serializers.models.Sum('quantity')
-        )['total_purchased'] or 0
+        from django.db.models import Sum
+        return (
+            OrderItem.objects.filter(
+                product=obj,
+                order__status='paid'
+            ).aggregate(
+                total_purchased=Sum('quantity')
+            )['total_purchased'] or 0
+        )
 
     def get_is_in_cart(self, obj):
-        """
-        Returns True if the current user has this product 
-        in their cart, else False.
-        """
         request = self.context.get('request', None)
-        if request is None or not request.user or not request.user.is_authenticated: # noqa
+        if request is None or not hasattr(request, "user") or not request.user.is_authenticated:  # noqa
             return False
-        # Import here to avoid circular import
         from .models import CartItem, Cart
         try:
             cart = Cart.objects.get(user=request.user)
-            
         except Cart.DoesNotExist:
             return False
         return CartItem.objects.filter(cart=cart, product=obj).exists()
 
     def get_is_in_favorite_list(self, obj):
-        """
-        Returns True if the current user has this product
-        in their favorite list, else False.
-        """
         request = self.context.get('request', None)
-        if request is None or not request.user or not request.user.is_authenticated: # noqa
+        if request is None or not hasattr(request, "user") or not request.user.is_authenticated: # noqa
             return False
-        # Import here to avoid circular import
         from .models import FavoriteProduct
-
-        return FavoriteProduct.objects.filter(product=obj).exists()
+        return FavoriteProduct.objects.filter(product=obj, user=request.user).exists() # noqa
 
 
 class HomeResponseSerializer(serializers.Serializer):

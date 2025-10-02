@@ -16,7 +16,9 @@ from .views import (
     FollowMerchantView,
     FollowedMerchantsListView,
     FavoriteProductView,
-    FavoriteProductsListView
+    FavoriteProductsListView,
+    ProductImageListView,
+    ProductImageCreateView
 )
 
 app_name = 'products'
@@ -72,6 +74,17 @@ urlpatterns = [
         'paystack/webhook/',
         PaystackWebhookView.as_view(),
         name='paystack-webhook'
+    ),
+
+    path(
+        'products/<uuid:product_id>/images/',
+        ProductImageListView.as_view(),
+        name='product-image-list'
+    ),
+    path(
+        'products/<uuid:product_id>/images/upload/',
+        ProductImageCreateView.as_view(),
+        name='product-image-upload'
     ),
     path(
         'products/<uuid:product_id>/reviews/',
