@@ -91,6 +91,7 @@ pycparser==2.22
 pycryptodome==3.23.0
 pyflakes==3.1.0
 pytest==7.4.4
+PyJWT < 2.10.0
 pytest-django==4.11.1
 python-barcode==0.15.1
 python-crontab==3.3.0

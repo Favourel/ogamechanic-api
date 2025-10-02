@@ -1662,6 +1662,9 @@ class MerchantAnalyticsView(APIView):
         }
     )
     def get(self, request):
+        from django.db import connection
+        from django.db.models.functions import TruncMonth
+
         status_, data = get_incoming_request_checks(request)
         if not status_:
             return Response(
@@ -1677,16 +1680,17 @@ class MerchantAnalyticsView(APIView):
                 ),
                 status=403
             )
-        
+
         # Product analytics
         product_count = Product.objects.filter(merchant=user).count()
-        rental_products = Product.objects.filter(merchant=user, is_rental=True).count()  # noqa
-        
+        rental_products = Product.objects.filter(
+            merchant=user, is_rental=True).count()
+
         # Order analytics
         order_items = OrderItem.objects.filter(product__merchant=user)
         order_ids = order_items.values_list('order_id', flat=True).distinct()
         orders = Order.objects.filter(id__in=order_ids)
-        
+
         # Sales analytics
         total_sales = order_items.filter(
             order__status__in=['paid', 'shipped', 'completed']
@@ -1701,7 +1705,7 @@ class MerchantAnalyticsView(APIView):
                 )
             )
         )['total'] or 0
-        
+
         order_count = orders.count()
         order_status_counts = (
             orders.values('status')
@@ -1711,7 +1715,7 @@ class MerchantAnalyticsView(APIView):
             item['status']: item['count']
             for item in order_status_counts
         }
-        
+
         # Best-selling products
         best_selling = (
             order_items.values('product__name')
@@ -1721,41 +1725,71 @@ class MerchantAnalyticsView(APIView):
         best_selling_products = [
             item['product__name'] for item in best_selling
         ]
-        
-        # Revenue by month
-        class TruncMonth(Func):
-            function = 'DATE_TRUNC'
-            template = "%(function)s('month', %(expressions)s)"
 
-        revenue_by_month = order_items.filter(
-            order__status__in=['paid', 'shipped', 'completed']
-        ).annotate(
-            month=TruncMonth('order__created_at')
-        ).values('month').annotate(
-            revenue=Sum(
-                ExpressionWrapper(
-                    F('price') * F('quantity'),
-                    output_field=DecimalField(
-                        max_digits=12,
-                        decimal_places=2
+        # Revenue by month (handle both Postgres and SQLite)
+        db_engine = connection.vendor  # 'postgresql', 'sqlite', etc.
+
+        if db_engine == 'postgresql':
+            # Use DATE_TRUNC for Postgres
+            class TruncMonthPG(Func):
+                function = 'DATE_TRUNC'
+                template = "%(function)s('month', %(expressions)s)"
+            month_annotate = TruncMonthPG('order__created_at')
+        elif db_engine == 'sqlite':
+            # Use strftime for SQLite
+            class TruncMonthSQLite(Func):
+                function = 'strftime'
+                template = "%(function)s('%%Y-%%m-01', %(expressions)s)"
+            month_annotate = TruncMonthSQLite('order__created_at')
+        else:
+            # Fallback to Django's TruncMonth (works for supported backends)
+            month_annotate = TruncMonth('order__created_at')
+
+        try:
+            revenue_by_month = order_items.filter(
+                order__status__in=['paid', 'shipped', 'completed']
+            ).annotate(
+                month=month_annotate
+            ).values('month').annotate(
+                revenue=Sum(
+                    ExpressionWrapper(
+                        F('price') * F('quantity'),
+                        output_field=DecimalField(
+                            max_digits=12,
+                            decimal_places=2
+                        )
                     )
                 )
-            )
-        ).order_by('month')
-        revenue_by_month_dict = {
-            str(item['month'].date()): float(item['revenue'])
-            for item in revenue_by_month
-        }
-        
+            ).order_by('month')
+
+            # For SQLite, month is a string, for Postgres it's a datetime
+            revenue_by_month_dict = {}
+            for item in revenue_by_month:
+                month_val = item['month']
+                if db_engine == 'sqlite':
+                    # month_val is 'YYYY-MM-01'
+                    key = month_val
+                elif db_engine == 'postgresql':
+                    # month_val is a datetime/date
+                    key = str(item['month'].date())
+                else:
+                    # fallback
+                    key = str(item['month'])
+                revenue_by_month_dict[key] = float(item['revenue'])
+        except Exception as e:
+            # Fallback: empty dict if error
+            logging.info(str(e))
+            revenue_by_month_dict = {}
+
         # Rental analytics
         rental_analytics = self._get_rental_analytics(user)
-        
+
         # Customer insights
         customer_insights = self._get_customer_insights(user)
-        
+
         # Product performance
         product_performance = self._get_product_performance(user)
-        
+
         return Response(
             api_response(
                 message="Merchant analytics retrieved successfully.",
@@ -1779,31 +1813,47 @@ class MerchantAnalyticsView(APIView):
         """Get rental-specific analytics for merchant"""
         try:
             from rentals.models import RentalBooking
-            
+
             # Rental bookings for merchant's products
             rental_bookings = RentalBooking.objects.filter(
                 product__merchant=user
             )
-            
+
             total_rentals = rental_bookings.count()
-            completed_rentals = rental_bookings.filter(status='completed').count()  # noqa
+            completed_rentals = rental_bookings.filter(
+                status='completed').count()
             active_rentals = rental_bookings.filter(status='active').count()
             pending_rentals = rental_bookings.filter(status='pending').count()
-            
+
             # Rental revenue
             rental_revenue = rental_bookings.filter(
                 status__in=['completed', 'active']
             ).aggregate(
                 total=Sum('total_amount')
             )['total'] or 0
-            
+
             # Average rental duration
-            avg_duration = rental_bookings.filter(
-                status='completed'
-            ).aggregate(
-                avg_duration=Avg('duration_days')
+            from django.db.models import F, ExpressionWrapper, fields
+            from django.db.models.functions import Cast
+
+            completed_rentals = rental_bookings.filter(
+                status='completed').annotate(
+                duration=ExpressionWrapper(
+                    F('end_date') - F('start_date'),
+                    output_field=fields.DurationField()
+                )
+            )
+
+            # Calculate average duration in days
+            avg_duration = completed_rentals.aggregate(
+                avg_duration=Avg(
+                    ExpressionWrapper(
+                        Cast(F('duration'), output_field=fields.DurationField()) / 86400.0,  # noqa
+                        output_field=fields.FloatField()
+                    )
+                )
             )['avg_duration'] or 0
-            
+
             return {
                 'total_rentals': total_rentals,
                 'completed_rentals': completed_rentals,
@@ -1811,7 +1861,8 @@ class MerchantAnalyticsView(APIView):
                 'pending_rentals': pending_rentals,
                 'rental_revenue': float(rental_revenue),
                 'avg_rental_duration': float(avg_duration),
-                'completion_rate': (completed_rentals / total_rentals * 100) if total_rentals > 0 else 0  # noqa
+                'completion_rate': (
+                    completed_rentals / total_rentals * 100) if total_rentals > 0 else 0 # noqa
             }
         except ImportError:
             return {}
@@ -1822,14 +1873,14 @@ class MerchantAnalyticsView(APIView):
         unique_customers = Order.objects.filter(
             items__product__merchant=user
         ).values('customer').distinct().count()
-        
+
         # Repeat customers (customers with multiple orders)
         repeat_customers = Order.objects.filter(
             items__product__merchant=user
         ).values('customer').annotate(
             order_count=Count('id')
         ).filter(order_count__gt=1).count()
-        
+
         # Average order value
         avg_order_value = Order.objects.filter(
             items__product__merchant=user,
@@ -1837,10 +1888,10 @@ class MerchantAnalyticsView(APIView):
         ).aggregate(
             avg_value=Avg('total_amount')
         )['avg_value'] or 0
-        
+
         # Customer retention rate
         retention_rate = (repeat_customers / unique_customers * 100) if unique_customers > 0 else 0  # noqa
-        
+
         return {
             'unique_customers': unique_customers,
             'repeat_customers': repeat_customers,
@@ -1852,18 +1903,18 @@ class MerchantAnalyticsView(APIView):
     def _get_product_performance(self, user):
         """Get product performance metrics"""
         from django.db.models import Avg
-        
+
         # Product performance metrics
         products = Product.objects.filter(merchant=user)
-        
+
         # Products with reviews
-        products_with_reviews = products.filter(reviews__isnull=False).distinct().count()  # noqa
-        
+        products_with_reviews = products.filter(reviews__isnull=False).distinct().count() # noqa
+
         # Average rating
         avg_rating = products.aggregate(
             avg_rating=Avg('reviews__rating')
         )['avg_rating'] or 0
-        
+
         # Top performing products (by sales)
         top_performing = OrderItem.objects.filter(
             product__merchant=user,
@@ -1876,7 +1927,7 @@ class MerchantAnalyticsView(APIView):
                 )
             )
         ).order_by('-total_sales')[:5]
-        
+
         top_performing_products = [
             {
                 'name': item['product__name'],
@@ -1884,7 +1935,7 @@ class MerchantAnalyticsView(APIView):
             }
             for item in top_performing
         ]
-        
+
         return {
             'products_with_reviews': products_with_reviews,
             'avg_rating': float(avg_rating),
