@@ -7,7 +7,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY') # noqa
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true' # noqa
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '24c0a5b5e311.ngrok-free.app'] # noqa
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '24c0a5b5e311.ngrok-free.app', 'ogamechanic-api-1.onrender.com'] # noqa
 X_API_KEY = os.environ.get('X_API_KEY') # noqa
 
 # WhiteNoise configuration
