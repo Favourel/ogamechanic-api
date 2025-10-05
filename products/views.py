@@ -218,11 +218,18 @@ class ProductImageCreateView(APIView):
 
     @swagger_auto_schema(
         operation_summary="Upload Product Images",
-        operation_description="Upload one or more images for a product (merchant only).",
+        operation_description="Upload one or more images for a product (merchant only).", # noqa
         request_body=None,
         responses={201: ProductImageSerializer(many=True)}
     )
     def post(self, request, product_id):
+        from django.db import models
+
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False), status=400
+            )
         try:
             product = Product.objects.get(id=product_id)
         except Product.DoesNotExist:
@@ -237,7 +244,7 @@ class ProductImageCreateView(APIView):
         if product.merchant != request.user:
             return Response(
                 api_response(
-                    message="You do not have permission to upload images for this product.",
+                    message="You do not have permission to upload images for this product.", # noqa
                     status=False
                 ),
                 status=status.HTTP_403_FORBIDDEN
@@ -262,7 +269,8 @@ class ProductImageCreateView(APIView):
                 ordering=max_ordering + idx
             )
             created_images.append(product_image)
-        serializer = ProductImageSerializer(created_images, many=True, context={'request': request})
+        serializer = ProductImageSerializer(
+            created_images, many=True, context={'request': request})
         return Response(
             api_response(
                 message="Images uploaded successfully.",
@@ -286,6 +294,11 @@ class ProductImageListView(APIView):
         responses={200: ProductImageSerializer(many=True)}
     )
     def get(self, request, product_id):
+        status_, data = get_incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False), status=400
+            )
         try:
             product = Product.objects.get(id=product_id)
         except Product.DoesNotExist:
@@ -297,7 +310,8 @@ class ProductImageListView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         images = product.images.all().order_by('ordering', 'id')
-        serializer = ProductImageSerializer(images, many=True, context={'request': request})
+        serializer = ProductImageSerializer(
+            images, many=True, context={'request': request})
         return Response(
             api_response(
                 message="Product images retrieved successfully.",

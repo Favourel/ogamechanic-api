@@ -224,10 +224,30 @@ class Product(models.Model):
         default=False,
         help_text="Alloy Wheels"
     )
-    safety_features = models.TextField(
-        blank=True,
-        help_text="Comma-separated list of safety features (e.g., Airbags, ABS, Traction Control, Lane Assist, Blind Spot Monitor, etc.)" # noqa
+    airbags = models.BooleanField(
+        default=False,
+        help_text="Airbags"
     )
+    abs = models.BooleanField(
+        default=False,
+        help_text="Anti-lock Braking System (ABS)"
+    )
+    traction_control = models.BooleanField(
+        default=False,
+        help_text="Traction Control"
+    )
+    lane_assist = models.BooleanField(
+        default=False,
+        help_text="Lane Assist"
+    )
+    blind_spot_monitor = models.BooleanField(
+        default=False,
+        help_text="Blind Spot Monitor"
+    )
+    # safety_features = models.TextField(
+    #     blank=True,
+    #     help_text="Comma-separated list of safety features (e.g., Airbags, ABS, Traction Control, Lane Assist, Blind Spot Monitor, etc.)" # noqa
+    # )
 
     # Description
     description = models.TextField(blank=True)
