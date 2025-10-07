@@ -16,7 +16,8 @@ from .serializers import (
     FavoriteProductListSerializer, ProductImageSerializer
 )
 from ogamechanic.modules.utils import (
-    api_response, get_incoming_request_checks, incoming_request_checks
+    api_response, get_incoming_request_checks, incoming_request_checks,
+    resize_and_save_image
 )
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
@@ -216,22 +217,46 @@ class ProductImageCreateView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    from drf_yasg import openapi
+
     @swagger_auto_schema(
         operation_summary="Upload Product Images",
-        operation_description="Upload one or more images for a product (merchant only).", # noqa
-        request_body=None,
+        operation_description="Upload one or more images for a product (merchant only).",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=["images"],
+            properties={
+                "images": openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Items(type=openapi.TYPE_FILE),
+                    description="List of image files to upload (multipart/form-data)."
+                )
+            }
+        ),
         responses={201: ProductImageSerializer(many=True)}
     )
     def post(self, request, product_id):
         from django.db import models
-
-        status_, data = incoming_request_checks(request)
-        if not status_:
-            return Response(
-                api_response(message=data, status=False), status=400
-            )
+        # Validate UUID so invalid IDs return JSON instead of HTML 404
         try:
-            product = Product.objects.get(id=product_id)
+            from uuid import UUID
+            product_uuid = UUID(str(product_id))
+        except Exception:
+            return Response(
+                api_response(
+                    message="Invalid product_id.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # status_, data = incoming_request_checks(request)
+        # if not status_:
+        #     return Response(
+        #         api_response(message=data, status=False), status=400
+        #     )
+        try:
+            product = Product.objects.get(id=product_uuid)
         except Product.DoesNotExist:
             return Response(
                 api_response(
@@ -244,7 +269,7 @@ class ProductImageCreateView(APIView):
         if product.merchant != request.user:
             return Response(
                 api_response(
-                    message="You do not have permission to upload images for this product.", # noqa
+                    message="You do not have permission to upload images for this product.",
                     status=False
                 ),
                 status=status.HTTP_403_FORBIDDEN
@@ -259,16 +284,29 @@ class ProductImageCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         created_images = []
-        # Get the current max ordering for this product's images
-        max_ordering = product.images.aggregate(
-            max_ordering=models.Max('ordering'))['max_ordering'] or 0
-        for idx, image in enumerate(images):
-            product_image = ProductImage.objects.create(
-                product=product,
-                image=image,
-                ordering=max_ordering + idx
+
+        for uploaded_image in images:
+            resized_image = resize_and_save_image(uploaded_image, 200, 200)
+            if not resized_image:
+                continue
+
+            # Get the current max ordering for this product's images
+            max_ordering = product.images.aggregate(
+                max_ordering=models.Max('ordering'))['max_ordering'] or 0
+            for idx, resized_image in enumerate(images):
+                product_image = ProductImage.objects.create(
+                    product=product,
+                    image=resized_image,
+                    ordering=max_ordering + idx
+                )
+                created_images.append(product_image)
+
+        if not created_images:
+            return Response(
+                {"detail": "No valid images were uploaded."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-            created_images.append(product_image)
+
         serializer = ProductImageSerializer(
             created_images, many=True, context={'request': request})
         return Response(
@@ -283,8 +321,10 @@ class ProductImageCreateView(APIView):
 
 class ProductImageListView(APIView):
     """
-    API endpoint to list all images for a product.
-    Publicly accessible.
+    API endpoint to list, update, and delete images for a product.
+    - GET: List all images for a given product (public).
+    - PATCH: Update an image's ordering (merchant only).
+    - DELETE: Delete an image (merchant only).
     """
     permission_classes = [permissions.AllowAny]
 
@@ -299,8 +339,20 @@ class ProductImageListView(APIView):
             return Response(
                 api_response(message=data, status=False), status=400
             )
+        # Validate UUID so invalid IDs return JSON instead of HTML 404
         try:
-            product = Product.objects.get(id=product_id)
+            from uuid import UUID
+            product_uuid = UUID(str(product_id))
+        except Exception:
+            return Response(
+                api_response(
+                    message="Invalid product_id.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            product = Product.objects.get(id=product_uuid)
         except Product.DoesNotExist:
             return Response(
                 api_response(
@@ -321,6 +373,194 @@ class ProductImageListView(APIView):
             status=status.HTTP_200_OK
         )
 
+    @swagger_auto_schema(
+        operation_summary="Update Product Image",
+        operation_description="Update a product image's ordering or image file. Only the merchant who owns the product can update.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'image_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the image to update'),
+                'ordering': openapi.Schema(type=openapi.TYPE_INTEGER, description='New ordering value'),
+                'image': openapi.Schema(type=openapi.TYPE_FILE, description='New image file (optional)'),
+            },
+            required=['image_id'],
+        ),
+        responses={200: ProductImageSerializer()}
+    )
+    def patch(self, request, product_id):
+        # Only authenticated merchants can update images
+        if not request.user.is_authenticated:
+            return Response(
+                api_response(
+                    message="Authentication required.",
+                    status=False
+                ),
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        try:
+            from uuid import UUID
+            product_uuid = UUID(str(product_id))
+        except Exception:
+            return Response(
+                api_response(
+                    message="Invalid product_id.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            product = Product.objects.get(id=product_uuid)
+        except Product.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Product not found.",
+                    status=False
+                ),
+                status=status.HTTP_404_NOT_FOUND
+            )
+        if not hasattr(request.user, "merchantprofile") or product.merchant != request.user:
+            return Response(
+                api_response(
+                    message="You do not have permission to update images for this product.",
+                    status=False
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+        image_id = request.data.get('image_id')
+        if not image_id:
+            return Response(
+                api_response(
+                    message="image_id is required.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            image_obj = product.images.get(id=image_id)
+        except ProductImage.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Product image not found.",
+                    status=False
+                ),
+                status=status.HTTP_404_NOT_FOUND
+            )
+        updated = False
+        ordering = request.data.get('ordering')
+        if ordering is not None:
+            try:
+                ordering = int(ordering)
+                image_obj.ordering = ordering
+                updated = True
+            except ValueError:
+                return Response(
+                    api_response(
+                        message="Invalid ordering value.",
+                        status=False
+                    ),
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        if 'image' in request.FILES:
+            image_obj.image = request.FILES['image']
+            updated = True
+        if updated:
+            image_obj.save()
+            serializer = ProductImageSerializer(image_obj, context={'request': request})
+            return Response(
+                api_response(
+                    message="Product image updated successfully.",
+                    status=True,
+                    data=serializer.data
+                ),
+                status=status.HTTP_200_OK
+            )
+        else:
+            return Response(
+                api_response(
+                    message="No changes provided.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @swagger_auto_schema(
+        operation_summary="Delete Product Image",
+        operation_description="Delete a product image. Only the merchant who owns the product can delete.",
+        manual_parameters=[
+            openapi.Parameter(
+                'image_id', openapi.IN_QUERY, description="ID of the image to delete",
+                type=openapi.TYPE_INTEGER, required=True
+            ),
+        ],
+        responses={204: "Product image deleted successfully."}
+    )
+    def delete(self, request, product_id):
+        # Only authenticated merchants can delete images
+        if not request.user.is_authenticated:
+            return Response(
+                api_response(
+                    message="Authentication required.",
+                    status=False
+                ),
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        try:
+            from uuid import UUID
+            product_uuid = UUID(str(product_id))
+        except Exception:
+            return Response(
+                api_response(
+                    message="Invalid product_id.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            product = Product.objects.get(id=product_uuid)
+        except Product.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Product not found.",
+                    status=False
+                ),
+                status=status.HTTP_404_NOT_FOUND
+            )
+        if not hasattr(request.user, "merchantprofile") or product.merchant != request.user:
+            return Response(
+                api_response(
+                    message="You do not have permission to delete images for this product.",
+                    status=False
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+        image_id = request.query_params.get('image_id')
+        if not image_id:
+            return Response(
+                api_response(
+                    message="image_id query parameter is required.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            image_obj = product.images.get(id=image_id)
+        except ProductImage.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Product image not found.",
+                    status=False
+                ),
+                status=status.HTTP_404_NOT_FOUND
+            )
+        image_obj.delete()
+        return Response(
+            api_response(
+                message="Product image deleted successfully.",
+                status=True
+            ),
+            status=status.HTTP_204_NO_CONTENT
+        )
+
 
 class ProductDetailView(APIView):
     """
@@ -337,15 +577,28 @@ class ProductDetailView(APIView):
         responses={200: ProductSerializer()}
     )
     def get(self, request, id):
+        # Validate UUID so invalid IDs return JSON instead of HTML 404
+        try:
+            from uuid import UUID
+            product_uuid = UUID(str(id))
+        except Exception:
+            return Response(
+                api_response(
+                    message="Invalid product_id.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
         status_, data = get_incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False), status=400
             )
+
         try:
             product = Product.objects.select_related(
                 'merchant', 'category'
-            ).prefetch_related('images').get(id=id)
+            ).prefetch_related('images').get(id=product_uuid)
         except Product.DoesNotExist:
             return Response(
                 api_response(
@@ -369,6 +622,23 @@ class ProductDetailView(APIView):
         responses={200: ProductSerializer()}
     )
     def put(self, request, id):
+        # Validate UUID so invalid IDs return JSON instead of HTML 404
+        try:
+            from uuid import UUID
+            product_uuid = UUID(str(id))
+        except Exception:
+            return Response(
+                api_response(
+                    message="Invalid product_id.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False), status=400
+            )
         # Only authenticated merchants can update their own products
         if not request.user.is_authenticated:
             return Response(
@@ -379,7 +649,7 @@ class ProductDetailView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
         try:
-            product = Product.objects.get(id=id)
+            product = Product.objects.get(id=product_uuid)
         except Product.DoesNotExist:
             return Response(
                 api_response(
@@ -388,7 +658,7 @@ class ProductDetailView(APIView):
                 ),
                 status=status.HTTP_404_NOT_FOUND
             )
-        if not hasattr(request.user, "merchantprofile") or product.merchant != request.user: # noqa
+        if product.merchant != request.user:
             return Response(
                 api_response(
                     message="You do not have permission to update this product.",  # noqa
@@ -396,7 +666,7 @@ class ProductDetailView(APIView):
                 ),
                 status=status.HTTP_403_FORBIDDEN
             )
-        serializer = ProductSerializer(product, data=request.data, partial=False, context={'request': self.request})  # noqa
+        serializer = ProductSerializer(product, data=data, partial=False, context={'request': self.request})  # noqa
         if serializer.is_valid():
             serializer.save()
             return Response(api_response(
@@ -420,6 +690,18 @@ class ProductDetailView(APIView):
         responses={200: ProductSerializer()}
     )
     def patch(self, request, id):
+        # Validate UUID so invalid IDs return JSON instead of HTML 404
+        try:
+            from uuid import UUID
+            product_uuid = UUID(str(id))
+        except Exception:
+            return Response(
+                api_response(
+                    message="Invalid product_id.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
         # Only authenticated merchants can update their own products
         if not request.user.is_authenticated:
             return Response(
@@ -430,7 +712,7 @@ class ProductDetailView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
         try:
-            product = Product.objects.get(id=id)
+            product = Product.objects.get(id=product_uuid)
         except Product.DoesNotExist:
             return Response(
                 api_response(
@@ -439,7 +721,7 @@ class ProductDetailView(APIView):
                 ),
                 status=status.HTTP_404_NOT_FOUND
             )
-        if not hasattr(request.user, "merchantprofile") or product.merchant != request.user: # noqa
+        if product.merchant != request.user: # noqa
             return Response(
                 api_response(
                     message="You do not have permission to update this product.",  # noqa
@@ -470,6 +752,18 @@ class ProductDetailView(APIView):
         responses={204: "Product deleted successfully."}
     )
     def delete(self, request, id):
+        # Validate UUID so invalid IDs return JSON instead of HTML 404
+        try:
+            from uuid import UUID
+            product_uuid = UUID(str(id))
+        except Exception:
+            return Response(
+                api_response(
+                    message="Invalid product_id.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
         # Only authenticated merchants can delete their own products
         if not request.user.is_authenticated:
             return Response(
@@ -480,7 +774,7 @@ class ProductDetailView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
         try:
-            product = Product.objects.get(id=id)
+            product = Product.objects.get(id=product_uuid)
         except Product.DoesNotExist:
             return Response(
                 api_response(
@@ -489,7 +783,7 @@ class ProductDetailView(APIView):
                 ),
                 status=status.HTTP_404_NOT_FOUND
             )
-        if not hasattr(request.user, "merchantprofile") or product.merchant != request.user: # noqa
+        if product.merchant != request.user: # noqa
             return Response(
                 api_response(
                     message="You do not have permission to delete this product.",  # noqa

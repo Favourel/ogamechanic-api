@@ -39,7 +39,7 @@ class ProductSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField(read_only=True)
     category = serializers.SerializerMethodField(read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(
-        queryset=Category.objects.all(), source='category', write_only=True
+        queryset=Category.objects.all(), source='category', write_only=True,
     )
     merchant = serializers.SerializerMethodField(read_only=True)
     rating = serializers.SerializerMethodField(read_only=True)
@@ -47,6 +47,75 @@ class ProductSerializer(serializers.ModelSerializer):
     purchased_count = serializers.SerializerMethodField(read_only=True)
     is_in_cart = serializers.SerializerMethodField(read_only=True)
     is_in_favorite_list = serializers.SerializerMethodField(read_only=True)
+    DELIVERY_OPTION_CHOICES = [
+        ('pickup', 'Pick-up only'),
+        ('nationwide', 'Nationwide delivery'),
+        ('international', 'International shipping'),
+    ]
+    availability = serializers.ChoiceField(
+        choices=Product.AVAILABILITY_CHOICES,
+        error_messages={
+            "invalid_choice": "Invalid delivery option. Allowed values are: in_stock, reserved, sold." # noqa
+        }
+    )
+    delivery_option = serializers.ChoiceField(
+        choices=DELIVERY_OPTION_CHOICES,
+        error_messages={
+            "invalid_choice": "Invalid delivery option. Allowed values are: pickup, nationwide, international." # noqa
+        }
+    )
+    fuel_type = serializers.ChoiceField(
+        choices=Product.FUEL_TYPE_CHOICES,
+        error_messages={
+            "invalid_choice": (
+                "Invalid fuel type. Allowed values are: " +
+                ", ".join([c[0] for c in [
+                    ('petrol', 'Petrol'),
+                    ('diesel', 'Diesel'),
+                    ('electric', 'Electric'),
+                    ('hybrid', 'Hybrid'),
+                    ('lpg', 'LPG'),
+                    ('other', 'Other'),
+                ]]) + "."
+            )
+        }
+    )
+    condition = serializers.ChoiceField(
+        choices=Product.CONDITION_CHOICES,
+        error_messages={
+            "invalid_choice": (
+                "Invalid condition. Allowed values are: " +
+                ", ".join([c[0] for c in Product.CONDITION_CHOICES]) + "."
+            )
+        }
+    )
+    body_type = serializers.ChoiceField(
+        choices=Product.BODY_TYPE_CHOICES,
+        error_messages={
+            "invalid_choice": (
+                "Invalid body type. Allowed values are: " +
+                ", ".join([c[0] for c in Product.BODY_TYPE_CHOICES]) + "."
+            )
+        }
+    )
+    transmission = serializers.ChoiceField(
+        choices=Product.TRANSMISSION_CHOICES,
+        error_messages={
+            "invalid_choice": (
+                "Invalid transmission. Allowed values are: " +
+                ", ".join([c[0] for c in Product.TRANSMISSION_CHOICES]) + "."
+            )
+        }
+    )
+    mileage_unit = serializers.ChoiceField(
+        choices=[
+            ('km', 'Kilometers'),
+            ('mi', 'Miles'),
+        ],
+        error_messages={
+            "invalid_choice": "Invalid mileage unit. Allowed values are: km, mi." # noqa
+        }
+    )
 
     class Meta:
         model = Product

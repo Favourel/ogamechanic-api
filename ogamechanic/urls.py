@@ -44,13 +44,13 @@ class DocsAccessPermission(BasePermission):
 
 
 # Determine the URL and schemes based on environment
-if 'f9a610a0375f.ngrok-free.app' in settings.ALLOWED_HOSTS:
+if '16402d4b9bdd.ngrok-free.app' in settings.ALLOWED_HOSTS:
     # Production configuration
-    API_URL = 'https://f9a610a0375f.ngrok-free.app'
+    API_URL = 'https://16402d4b9bdd.ngrok-free.app'
     API_SCHEMES = ['https']
 else:
     # Development configuration
-    API_URL = 'http://127.0.0.1:8000'
+    API_URL = 'http://127.0.0.1:8005'
     API_SCHEMES = ['http']
 
 schema_view = get_schema_view(

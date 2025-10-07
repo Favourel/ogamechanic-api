@@ -1,6 +1,7 @@
 import uuid
 from django.db import models
 from django.conf import settings
+from django.core.exceptions import ValidationError
 
 
 class Category(models.Model):
@@ -325,6 +326,11 @@ class Product(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.year} {self.make} {self.model}) by {self.merchant.email}" # noqa
+
+    def clean(self):
+        if self.model and self.make:
+            if self.model.parent_make_id != self.make.id:
+                raise ValidationError("Selected model does not belong to the selected make.") # noqa
 
 
 class ProductImage(models.Model):

@@ -145,6 +145,46 @@ class TrainingSessionParticipantAdmin(admin.ModelAdmin):
     )
 
 
+@admin.register(models.VehicleMake)
+class VehicleMakeAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'name',
+        'parent_make',
+        'is_active',
+        'created_at',
+        'updated_at',
+        'model_count',
+    )
+    list_filter = (
+        'is_active',
+        ('parent_make', admin.RelatedOnlyFieldListFilter),
+        'created_at',
+        'updated_at',
+    )
+    search_fields = ('name', 'description')
+    readonly_fields = ('id', 'created_at', 'updated_at')
+    ordering = ('name',)
+    date_hierarchy = 'created_at'
+    autocomplete_fields = ['parent_make']
+    list_per_page = 50
+
+    fieldsets = (
+        (None, {
+            'fields': ('id', 'name', 'parent_make', 'description', 'is_active')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def model_count(self, obj):
+        return obj.models.count()
+    model_count.short_description = "Model Count"
+    model_count.admin_order_field = 'models__count'
+
+
 # Register all other models from mechanics app that are not already registered above  # noqa
 already_registered = {
     models.RepairRequest,

@@ -305,3 +305,80 @@ def transaction_pin_correct(user, trans_pin):
     if str(decrypted_pin) != str(correct_pin):
         return False
     return True
+
+
+
+def resize_and_save_image(input_image, width, height):
+    """
+    Resizes an image to the given width and height, applies sharpening, and saves it to the database.
+
+    Parameters:
+    input_image (InMemoryUploadedFile): Image file uploaded by the user.
+    width (int): Desired width for the image.
+    height (int): Desired height for the image.
+
+    Returns:
+    ContentFile: Resized image ready to be saved to the database.
+    """
+
+    try:
+        from PIL import Image, ImageFilter, UnidentifiedImageError
+        from pillow_heif import register_heif_opener
+        from django.core.files.base import ContentFile
+        from io import BytesIO
+        import imageio, os
+        import ghostscript
+
+        # Register HEIF/AVIF opener
+        register_heif_opener()
+
+        # Determine the file extension
+        ext = os.path.splitext(input_image.name)[-1].lower()
+
+        # Open the image
+        if ext == ".eps":
+            # EPS-specific handling using Ghostscript
+            try:
+                img = Image.open(input_image)
+                img.load(scale=2)  # Load at 2x resolution for better quality
+                img = img.convert("RGB")  # Convert EPS to RGB mode
+            except Exception as e:
+                log_request(f"Error processing EPS file: {e}")
+                return None
+        else:
+            try:
+                # Open non-EPS formats
+                img = Image.open(input_image)
+                img = img.convert("RGB")  # Ensure compatibility
+            except UnidentifiedImageError:
+                # Fallback for unsupported formats
+                img = imageio.imread(input_image)
+                img = Image.fromarray(img)  # Convert to Pillow Image object
+
+        original_width, original_height = img.size
+
+        log_request(
+            f"Processing image: {input_image.name}, size: {original_width}x{original_height}"
+        )
+
+        # Resize if needed
+        if original_width > width or original_height > height:
+            img.thumbnail((width, height), Image.Resampling.LANCZOS)
+            # img.thumbnail((width, height), Image.LANCZOS)
+
+            log_request(f"Resized size: {img.size}")
+            # print(f"Resized size: {img.size}")
+
+            # Apply sharpening
+            img = img.filter(ImageFilter.SHARPEN)
+
+        # Save the resized image to a buffer as JPEG
+        buffer = BytesIO()
+        img.save(buffer, format="JPEG", optimize=True, quality=85)
+        buffer.seek(0)
+
+        return ContentFile(buffer.read(), name=f"{input_image.name.split('.')[0]}.jpg")
+
+    except Exception as e:
+        log_request(f"Error resizing image: {e}")
+        return None

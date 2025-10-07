@@ -221,11 +221,22 @@ class MechanicReviewSerializer(serializers.ModelSerializer):
 
 class VehicleMakeSerializer(serializers.ModelSerializer):
     """Serializer for VehicleMake model"""
-    
+    # models = serializers.StringRelatedField(many=True, read_only=True)
+    models = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = VehicleMake
-        fields = ['id', 'name', 'description', 'is_active']
-        read_only_fields = ['id']
+        fields = [
+            "id", "name", "parent_make", "description",
+            "is_active", "models"
+        ]
+
+    def get_models(self, obj):
+        if obj.parent_make is None:
+            return VehicleMakeSerializer(
+                obj.models.filter(is_active=True), many=True
+            ).data
+        return []
 
 
 class MechanicVehicleExpertiseSerializer(serializers.ModelSerializer):

@@ -600,28 +600,33 @@ class TrainingSessionParticipantListView(APIView):
 
 class VehicleMakeListView(APIView):
     """
-    API endpoint to get all available vehicle makes for mechanic registration
+    API endpoint to get all available vehicle makes and models for mechanic registration.
+
+    - GET: List all active vehicle makes (parent_make is null) and their models.
+    - POST: Create a new vehicle make or model (admin only).
+    - PATCH: Update a vehicle make or model (admin only).
+    - DELETE: Delete a vehicle make or model (admin only).
     """
     permission_classes = [permissions.AllowAny]
 
     @swagger_auto_schema(
-        operation_summary="Get Available Vehicle Makes",
-        operation_description="""
-        Get a list of all available vehicle makes 
-        that mechanics can specialize in.
-        This endpoint is used during mechanic 
-        registration to show available options.
-        """,
+        operation_summary="Get Available Vehicle Makes and Models",
+        operation_description=(
+            "Get a list of all available vehicle makes and their models "
+            "that mechanics can specialize in. This endpoint is used during "
+            "mechanic registration to show available options. Each make includes "
+            "its models as a nested list."
+        ),
         responses={
             200: openapi.Response(
-                description="List of vehicle makes",
+                description="List of vehicle makes and models",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'status': openapi.Schema(
                             type=openapi.TYPE_BOOLEAN, example=True),
                         'message': openapi.Schema(
-                            type=openapi.TYPE_STRING, 
+                            type=openapi.TYPE_STRING,
                             example="Vehicle makes retrieved successfully"),
                         'data': openapi.Schema(
                             type=openapi.TYPE_ARRAY,
@@ -631,14 +636,46 @@ class VehicleMakeListView(APIView):
                                     'id': openapi.Schema(
                                         type=openapi.TYPE_INTEGER, example=1),
                                     'name': openapi.Schema(
-                                        type=openapi.TYPE_STRING, 
+                                        type=openapi.TYPE_STRING,
                                         example="Toyota"),
+                                    'parent_make': openapi.Schema(
+                                        type=openapi.TYPE_INTEGER,
+                                        nullable=True,
+                                        example=None,
+                                        description=(
+                                            "ID of parent make if this is a model, else null"
+                                        )
+                                    ),
                                     'description': openapi.Schema(
-                                        type=openapi.TYPE_STRING, 
+                                        type=openapi.TYPE_STRING,
                                         example="Vehicle make: Toyota"),
                                     'is_active': openapi.Schema(
-                                        type=openapi.TYPE_BOOLEAN, 
-                                        example=True)
+                                        type=openapi.TYPE_BOOLEAN,
+                                        example=True),
+                                    'models': openapi.Schema(
+                                        type=openapi.TYPE_ARRAY,
+                                        items=openapi.Schema(
+                                            type=openapi.TYPE_OBJECT,
+                                            properties={
+                                                'id': openapi.Schema(
+                                                    type=openapi.TYPE_INTEGER,
+                                                    example=10),
+                                                'name': openapi.Schema(
+                                                    type=openapi.TYPE_STRING,
+                                                    example="Corolla"),
+                                                'parent_make': openapi.Schema(
+                                                    type=openapi.TYPE_INTEGER,
+                                                    example=1),
+                                                'description': openapi.Schema(
+                                                    type=openapi.TYPE_STRING,
+                                                    example="Toyota Corolla"),
+                                                'is_active': openapi.Schema(
+                                                    type=openapi.TYPE_BOOLEAN,
+                                                    example=True),
+                                            }
+                                        ),
+                                        description="List of models for this make"
+                                    ),
                                 }
                             )
                         )
@@ -648,17 +685,196 @@ class VehicleMakeListView(APIView):
         }
     )
     def get(self, request):
-        """Get all active vehicle makes"""
-        vehicle_makes = VehicleMake.objects.filter(
-            is_active=True).order_by('name')
-        serializer = VehicleMakeSerializer(vehicle_makes, many=True)
-        
+        """
+        Get all active vehicle makes (parent_make is null) and their active models.
+        Uses caching to improve performance.
+        """
+        from django.core.cache import cache
+
+        CACHE_KEY = "active_vehicle_makes_with_models"
+        CACHE_TIMEOUT = 60 * 10  # 10 minutes
+
+        cached_data = cache.get(CACHE_KEY)
+        if cached_data is not None:
+            return Response(
+                api_response(
+                    message="Vehicle makes retrieved successfully (cached)",
+                    status=True,
+                    data=cached_data
+                )
+            )
+
+        makes = VehicleMake.objects.filter(
+            is_active=True, parent_make__isnull=True
+        ).order_by('name').prefetch_related('models')
+        serializer = VehicleMakeSerializer(makes, many=True)
+        cache.set(CACHE_KEY, serializer.data, CACHE_TIMEOUT)
         return Response(
             api_response(
                 message="Vehicle makes retrieved successfully",
                 status=True,
                 data=serializer.data
             )
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Create a Vehicle Make or Model",
+        request_body=VehicleMakeSerializer,
+        responses={
+            201: VehicleMakeSerializer(),
+            400: "Bad Request",
+            403: "Forbidden"
+        }
+    )
+    def post(self, request):
+        """
+        Create a new vehicle make or model. Admin only.
+        """
+        if not request.user.is_authenticated or not request.user.is_staff:
+            return Response(
+                api_response(
+                    message="You do not have permission to perform this action.",
+                    status=False
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+        serializer = VehicleMakeSerializer(data=request.data)
+        if serializer.is_valid():
+            vehicle_make = serializer.save()
+            return Response(
+                api_response(
+                    message="Vehicle make/model created successfully.",
+                    status=True,
+                    data=VehicleMakeSerializer(vehicle_make).data
+                ),
+                status=status.HTTP_201_CREATED
+            )
+        return Response(
+            api_response(
+                message=serializer.errors,
+                status=False
+            ),
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Update a Vehicle Make or Model",
+        request_body=VehicleMakeSerializer,
+        manual_parameters=[
+            openapi.Parameter(
+                'id', openapi.IN_QUERY, description="ID of the vehicle make/model to update",
+                type=openapi.TYPE_INTEGER, required=True
+            )
+        ],
+        responses={
+            200: VehicleMakeSerializer(),
+            400: "Bad Request",
+            403: "Forbidden",
+            404: "Not Found"
+        }
+    )
+    def patch(self, request):
+        """
+        Update a vehicle make or model. Admin only.
+        """
+        if not request.user.is_authenticated or not request.user.is_staff:
+            return Response(
+                api_response(
+                    message="You do not have permission to perform this action.",
+                    status=False
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+        vehicle_make_id = request.query_params.get('id')
+        if not vehicle_make_id:
+            return Response(
+                api_response(
+                    message="Vehicle make/model ID is required.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            vehicle_make = VehicleMake.objects.get(id=vehicle_make_id)
+        except VehicleMake.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Vehicle make/model not found.",
+                    status=False
+                ),
+                status=status.HTTP_404_NOT_FOUND
+            )
+        serializer = VehicleMakeSerializer(vehicle_make, data=request.data, partial=True)
+        if serializer.is_valid():
+            vehicle_make = serializer.save()
+            return Response(
+                api_response(
+                    message="Vehicle make/model updated successfully.",
+                    status=True,
+                    data=VehicleMakeSerializer(vehicle_make).data
+                ),
+                status=status.HTTP_200_OK
+            )
+        return Response(
+            api_response(
+                message=serializer.errors,
+                status=False
+            ),
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Delete a Vehicle Make or Model",
+        manual_parameters=[
+            openapi.Parameter(
+                'id', openapi.IN_QUERY, description="ID of the vehicle make/model to delete",
+                type=openapi.TYPE_INTEGER, required=True
+            )
+        ],
+        responses={
+            204: "No Content",
+            403: "Forbidden",
+            404: "Not Found"
+        }
+    )
+    def delete(self, request):
+        """
+        Delete a vehicle make or model. Admin only.
+        """
+        if not request.user.is_authenticated or not request.user.is_staff:
+            return Response(
+                api_response(
+                    message="You do not have permission to perform this action.",
+                    status=False
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+        vehicle_make_id = request.query_params.get('id')
+        if not vehicle_make_id:
+            return Response(
+                api_response(
+                    message="Vehicle make/model ID is required.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            vehicle_make = VehicleMake.objects.get(id=vehicle_make_id)
+        except VehicleMake.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Vehicle make/model not found.",
+                    status=False
+                ),
+                status=status.HTTP_404_NOT_FOUND
+            )
+        vehicle_make.delete()
+        return Response(
+            api_response(
+                message="Vehicle make/model deleted successfully.",
+                status=True
+            ),
+            status=status.HTTP_204_NO_CONTENT
         )
 
 

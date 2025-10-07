@@ -31,7 +31,7 @@ urlpatterns = [
         name='product-list-create'
     ),
     path(
-        'products/<uuid:id>/',
+        'products/<id>/',
         ProductDetailView.as_view(),
         name='product-detail'
     ),
@@ -77,12 +77,12 @@ urlpatterns = [
     ),
 
     path(
-        'products/<uuid:product_id>/images/',
+        'products/<product_id>/images/',
         ProductImageListView.as_view(),
         name='product-image-list'
     ),
     path(
-        'products/<uuid:product_id>/images/upload/',
+        'products/<product_id>/images/upload/',
         ProductImageCreateView.as_view(),
         name='product-image-upload'
     ),

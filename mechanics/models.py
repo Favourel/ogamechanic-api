@@ -358,22 +358,36 @@ class TrainingSessionParticipant(models.Model):
 
 class VehicleMake(models.Model):
     """
-    Model for vehicle makes that mechanics can specialize in
+    Model for vehicle makes that mechanics can specialize in.
+    If this instance is a car model, 'parent_make' points to the make.
+    If 'parent_make' is null, this is a make; otherwise, it's a model.
     """
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100)
+    parent_make = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='models',
+        help_text="If this is a car model, select its make. Leave blank for makes." # noqa
+    )
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        unique_together = ('name', 'parent_make')
         ordering = ['name']
         indexes = [
             models.Index(fields=['name']),
             models.Index(fields=['is_active']),
+            models.Index(fields=['parent_make']),
         ]
 
     def __str__(self):
+        if self.parent_make:
+            return f"{self.parent_make.name} {self.name}"
         return self.name
 
 
