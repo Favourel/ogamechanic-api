@@ -239,8 +239,8 @@ class ProductListCreateView(APIView):
 
     @swagger_auto_schema(
         operation_description="Create a new product (merchant only). "
-                              "For spare parts, you can specify multiple vehicle "
-                              "makes/models in the vehicle_compatibility field.",
+                              "For spare parts, you can specify multiple vehicle " # noqa
+                              "makes/models in the vehicle_compatibility field.", # noqa
         request_body=ProductCreateSerializer,
         responses={201: ProductSerializer()}
     )

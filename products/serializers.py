@@ -22,7 +22,8 @@ class ProductVehicleCompatibilitySerializer(serializers.ModelSerializer):
         model = ProductVehicleCompatibility
         fields = [
             'id', 'make', 'model', 'make_name', 'model_name',
-            'year_from', 'year_to', 'notes', 'created_at', 'updated_at'
+            # 'year_from', 'year_to', 
+            'notes', 'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'created_at', 'updated_at', 'make_name', 'model_name'

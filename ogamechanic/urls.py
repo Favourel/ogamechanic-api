@@ -43,16 +43,6 @@ class DocsAccessPermission(BasePermission):
         return False
 
 
-# Determine the URL and schemes based on environment
-if 'ff2d18abf80f.ngrok-free.app' in settings.ALLOWED_HOSTS:
-    # Production configuration
-    API_URL = 'https://ff2d18abf80f.ngrok-free.app'
-    API_SCHEMES = ['https']
-else:
-    # Development configuration
-    API_URL = 'http://127.0.0.1:8001'
-    API_SCHEMES = ['http']
-
 schema_view = get_schema_view(
     openapi.Info(
         title="OGAMECHANIC API",
@@ -66,7 +56,7 @@ schema_view = get_schema_view(
     ),
     public=settings.DEBUG,
     permission_classes=(AllowAny,) if settings.DEBUG else (DocsAccessPermission,), # noqa
-    url=API_URL,
+    # url=API_URL,
 )
 
 urlpatterns = [

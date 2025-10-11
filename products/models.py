@@ -359,16 +359,16 @@ class ProductVehicleCompatibility(models.Model):
         help_text="Specific vehicle model (optional). If not specified, "
                   "compatible with all models of the make."
     )
-    year_from = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Starting year of compatibility (optional)"
-    )
-    year_to = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Ending year of compatibility (optional)"
-    )
+    # year_from = models.PositiveIntegerField(
+    #     null=True,
+    #     blank=True,
+    #     help_text="Starting year of compatibility (optional)"
+    # )
+    # year_to = models.PositiveIntegerField(
+    #     null=True,
+    #     blank=True,
+    #     help_text="Ending year of compatibility (optional)"
+    # )
     notes = models.TextField(
         blank=True,
         help_text="Additional compatibility notes"
@@ -377,12 +377,15 @@ class ProductVehicleCompatibility(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('product', 'make', 'model', 'year_from', 'year_to')
+        unique_together = (
+            'product', 'make', 'model', 
+            # 'year_from', 'year_to'
+            )
         indexes = [
             models.Index(fields=['product']),
             models.Index(fields=['make']),
             models.Index(fields=['model']),
-            models.Index(fields=['year_from', 'year_to']),
+            # models.Index(fields=['year_from', 'year_to']),
         ]
         ordering = ['make__name', 'model__name']
 
@@ -397,8 +400,8 @@ class ProductVehicleCompatibility(models.Model):
                 raise ValidationError(
                     "Selected model does not belong to the selected make.")
         
-        if self.year_from and self.year_to and self.year_from > self.year_to:
-            raise ValidationError("Year from cannot be greater than year to.")
+        # if self.year_from and self.year_to and self.year_from > self.year_to:
+        #     raise ValidationError("Year from cannot be greater than year to.")
 
 
 class ProductImage(models.Model):
