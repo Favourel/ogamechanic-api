@@ -119,3 +119,4 @@ whitenoise==6.9.0
 
 # Image processing
 imageio==2.34.1
+pillow_heif==1.1.1
