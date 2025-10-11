@@ -268,11 +268,11 @@ class ProductListCreateView(APIView):
             serializer = ProductCreateSerializer(data=data)
             if serializer.is_valid():
                 product = serializer.save(merchant=user)
-                images = request.FILES.getlist('images')
-                for idx, image in enumerate(images):
-                    ProductImage.objects.create(
-                        product=product, image=image, ordering=idx
-                    )
+                # images = request.FILES.getlist('images')
+                # for idx, image in enumerate(images):
+                #     ProductImage.objects.create(
+                #         product=product, image=image, ordering=idx
+                #     )
                 return Response(
                     api_response(
                         message="Product created successfully.",

@@ -13,8 +13,19 @@ class CategorySerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
-class ProductVehicleCompatibilitySerializer(serializers.ModelSerializer):
-    """Serializer for ProductVehicleCompatibility model"""
+class ProductVehicleCompatibilitySerializer(serializers.Serializer):
+    """Serializer for ProductVehicleCompatibility model with array support"""
+    make = serializers.IntegerField()
+    model = serializers.ListField(
+        child=serializers.IntegerField(), 
+        required=False,
+        allow_empty=True
+    )
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class ProductVehicleCompatibilityReadSerializer(serializers.ModelSerializer):
+    """Serializer for reading ProductVehicleCompatibility model"""
     make_name = serializers.CharField(source='make.name', read_only=True)
     model_name = serializers.CharField(source='model.name', read_only=True)
     
@@ -22,7 +33,6 @@ class ProductVehicleCompatibilitySerializer(serializers.ModelSerializer):
         model = ProductVehicleCompatibility
         fields = [
             'id', 'make', 'model', 'make_name', 'model_name',
-            # 'year_from', 'year_to', 
             'notes', 'created_at', 'updated_at'
         ]
         read_only_fields = [
@@ -72,7 +82,7 @@ class ProductSerializer(serializers.ModelSerializer):
         queryset=Category.objects.all(), source='category', write_only=True,
     )
     merchant = serializers.SerializerMethodField(read_only=True)
-    vehicle_compatibility = ProductVehicleCompatibilitySerializer(
+    vehicle_compatibility = ProductVehicleCompatibilityReadSerializer(
         many=True, read_only=True)
 
     rating = serializers.SerializerMethodField()
@@ -282,10 +292,26 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         
         # Create vehicle compatibility entries
         for compatibility_data in vehicle_compatibility_data:
-            ProductVehicleCompatibility.objects.create(
-                product=product,
-                **compatibility_data
-            )
+            make_id = compatibility_data['make']
+            model_ids = compatibility_data.get('model', [])
+            notes = compatibility_data.get('notes', '')
+            
+            # Create entry for make only (if no specific models)
+            if not model_ids:
+                ProductVehicleCompatibility.objects.create(
+                    product=product,
+                    make_id=make_id,
+                    notes=notes
+                )
+            else:
+                # Create entries for each specific model
+                for model_id in model_ids:
+                    ProductVehicleCompatibility.objects.create(
+                        product=product,
+                        make_id=make_id,
+                        model_id=model_id,
+                        notes=notes
+                    )
         
         return product
     
@@ -303,10 +329,26 @@ class ProductCreateSerializer(serializers.ModelSerializer):
             instance.vehicle_compatibility.all().delete()
             # Create new compatibility entries
             for compatibility_data in vehicle_compatibility_data:
-                ProductVehicleCompatibility.objects.create(
-                    product=instance,
-                    **compatibility_data
-                )
+                make_id = compatibility_data['make']
+                model_ids = compatibility_data.get('model', [])
+                notes = compatibility_data.get('notes', '')
+                
+                # Create entry for make only (if no specific models)
+                if not model_ids:
+                    ProductVehicleCompatibility.objects.create(
+                        product=instance,
+                        make_id=make_id,
+                        notes=notes
+                    )
+                else:
+                    # Create entries for each specific model
+                    for model_id in model_ids:
+                        ProductVehicleCompatibility.objects.create(
+                            product=instance,
+                            make_id=make_id,
+                            model_id=model_id,
+                            notes=notes
+                        )
         
         return instance
 
