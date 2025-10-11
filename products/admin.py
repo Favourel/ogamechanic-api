@@ -16,6 +16,13 @@ class ProductImageInline(admin.TabularInline):
     readonly_fields = ('created_at',)
 
 
+class ProductVehicleCompatibilityInline(admin.TabularInline):
+    model = models.ProductVehicleCompatibility
+    extra = 1
+    fields = ('make', 'model', 'year_from', 'year_to', 'notes')
+    autocomplete_fields = ('make', 'model')
+
+
 @admin.register(models.Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = (
@@ -25,7 +32,7 @@ class ProductAdmin(admin.ModelAdmin):
     search_fields = ('name', 'merchant__email', 'category__name', 'id')
     list_filter = ('is_rental', 'category', 'created_at')
     readonly_fields = ('created_at', 'updated_at')
-    inlines = [ProductImageInline]
+    inlines = [ProductImageInline, ProductVehicleCompatibilityInline]
     autocomplete_fields = ('merchant', 'category',)
     list_per_page = 30  # Enable pagination, 25 per page by default
     list_max_show_all = 200  # Optional: limit max "Show all" to 200
@@ -96,6 +103,7 @@ already_registered = {
     models.Category,
     models.Product,
     models.ProductImage,
+    models.ProductVehicleCompatibility,
     models.Order,
     models.OrderItem,
     models.Cart,

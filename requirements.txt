@@ -116,3 +116,6 @@ urllib3==2.5.0
 vine==5.1.0
 wcwidth==0.2.13
 whitenoise==6.9.0
+
+# Image processing
+imageio==2.34.1

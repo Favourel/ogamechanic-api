@@ -36,7 +36,7 @@ urlpatterns = [
         name='product-detail'
     ),
     path(
-        'products/search/',
+        'search-product/',
         ProductSearchView.as_view(),
         name='product-search'
     ),

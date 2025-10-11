@@ -7,7 +7,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY') # noqa
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true' # noqa
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '16402d4b9bdd.ngrok-free.app', 'ogamechanic-api-1.onrender.com'] # noqa
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ff2d18abf80f.ngrok-free.app', 'ogamechanic-api-1.onrender.com'] # noqa
 X_API_KEY = os.environ.get('X_API_KEY') # noqa
 
 # WhiteNoise configuration
@@ -93,30 +93,30 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL') # noqa
 PASSWORD_RESET_TIMEOUT = 3600  # 1 hour
 
 # Cache settings
-CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}',
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            'SOCKET_CONNECT_TIMEOUT': 5,
-            'SOCKET_TIMEOUT': 5,
-            'RETRY_ON_TIMEOUT': True,
-            'MAX_CONNECTIONS': 1000,
-            'CONNECTION_POOL_KWARGS': {'max_connections': 100},
-        }
-    }
-}
+# CACHES = {
+#     'default': {
+#         'BACKEND': 'django_redis.cache.RedisCache',
+#         'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}',
+#         'OPTIONS': {
+#             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+#             'SOCKET_CONNECT_TIMEOUT': 5,
+#             'SOCKET_TIMEOUT': 5,
+#             'RETRY_ON_TIMEOUT': True,
+#             'MAX_CONNECTIONS': 1000,
+#             'CONNECTION_POOL_KWARGS': {'max_connections': 100},
+#         }
+#     }
+# }
 
-# Cache timeouts
-CACHE_TIMEOUT_SHORT = os.environ.get('CACHE_TIMEOUT_SHORT') # noqa
-CACHE_TIMEOUT_MEDIUM = os.environ.get('CACHE_TIMEOUT_MEDIUM') # noqa
-CACHE_TIMEOUT_LONG = os.environ.get('CACHE_TIMEOUT_LONG') # noqa
-CACHE_TIMEOUT_VERY_LONG = os.environ.get('CACHE_TIMEOUT_VERY_LONG') # noqa
+# # Cache timeouts
+# CACHE_TIMEOUT_SHORT = os.environ.get('CACHE_TIMEOUT_SHORT') # noqa
+# CACHE_TIMEOUT_MEDIUM = os.environ.get('CACHE_TIMEOUT_MEDIUM') # noqa
+# CACHE_TIMEOUT_LONG = os.environ.get('CACHE_TIMEOUT_LONG') # noqa
+# CACHE_TIMEOUT_VERY_LONG = os.environ.get('CACHE_TIMEOUT_VERY_LONG') # noqa
 
 # Use Redis for session storage
-SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
-SESSION_CACHE_ALIAS = 'default'
+# SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+# SESSION_CACHE_ALIAS = 'default'
 
 # Email Validation API Keys
 DISPOSABLE_EMAIL_API_KEY = 'your_key_here'  # For disposable-email-detector.com

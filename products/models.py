@@ -333,6 +333,74 @@ class Product(models.Model):
                 raise ValidationError("Selected model does not belong to the selected make.") # noqa
 
 
+class ProductVehicleCompatibility(models.Model):
+    """
+    Model to track which vehicle makes/models a product (especially spare parts) 
+    is compatible with. This allows spare parts to be compatible with multiple 
+    vehicle makes and models.
+    """
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='vehicle_compatibility'
+    )
+    make = models.ForeignKey(
+        'mechanics.VehicleMake',
+        on_delete=models.CASCADE,
+        related_name='compatible_products_by_make',
+        help_text="Vehicle make this product is compatible with"
+    )
+    model = models.ForeignKey(
+        'mechanics.VehicleMake',
+        on_delete=models.CASCADE,
+        related_name='compatible_products_by_model',
+        null=True,
+        blank=True,
+        help_text="Specific vehicle model (optional). If not specified, "
+                  "compatible with all models of the make."
+    )
+    year_from = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Starting year of compatibility (optional)"
+    )
+    year_to = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Ending year of compatibility (optional)"
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Additional compatibility notes"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('product', 'make', 'model', 'year_from', 'year_to')
+        indexes = [
+            models.Index(fields=['product']),
+            models.Index(fields=['make']),
+            models.Index(fields=['model']),
+            models.Index(fields=['year_from', 'year_to']),
+        ]
+        ordering = ['make__name', 'model__name']
+
+    def __str__(self):
+        if self.model:
+            return f"{self.product.name} - {self.make.name} {self.model.name}"
+        return f"{self.product.name} - {self.make.name}"
+
+    def clean(self):
+        if self.model and self.make:
+            if self.model.parent_make_id != self.make.id:
+                raise ValidationError(
+                    "Selected model does not belong to the selected make.")
+        
+        if self.year_from and self.year_to and self.year_from > self.year_to:
+            raise ValidationError("Year from cannot be greater than year to.")
+
+
 class ProductImage(models.Model):
     product = models.ForeignKey(
         Product, on_delete=models.CASCADE, related_name='images'
@@ -342,7 +410,7 @@ class ProductImage(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['ordering', 'created_at']
+        ordering = ['-created_at', 'ordering']
         indexes = [
             models.Index(fields=['product']),
             models.Index(fields=['ordering']),

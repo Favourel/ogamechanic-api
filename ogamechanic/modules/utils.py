@@ -307,37 +307,41 @@ def transaction_pin_correct(user, trans_pin):
     return True
 
 
-
 def resize_and_save_image(input_image, width, height):
     """
-    Resizes an image to the given width and height, applies sharpening, and saves it to the database.
+    Resizes an uploaded image to the specified width and height,
+    applies sharpening,
+    and returns a ContentFile suitable for saving to a Django model.
 
-    Parameters:
-    input_image (InMemoryUploadedFile): Image file uploaded by the user.
-    width (int): Desired width for the image.
-    height (int): Desired height for the image.
+    Args:
+        input_image (InMemoryUploadedFile): The uploaded image file.
+        width (int): The target width in pixels.
+        height (int): The target height in pixels.
 
     Returns:
-    ContentFile: Resized image ready to be saved to the database.
+        ContentFile: The processed image file, or None if processing fails.
     """
+    from PIL import Image, ImageFilter, UnidentifiedImageError
+    from pillow_heif import register_heif_opener
+    from django.core.files.base import ContentFile
+    from io import BytesIO
+    import imageio
+    import os
+
+    # Register HEIF/AVIF opener for Pillow
+    register_heif_opener()
+
+    # Validate input
+    if not input_image or not hasattr(input_image, "name"):
+        log_request("Invalid input_image provided to resize_and_save_image.")
+        return None
+
+    ext = os.path.splitext(input_image.name)[-1].lower()
+    img = None
 
     try:
-        from PIL import Image, ImageFilter, UnidentifiedImageError
-        from pillow_heif import register_heif_opener
-        from django.core.files.base import ContentFile
-        from io import BytesIO
-        import imageio, os
-        import ghostscript
-
-        # Register HEIF/AVIF opener
-        register_heif_opener()
-
-        # Determine the file extension
-        ext = os.path.splitext(input_image.name)[-1].lower()
-
-        # Open the image
+        # EPS-specific handling
         if ext == ".eps":
-            # EPS-specific handling using Ghostscript
             try:
                 img = Image.open(input_image)
                 img.load(scale=2)  # Load at 2x resolution for better quality
@@ -351,33 +355,43 @@ def resize_and_save_image(input_image, width, height):
                 img = Image.open(input_image)
                 img = img.convert("RGB")  # Ensure compatibility
             except UnidentifiedImageError:
-                # Fallback for unsupported formats
-                img = imageio.imread(input_image)
-                img = Image.fromarray(img)  # Convert to Pillow Image object
+                try:
+                    # Fallback for unsupported formats
+                    img_array = imageio.imread(input_image)
+                    img = Image.fromarray(img_array)
+                except Exception as e:
+                    log_request(f"Unsupported image format: {e}")
+                    return None
+
+        if img is None:
+            log_request("Failed to open image file.")
+            return None
 
         original_width, original_height = img.size
-
         log_request(
-            f"Processing image: {input_image.name}, size: {original_width}x{original_height}"
+            f"Processing image: {input_image.name}, size: {original_width}x{original_height}"  # noqa
         )
 
-        # Resize if needed
+        # Only resize if necessary
         if original_width > width or original_height > height:
             img.thumbnail((width, height), Image.Resampling.LANCZOS)
-            # img.thumbnail((width, height), Image.LANCZOS)
-
-            log_request(f"Resized size: {img.size}")
-            # print(f"Resized size: {img.size}")
-
-            # Apply sharpening
+            log_request(f"Resized image to: {img.size}")
             img = img.filter(ImageFilter.SHARPEN)
 
-        # Save the resized image to a buffer as JPEG
+        # Save to buffer as JPEG
         buffer = BytesIO()
-        img.save(buffer, format="JPEG", optimize=True, quality=85)
+        try:
+            img.save(buffer, format="JPEG", optimize=True, quality=85)
+        except Exception as e:
+            log_request(f"Error saving image to buffer: {e}")
+            return None
         buffer.seek(0)
 
-        return ContentFile(buffer.read(), name=f"{input_image.name.split('.')[0]}.jpg")
+        # Generate a safe filename
+        base_name = os.path.splitext(os.path.basename(input_image.name))[0]
+        safe_name = f"{base_name}.jpg"
+
+        return ContentFile(buffer.read(), name=safe_name)
 
     except Exception as e:
         log_request(f"Error resizing image: {e}")

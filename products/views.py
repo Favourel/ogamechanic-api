@@ -1,19 +1,21 @@
+from multiprocessing import Value
 from rest_framework.views import APIView
 from rest_framework import permissions, status, parsers
 from rest_framework.response import Response
 from django.db import connection
 from django.db.models import (Q, Sum, Count, F, DecimalField, 
                               ExpressionWrapper, 
-                              Func, Avg)
+                              Func, Avg, Prefetch, Exists, OuterRef)
 from .models import (Product, Category, ProductImage, 
                      Order, Cart, CartItem, OrderItem, ProductReview,
                      FollowMerchant, FavoriteProduct)
 from .serializers import (
-    ProductSerializer, CategorySerializer, HomeResponseSerializer, 
-    OrderSerializer, CartSerializer, 
+    ProductSerializer, ProductCreateSerializer, CategorySerializer, 
+    HomeResponseSerializer, OrderSerializer, CartSerializer, 
     ProductReviewSerializer, FollowMerchantSerializer,
     FollowMerchantListSerializer, FavoriteProductSerializer,
-    FavoriteProductListSerializer, ProductImageSerializer
+    FavoriteProductListSerializer, ProductImageSerializer,
+    ProductImageUpdateSerializer
 )
 from ogamechanic.modules.utils import (
     api_response, get_incoming_request_checks, incoming_request_checks,
@@ -43,16 +45,23 @@ from users.throttling import UserRateThrottle
 import logging
 import traceback
 
+from django.db.models.functions import Coalesce
+from django.db import models
+
 logger = logging.getLogger(__name__)
 
 
 class ProductListCreateView(APIView):
+    """
+    API endpoint to list all products (optionally filterable by merchant, category, price, etc.) # noqa
+    and to create a new product (merchant only).
+    """
     parser_classes = [
         parsers.MultiPartParser,
         parsers.FormParser,
         parsers.JSONParser
     ]
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
     pagination_class = CustomLimitOffsetPagination
     throttle_classes = [UserRateThrottle]
 
@@ -65,8 +74,16 @@ class ProductListCreateView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
     @swagger_auto_schema(
-        operation_description="List all products or create a new product (merchant only)",  # noqa
+        operation_description="List all products. Optionally filter by merchant, category, price, or rental status.", # noqa
         manual_parameters=[
+            openapi.Parameter(
+                'merchant',
+                openapi.IN_QUERY,
+                description="Filter by merchant user ID",
+                type=openapi.TYPE_STRING,
+                format=openapi.FORMAT_UUID,
+                required=False
+            ),
             openapi.Parameter(
                 'category',
                 openapi.IN_QUERY,
@@ -98,49 +115,133 @@ class ProductListCreateView(APIView):
         ],
         responses={
             200: ProductSerializer(many=True),
-            201: ProductSerializer()
         }
     )
     def get(self, request):
-        status_, data = get_incoming_request_checks(request)
-        if not status_:
-            return Response(
-                api_response(message=data, status=False), status=400
+        """
+        List all products, with optional filters:
+        - merchant: user ID of the merchant
+        - category: category ID
+        - is_rental: true/false
+        - min_price: minimum price
+        - max_price: maximum price
+        """
+        try:
+            status_, data = get_incoming_request_checks(request)
+            if not status_:
+                return Response(
+                    api_response(message=data, status=False), status=400
+                )
+
+            queryset = (
+                Product.objects.select_related("merchant", "category")
+                .prefetch_related(
+                    Prefetch(
+                        "images",
+                        queryset=ProductImage.objects.order_by("ordering")
+                    )
+                )
+                .annotate(
+                    avg_rating=Avg("reviews__rating"),
+                    total_purchased=Sum(
+                        "orderitem__quantity",
+                        filter=Q(orderitem__order__status="paid")
+                    ),
+                    is_in_favorite_list=Exists(
+                        FavoriteProduct.objects.filter(
+                            product=OuterRef("pk"), user=request.user)
+                    ) if request.user.is_authenticated else None,
+                    is_in_cart=Exists(
+                        CartItem.objects.filter(
+                            cart__user=request.user,
+                            product=OuterRef("pk"))
+                    ) if request.user.is_authenticated else None,
+                )
             )
-        queryset = Product.objects.select_related(
-            'merchant', 'category'
-        ).prefetch_related('images').all()
-        category = request.query_params.get('category')
-        is_rental = request.query_params.get('is_rental')
-        min_price = request.query_params.get('min_price')
-        max_price = request.query_params.get('max_price')
 
-        if category:
-            queryset = queryset.filter(category__id=category)
-        if is_rental is not None:
-            queryset = queryset.filter(is_rental=(is_rental.lower() == 'true'))
-        if min_price is not None:
-            try:
-                min_price_val = float(min_price)
-                queryset = queryset.filter(price__gte=min_price_val)
-            except ValueError:
-                pass  # Ignore invalid min_price
-        if max_price is not None:
-            try:
-                max_price_val = float(max_price)
-                queryset = queryset.filter(price__lte=max_price_val)
-            except ValueError:
-                pass  # Ignore invalid max_price
+            # Filtering
+            merchant = request.query_params.get('merchant')
+            category = request.query_params.get('category')
+            is_rental = request.query_params.get('is_rental')
+            min_price = request.query_params.get('min_price')
+            max_price = request.query_params.get('max_price')
 
-        return Response(api_response(
-            message="Product list retrieved successfully.",
-            status=True,
-            data=self.get_paginated_response(queryset).data
-        ))
+            if merchant:
+                try:
+                    queryset = queryset.filter(merchant__id=merchant)
+                except (ValueError, TypeError):
+                    return Response(
+                        api_response(
+                            message="Invalid merchant ID.", status=False),
+                        status=400
+                    )
+            if category:
+                try:
+                    queryset = queryset.filter(category__id=category)
+                except (ValueError, TypeError):
+                    return Response(
+                        api_response(
+                            message="Invalid category ID.", status=False),
+                        status=400
+                    )
+            if is_rental is not None:
+                if is_rental.lower() in ['true', '1']:
+                    queryset = queryset.filter(is_rental=True)
+                elif is_rental.lower() in ['false', '0']:
+                    queryset = queryset.filter(is_rental=False)
+                else:
+                    return Response(
+                        api_response(
+                            message="Invalid is_rental value. Use true or false.", # noqa
+                            status=False),
+                        status=400
+                    )
+            if min_price is not None:
+                try:
+                    min_price_val = float(min_price)
+                    queryset = queryset.filter(price__gte=min_price_val)
+                except (ValueError, TypeError):
+                    return Response(
+                        api_response(
+                            message="Invalid min_price value.", 
+                            status=False),
+                        status=400
+                    )
+            if max_price is not None:
+                try:
+                    max_price_val = float(max_price)
+                    queryset = queryset.filter(price__lte=max_price_val)
+                except (ValueError, TypeError):
+                    return Response(
+                        api_response(
+                            message="Invalid max_price value.",
+                            status=False),
+                        status=400
+                    )
+
+            paginated_response = self.get_paginated_response(queryset)
+            return Response(api_response(
+                message="Product list retrieved successfully.",
+                status=True,
+                data=paginated_response.data
+            ))
+        except Exception as exc:
+            logger.error(
+                "Error in ProductListCreateView.get: %s", exc,
+                exc_info=True)
+            return Response(
+                api_response(
+                    message="An error occurred while retrieving products.",
+                    status=False
+                ),
+                status=500
+            )
 
     @swagger_auto_schema(
-        operation_description="Create a new product (merchant only)",
-        request_body=ProductSerializer,
+        operation_description="Create a new product (merchant only). "
+                              "For spare parts, you can specify multiple vehicle "
+                              "makes/models in the vehicle_compatibility field.",
+        request_body=ProductCreateSerializer,
         responses={201: ProductSerializer()}
     )
     def post(self, request):
@@ -164,7 +265,7 @@ class ProductListCreateView(APIView):
                     ),
                     status=status.HTTP_403_FORBIDDEN
                 )
-            serializer = ProductSerializer(data=data)
+            serializer = ProductCreateSerializer(data=data)
             if serializer.is_valid():
                 product = serializer.save(merchant=user)
                 images = request.FILES.getlist('images')
@@ -176,7 +277,8 @@ class ProductListCreateView(APIView):
                     api_response(
                         message="Product created successfully.",
                         status=True,
-                        data=ProductSerializer(product).data
+                        data=ProductSerializer(
+                            product, context={'request': request}).data
                     ),
                     status=status.HTTP_201_CREATED
                 )
@@ -221,7 +323,7 @@ class ProductImageCreateView(APIView):
 
     @swagger_auto_schema(
         operation_summary="Upload Product Images",
-        operation_description="Upload one or more images for a product (merchant only).",
+        operation_description="Upload one or more images for a product (merchant only).", # noqa
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             required=["images"],
@@ -229,7 +331,7 @@ class ProductImageCreateView(APIView):
                 "images": openapi.Schema(
                     type=openapi.TYPE_ARRAY,
                     items=openapi.Items(type=openapi.TYPE_FILE),
-                    description="List of image files to upload (multipart/form-data)."
+                    description="List of image files to upload (multipart/form-data)." # noqa
                 )
             }
         ),
@@ -250,11 +352,6 @@ class ProductImageCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # status_, data = incoming_request_checks(request)
-        # if not status_:
-        #     return Response(
-        #         api_response(message=data, status=False), status=400
-        #     )
         try:
             product = Product.objects.get(id=product_uuid)
         except Product.DoesNotExist:
@@ -269,7 +366,7 @@ class ProductImageCreateView(APIView):
         if product.merchant != request.user:
             return Response(
                 api_response(
-                    message="You do not have permission to upload images for this product.",
+                    message="You do not have permission to upload images for this product.", # noqa
                     status=False
                 ),
                 status=status.HTTP_403_FORBIDDEN
@@ -285,21 +382,22 @@ class ProductImageCreateView(APIView):
             )
         created_images = []
 
-        for uploaded_image in images:
-            resized_image = resize_and_save_image(uploaded_image, 200, 200)
-            if not resized_image:
+        # Get the current max ordering for this product's images
+        max_ordering = product.images.aggregate(
+            max_ordering=models.Max('ordering'))['max_ordering'] or 0
+
+        for idx, uploaded_image in enumerate(images, start=1):
+            # Use the image optimizer utility
+            optimized_image = resize_and_save_image(uploaded_image, 400, 400)
+            if not optimized_image:
                 continue
 
-            # Get the current max ordering for this product's images
-            max_ordering = product.images.aggregate(
-                max_ordering=models.Max('ordering'))['max_ordering'] or 0
-            for idx, resized_image in enumerate(images):
-                product_image = ProductImage.objects.create(
-                    product=product,
-                    image=resized_image,
-                    ordering=max_ordering + idx
-                )
-                created_images.append(product_image)
+            product_image = ProductImage.objects.create(
+                product=product,
+                image=optimized_image,
+                ordering=max_ordering + idx
+            )
+            created_images.append(product_image)
 
         if not created_images:
             return Response(
@@ -374,121 +472,130 @@ class ProductImageListView(APIView):
         )
 
     @swagger_auto_schema(
-        operation_summary="Update Product Image",
-        operation_description="Update a product image's ordering or image file. Only the merchant who owns the product can update.",
+        operation_summary="Batch Update Product Images",
+        operation_description="Update multiple product images (ordering or image file).", # noqa
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                'image_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the image to update'),
-                'ordering': openapi.Schema(type=openapi.TYPE_INTEGER, description='New ordering value'),
-                'image': openapi.Schema(type=openapi.TYPE_FILE, description='New image file (optional)'),
+                "updates": openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        properties={
+                            "image_id": openapi.Schema(
+                                type=openapi.TYPE_INTEGER),
+                            "ordering": openapi.Schema(
+                                type=openapi.TYPE_INTEGER),
+                            "image": openapi.Schema(
+                                type=openapi.TYPE_STRING, 
+                                format=openapi.FORMAT_BINARY),
+                        },
+                        required=["image_id"],
+                    ),
+                )
             },
-            required=['image_id'],
         ),
-        responses={200: ProductImageSerializer()}
+        responses={200: ProductImageSerializer(many=True)}
     )
     def patch(self, request, product_id):
-        # Only authenticated merchants can update images
-        if not request.user.is_authenticated:
+        """
+        Batch update product images (ordering or file).
+        """
+        user = request.user
+
+        if not user.is_authenticated:
             return Response(
-                api_response(
-                    message="Authentication required.",
-                    status=False
-                ),
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+                api_response("Authentication required.", False), 401)
+
+        from uuid import UUID
         try:
-            from uuid import UUID
             product_uuid = UUID(str(product_id))
         except Exception:
             return Response(
-                api_response(
-                    message="Invalid product_id.",
-                    status=False
-                ),
-                status=status.HTTP_400_BAD_REQUEST
-            )
+                api_response("Invalid product_id.", False), 400)
+
         try:
             product = Product.objects.get(id=product_uuid)
         except Product.DoesNotExist:
+            return Response(api_response("Product not found.", False), 404)
+
+        if product.merchant != user:
             return Response(
                 api_response(
-                    message="Product not found.",
-                    status=False
-                ),
-                status=status.HTTP_404_NOT_FOUND
-            )
-        if not hasattr(request.user, "merchantprofile") or product.merchant != request.user:
-            return Response(
-                api_response(
-                    message="You do not have permission to update images for this product.",
-                    status=False
-                ),
-                status=status.HTTP_403_FORBIDDEN
-            )
-        image_id = request.data.get('image_id')
-        if not image_id:
-            return Response(
-                api_response(
-                    message="image_id is required.",
-                    status=False
-                ),
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        try:
-            image_obj = product.images.get(id=image_id)
-        except ProductImage.DoesNotExist:
-            return Response(
-                api_response(
-                    message="Product image not found.",
-                    status=False
-                ),
-                status=status.HTTP_404_NOT_FOUND
-            )
-        updated = False
-        ordering = request.data.get('ordering')
-        if ordering is not None:
+                    "You do not have permission to update this product's images.", False), 403) # noqa
+
+        updates = request.data.get('updates')
+        if not updates:
+            return Response(api_response("`updates` array is required.", False), 400) # noqa
+
+        # Handle case when request.data is QueryDict (multipart form)
+        if isinstance(updates, str):
+            import json
             try:
-                ordering = int(ordering)
-                image_obj.ordering = ordering
-                updated = True
-            except ValueError:
+                updates = json.loads(updates)
+            except json.JSONDecodeError:
                 return Response(
                     api_response(
-                        message="Invalid ordering value.",
-                        status=False
-                    ),
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        if 'image' in request.FILES:
-            image_obj.image = request.FILES['image']
-            updated = True
-        if updated:
-            image_obj.save()
-            serializer = ProductImageSerializer(image_obj, context={'request': request})
-            return Response(
-                api_response(
-                    message="Product image updated successfully.",
-                    status=True,
-                    data=serializer.data
-                ),
-                status=status.HTTP_200_OK
-            )
-        else:
-            return Response(
-                api_response(
-                    message="No changes provided.",
-                    status=False
-                ),
-                status=status.HTTP_400_BAD_REQUEST
-            )
+                        "Invalid JSON format in updates.",
+                        False), 400)
+
+        updated_images = []
+        errors = []
+
+        for update in updates:
+            serializer = ProductImageUpdateSerializer(data=update)
+            serializer.is_valid(raise_exception=True)
+
+            image_id = serializer.validated_data["image_id"]
+            ordering = serializer.validated_data.get("ordering")
+            uploaded_file = serializer.validated_data.get("image") or request.FILES.get(f"image_{image_id}")  # noqa
+
+            try:
+                image_obj = product.images.get(id=image_id)
+            except product.images.model.DoesNotExist:
+                errors.append({"image_id": image_id, "error": "Image not found."}) # noqa
+                continue
+
+            changed = False
+
+            if ordering is not None:
+                image_obj.ordering = ordering
+                changed = True
+
+            if uploaded_file:
+                resized = resize_and_save_image(uploaded_file, 400, 400)
+                if resized is None:
+                    errors.append(
+                        {
+                            "image_id": image_id, "error": "Invalid image file."}) # noqa
+                    continue
+                if image_obj.image:
+                    image_obj.image.delete(save=False)
+                image_obj.image = resized
+                changed = True
+
+            if changed:
+                image_obj.save()
+                updated_images.append(image_obj)
+
+        serializer = ProductImageSerializer(
+            updated_images, many=True, context={"request": request})
+        return Response(
+            api_response(
+                "Batch product image update completed.",
+                True,
+                data={"updated": serializer.data, "errors": errors or None},
+            ),
+            200
+        )
 
     @swagger_auto_schema(
         operation_summary="Delete Product Image",
-        operation_description="Delete a product image. Only the merchant who owns the product can delete.",
+        operation_description="Delete a product image. Only the merchant who owns the product can delete.", # noqa
         manual_parameters=[
             openapi.Parameter(
-                'image_id', openapi.IN_QUERY, description="ID of the image to delete",
+                'image_id', openapi.IN_QUERY, 
+                description="ID of the image to delete",
                 type=openapi.TYPE_INTEGER, required=True
             ),
         ],
@@ -525,10 +632,10 @@ class ProductImageListView(APIView):
                 ),
                 status=status.HTTP_404_NOT_FOUND
             )
-        if not hasattr(request.user, "merchantprofile") or product.merchant != request.user:
+        if product.merchant != request.user: # noqa
             return Response(
                 api_response(
-                    message="You do not have permission to delete images for this product.",
+                    message="You do not have permission to delete images for this product.", # noqa
                     status=False
                 ),
                 status=status.HTTP_403_FORBIDDEN
@@ -556,9 +663,10 @@ class ProductImageListView(APIView):
         return Response(
             api_response(
                 message="Product image deleted successfully.",
-                status=True
+                status=True,
+                data={}
             ),
-            status=status.HTTP_204_NO_CONTENT
+            status=status.HTTP_200_OK
         )
 
 
@@ -596,9 +704,34 @@ class ProductDetailView(APIView):
             )
 
         try:
-            product = Product.objects.select_related(
-                'merchant', 'category'
-            ).prefetch_related('images').get(id=product_uuid)
+            # product = Product.objects.select_related(
+            #     'merchant', 'category'
+            # ).prefetch_related('images').get(id=product_uuid)
+            product = (
+                Product.objects.select_related("merchant", "category")
+                .prefetch_related(
+                    Prefetch(
+                        "images",
+                        queryset=ProductImage.objects.order_by("ordering")
+                    )
+                )
+                .annotate(
+                    avg_rating=Avg("reviews__rating"),
+                    total_purchased=Sum(
+                        "orderitem__quantity",
+                        filter=Q(orderitem__order__status="paid")
+                    ),
+                    is_in_favorite_list=Exists(
+                        FavoriteProduct.objects.filter(
+                            product=OuterRef("pk"), user=request.user)
+                    ) if request.user.is_authenticated else None,
+                    is_in_cart=Exists(
+                        CartItem.objects.filter(
+                            cart__user=request.user,
+                            product=OuterRef("pk"))
+                    ) if request.user.is_authenticated else None,
+                ).get(id=product_uuid)
+            )
         except Product.DoesNotExist:
             return Response(
                 api_response(
@@ -797,12 +930,22 @@ class ProductDetailView(APIView):
                 message="Product deleted successfully.",
                 status=True
             ),
-            status=status.HTTP_204_NO_CONTENT
+            status=status.HTTP_200_OK
         )
 
 
 class ProductSearchView(APIView):
     permission_classes = [permissions.AllowAny]
+    pagination_class = CustomLimitOffsetPagination
+    throttle_classes = [UserRateThrottle]
+
+    def get_paginated_response(self, queryset):
+        """Return paginated response"""
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(queryset, self.request)
+        serializer = ProductSerializer(
+            page, many=True, context={'request': self.request})
+        return paginator.get_paginated_response(serializer.data)
 
     @swagger_auto_schema(
         operation_description="Full-text search for products (by name, description, category)", # noqa
@@ -810,6 +953,16 @@ class ProductSearchView(APIView):
             openapi.Parameter(
                 'q', openapi.IN_QUERY, description="Search query",
                 type=openapi.TYPE_STRING
+            ),
+            openapi.Parameter(
+                'page', openapi.IN_QUERY, 
+                description="Page number for pagination",
+                type=openapi.TYPE_INTEGER, required=False
+            ),
+            openapi.Parameter(
+                'page_size', openapi.IN_QUERY, 
+                description="Number of items per page",
+                type=openapi.TYPE_INTEGER, required=False
             ),
         ],
         responses={200: ProductSerializer(many=True)}
@@ -820,52 +973,62 @@ class ProductSearchView(APIView):
             return Response(
                 api_response(message=data, status=False), status=400
             )
-        query = request.query_params.get('q', '').strip()
-        if not query:
-            return Response(
-                api_response(
-                    message="No search query provided.",
-                    status=False,
-                    data=[]
-                ),
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        try:
+            query = request.query_params.get('q', '').strip()
+            if not query:
+                return Response(
+                    api_response(
+                        message="No search query provided.",
+                        status=False,
+                        data=[]
+                    ),
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-        # Check if we're using PostgreSQL for full-text search
-        if connection.vendor == 'postgresql':
-            try:
-                from django.contrib.postgres.search import (
-                    SearchVector, SearchQuery, SearchRank
-                )
-                vector = (
-                    SearchVector('name', weight='A') +
-                    SearchVector('description', weight='B') +
-                    SearchVector('category__name', weight='B')
-                )
-                search_query = SearchQuery(query)
-                queryset = Product.objects.annotate(
-                    rank=SearchRank(vector, search_query)
-                ).filter(rank__gte=0.1).order_by('-rank')
-            except Exception:
-                # Fallback to basic search if PostgreSQL search fails
+            # Check if we're using PostgreSQL for full-text search
+            if connection.vendor == 'postgresql':
+                try:
+                    from django.contrib.postgres.search import (
+                        SearchVector, SearchQuery, SearchRank
+                    )
+                    vector = (
+                        SearchVector('name', weight='A') +
+                        SearchVector('description', weight='B') +
+                        SearchVector('category__name', weight='B')
+                    )
+                    search_query = SearchQuery(query)
+                    queryset = Product.objects.annotate(
+                        rank=SearchRank(vector, search_query)
+                    ).filter(rank__gte=0.1).order_by('-rank')
+                except Exception:
+                    # Fallback to basic search if PostgreSQL search fails
+                    queryset = Product.objects.filter(
+                        Q(name__icontains=query) |
+                        Q(description__icontains=query) |
+                        Q(category__name__icontains=query)
+                    )
+            else:
                 queryset = Product.objects.filter(
                     Q(name__icontains=query) |
                     Q(description__icontains=query) |
                     Q(category__name__icontains=query)
                 )
-        else:
-            queryset = Product.objects.filter(
-                Q(name__icontains=query) |
-                Q(description__icontains=query) |
-                Q(category__name__icontains=query)
-            )
-        serializer = ProductSerializer(
-            queryset, many=True, context={'request': self.request}) 
-        return Response(api_response(
-            message="Search results retrieved successfully.",
-            status=True,
-            data=serializer.data
-        ))
+
+            serializer = self.get_paginated_response(queryset)
+
+            return Response(api_response(
+                message="Search results retrieved successfully.",
+                status=True,
+                data=serializer.data
+            ))
+        except Exception as e:
+            import traceback
+            logging.debug(traceback.format_exc())
+            return Response(api_response(
+                message="Something went wrong.",
+                status=False,
+                data=str(e)
+            ), status=500)
 
 
 class CategoryListView(APIView):
@@ -899,8 +1062,19 @@ class HomeView(APIView):
         operation_summary="Home view",
         operation_description=(
             "Home view: 15 random mechanics, best selling cars, "
-            "best selling spare parts"
+            "best selling spare parts. Use ?requestType=mechanics, "
+            "?requestType=best_selling_cars, or ?requestType=best_selling_spare_parts " # noqa
+            "to fetch only a specific section for performance."
         ),
+        manual_parameters=[
+            openapi.Parameter(
+                'requestType',
+                openapi.IN_QUERY,
+                description="Specify which data to fetch: 'mechanics', 'best_selling_cars', 'best_selling_spare_parts'. If omitted, all are returned.", # noqa
+                type=openapi.TYPE_STRING,
+                required=False
+            ),
+        ],
         responses={200: HomeResponseSerializer()}
     )
     def get(self, request):
@@ -911,48 +1085,121 @@ class HomeView(APIView):
                 status=400
             )
 
-        # 15 random approved mechanics
-        mechanics = (
-            MechanicProfile.objects
-            .filter(is_approved=True)
-            .order_by('?')[:15]
-        )
-        mechanics_data = MechanicProfileSerializer(
-            mechanics, many=True, context={'request': self.request} # noqa
-        ).data
+        request_type = request.query_params.get('requestType', '').strip().lower() # noqa
 
-        # Best selling cars (category name 'car')
-        best_selling_cars = (
-            Product.objects
-            .filter(category__name__iexact='car')
-            .annotate(total_sales=Sum('orderitem__quantity'))
-            .order_by('-total_sales', '-created_at')[:10]
-        )
-        best_selling_cars_data = ProductSerializer(
-            best_selling_cars, many=True, context={'request': self.request} # noqa
-        ).data
+        # If requestType is invalid, return error
+        if request_type not in {'mechanics', 'best_selling_cars', 'best_selling_spare_parts'}: # noqa
+            return Response(
+                api_response(
+                    message="You must specify a valid query params as requestType. Valid values: 'mechanics', 'best_selling_cars', 'best_selling_spare_parts'.", # noqa
+                    status=False
+                ),
+                status=400
+            )
+        response_data = {}
 
-        # Best selling spare parts (category name 'spare part')
-        best_selling_spare_parts = (
-            Product.objects
-            .filter(category__name__iexact='spare part')
-            .annotate(total_sales=Sum('orderitem__quantity'))
-            .order_by('-total_sales', '-created_at')[:10]
-        )
-        best_selling_spare_parts_data = ProductSerializer(
-            best_selling_spare_parts, many=True, context={'request': self.request} # noqa
-        ).data
-        
+        # Only fetch what is needed based on requestType for performance
+        if request_type == 'mechanics':
+            mechanics = (
+                MechanicProfile.objects
+                .filter(is_approved=True)
+                .order_by('?')[:15]
+            )
+            mechanics_data = MechanicProfileSerializer(
+                mechanics, many=True, context={'request': self.request}
+            ).data
+            response_data['mechanics'] = mechanics_data
+
+        if request_type == 'best_selling_cars':
+            best_selling_cars = (
+                Product.objects.select_related("merchant", "category")
+                .prefetch_related(
+                    Prefetch(
+                        "images",
+                        queryset=ProductImage.objects.order_by("ordering")
+                    )
+                )
+                .annotate(
+                    total_sales=Coalesce(Sum("orderitem__quantity"), 0),
+                    avg_rating=Avg("reviews__rating"),
+                    total_purchased=Coalesce(
+                        Sum(
+                            "orderitem__quantity",
+                            filter=Q(orderitem__order__status="paid")
+                        ),
+                        0
+                    ),
+                    is_in_favorite_list=Exists(
+                        FavoriteProduct.objects.filter(
+                            product=OuterRef("pk"), user=request.user
+                        )
+                    ) if request.user.is_authenticated else Value(
+                        False, output_field=models.BooleanField()),
+                    is_in_cart=Exists(
+                        CartItem.objects.filter(
+                            cart__user=request.user,
+                            product=OuterRef("pk")
+                        )
+                    ) if request.user.is_authenticated else Value(
+                        False, output_field=models.BooleanField()),
+                )
+                .filter(category__name__iexact="car")
+                .order_by("-total_sales", "-created_at")[:10]
+            )
+            best_selling_cars_data = ProductSerializer(
+                best_selling_cars, many=True, context={'request': self.request}
+            ).data
+            response_data['best_selling_cars'] = best_selling_cars_data
+
+        if request_type == 'best_selling_spare_parts':
+            best_selling_spare_parts = (
+                Product.objects.select_related("merchant", "category")
+                .prefetch_related(
+                    Prefetch(
+                        "images",
+                        queryset=ProductImage.objects.order_by("ordering")
+                    )
+                )
+                .annotate(
+                    total_sales=Coalesce(Sum("orderitem__quantity"), 0),
+                    avg_rating=Avg("reviews__rating"),
+                    total_purchased=Coalesce(
+                        Sum(
+                            "orderitem__quantity",
+                            filter=Q(orderitem__order__status="paid")
+                        ),
+                        0
+                    ),
+                    is_in_favorite_list=Exists(
+                        FavoriteProduct.objects.filter(
+                            product=OuterRef("pk"), user=request.user
+                        )
+                    ) if request.user.is_authenticated else Value(
+                        False, output_field=models.BooleanField()),
+                    is_in_cart=Exists(
+                        CartItem.objects.filter(
+                            cart__user=request.user,
+                            product=OuterRef("pk")
+                        )
+                    ) if request.user.is_authenticated else Value(
+                        False, output_field=models.BooleanField()),
+                )
+                .filter(category__name__iexact="spare part")
+                .order_by("-total_sales", "-created_at")[:10]
+            )
+            best_selling_spare_parts_data = ProductSerializer(
+                best_selling_spare_parts, many=True, 
+                context={'request': self.request}
+            ).data
+            response_data['best_selling_spare_parts'] = best_selling_spare_parts_data # noqa
+
         return Response(
             api_response(
                 message="Home data retrieved successfully.",
                 status=True,
-                data={
-                    'mechanics': mechanics_data,
-                    'best_selling_cars': best_selling_cars_data,
-                    'best_selling_spare_parts': best_selling_spare_parts_data,
-                }
-            )
+                data=response_data
+            ),
+            status=200
         )
 
 
@@ -1721,21 +1968,70 @@ class OrderListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_description="List all orders for the authenticated user",
+        operation_description="List all orders for the authenticated user, or all orders for one of the user's merchant accounts (if merchant_id is provided as a query parameter).",
+        manual_parameters=[
+            openapi.Parameter(
+                name='merchant_id',
+                in_=openapi.IN_QUERY,
+                description="ID of the merchant (user id) whose orders will be listed. If not provided, returns orders for currently authenticated user as a customer.",
+                type=openapi.TYPE_STRING,
+                required=False
+            )
+        ],
         responses={200: OrderSerializer(many=True)}
     )
     def get(self, request):
+        """
+        Returns:
+            - All orders where the authenticated user is the customer (default)
+            - If `merchant_id` is provided and belongs to current user (or current user is merchant), returns all orders containing products owned by the merchant
+        """
         status_, data = get_incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
                 status=400
             )
-        orders = (
-            Order.objects
-            .filter(customer=request.user)
-            .prefetch_related('items__product')
-        )
+        merchant_id = request.query_params.get('merchant_id', None)
+        if merchant_id:
+            # Only allow if the current user is the merchant or superuser
+            if not (str(request.user.id) == str(merchant_id) or request.user.is_staff):
+                return Response(
+                    api_response(message="Permission denied: You cannot query orders for this merchant.", status=False),
+                    status=403
+                )
+            # N+1 mindful: fetch orders that include any products belonging to this merchant
+            # Get OrderItems whose product.merchant == merchant_id, then filter for those orders.
+            order_ids = (
+                Order.objects
+                .filter(items__product__merchant_id=merchant_id)
+                .distinct()
+                .values_list('id', flat=True)
+            )
+            orders = (
+                Order.objects
+                .filter(id__in=order_ids)
+                .prefetch_related(
+                    'items',
+                    'items__product',
+                    'items__product__merchant',
+                )
+                .select_related('customer')
+                .order_by('-created_at')
+            )
+        else:
+            # Default: show all orders for authenticated customer (you)
+            orders = (
+                Order.objects
+                .filter(customer=request.user)
+                .prefetch_related(
+                    'items',
+                    'items__product',
+                    'items__product__merchant'
+                )
+                .select_related('customer')
+                .order_by('-created_at')
+            )
         serializer = OrderSerializer(orders, many=True)
         return Response(
             api_response(

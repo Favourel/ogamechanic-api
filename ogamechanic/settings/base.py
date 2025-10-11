@@ -50,7 +50,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    # 'ogamechanic.modules.middleware.PreventDuplicateSubmissionMiddleware'
+    'ogamechanic.modules.middleware.ResponseTimeMiddleware',
+    'ogamechanic.modules.middleware.DatabaseQueryLoggingMiddleware',
+    'ogamechanic.modules.middleware.RequestLoggingMiddleware'
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -226,17 +228,17 @@ SITE_ID = 1
 AUTH_USER_MODEL = 'users.User'
 
 # Django Channels Configuration
-ASGI_APPLICATION = 'ogamechanic.asgi.application'
+# ASGI_APPLICATION = 'ogamechanic.asgi.application'
 
 # Channel Layers for WebSocket support
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [('127.0.0.1', 6379)],
-        },
-    },
-}
+# CHANNEL_LAYERS = {
+#     'default': {
+#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
+#         'CONFIG': {
+#             "hosts": [('127.0.0.1', 6379)],
+#         },
+#     },
+# }
 
 # Database Configuration
 # Choose your database backend based on environment
@@ -270,3 +272,8 @@ DATABASES = {
 
 # GeoDjango Configuration
 SPATIALITE_LIBRARY_PATH = 'mod_spatialite'
+
+# File upload settings
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 1000

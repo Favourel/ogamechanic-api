@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (Category, Product, ProductImage, 
-                     Order, OrderItem, Cart, CartItem, ProductReview,
-                     FollowMerchant, FavoriteProduct)
+                     ProductVehicleCompatibility, Order, OrderItem, Cart, 
+                     CartItem, ProductReview, FollowMerchant, FavoriteProduct)
 from users.serializers import MechanicProfileSerializer, UserSerializer
 from django.db.models import Avg
 
@@ -13,26 +13,55 @@ class CategorySerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
+class ProductVehicleCompatibilitySerializer(serializers.ModelSerializer):
+    """Serializer for ProductVehicleCompatibility model"""
+    make_name = serializers.CharField(source='make.name', read_only=True)
+    model_name = serializers.CharField(source='model.name', read_only=True)
+    
+    class Meta:
+        model = ProductVehicleCompatibility
+        fields = [
+            'id', 'make', 'model', 'make_name', 'model_name',
+            'year_from', 'year_to', 'notes', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'created_at', 'updated_at', 'make_name', 'model_name'
+        ]
+
+
 class ProductImageSerializer(serializers.ModelSerializer):
-    image = serializers.SerializerMethodField()
+    # For reading: return absolute URL; for writing/updating: accept file upload # noqa
+    image = serializers.ImageField()
 
     class Meta:
         model = ProductImage
         fields = ['id', 'image', 'ordering', 'created_at']
         read_only_fields = ['id', 'created_at']
 
-    def get_image(self, obj):
+    def to_representation(self, instance):
+        """Override to return absolute URL for image field."""
+        representation = super().to_representation(instance)
         request = self.context.get('request', None)
-        if obj.image and hasattr(obj.image, 'url'):
-            image_url = obj.image.url
+        image_field = instance.image
+        if image_field and hasattr(image_field, 'url'):
+            image_url = image_field.url
             if request is not None:
-                return request.build_absolute_uri(image_url)
-            # Fallback: try to build absolute URL manually if possible
-            from django.conf import settings
-            if hasattr(settings, "SITE_DOMAIN"):
-                return f"{settings.SITE_DOMAIN}{image_url}"
-            return image_url
-        return None
+                representation['image'] = request.build_absolute_uri(image_url)
+            else:
+                from django.conf import settings
+                if hasattr(settings, "SITE_DOMAIN"):
+                    representation['image'] = f"{settings.SITE_DOMAIN}{image_url}" # noqa
+                else:
+                    representation['image'] = image_url
+        else:
+            representation['image'] = None
+        return representation
+
+
+class ProductImageUpdateSerializer(serializers.Serializer):
+    image_id = serializers.IntegerField()
+    ordering = serializers.IntegerField(required=False)
+    image = serializers.ImageField(required=False)
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -42,11 +71,16 @@ class ProductSerializer(serializers.ModelSerializer):
         queryset=Category.objects.all(), source='category', write_only=True,
     )
     merchant = serializers.SerializerMethodField(read_only=True)
-    rating = serializers.SerializerMethodField(read_only=True)
-    merchant_rating = serializers.SerializerMethodField(read_only=True)
-    purchased_count = serializers.SerializerMethodField(read_only=True)
-    is_in_cart = serializers.SerializerMethodField(read_only=True)
-    is_in_favorite_list = serializers.SerializerMethodField(read_only=True)
+    vehicle_compatibility = ProductVehicleCompatibilitySerializer(
+        many=True, read_only=True)
+
+    rating = serializers.SerializerMethodField()
+    merchant_rating = serializers.SerializerMethodField()
+    purchased_count = serializers.IntegerField(
+        source="total_purchased", read_only=True)
+    is_in_cart = serializers.BooleanField(read_only=True)
+    is_in_favorite_list = serializers.BooleanField(read_only=True)
+
     DELIVERY_OPTION_CHOICES = [
         ('pickup', 'Pick-up only'),
         ('nationwide', 'Nationwide delivery'),
@@ -163,6 +197,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'blind_spot_monitor',
             'delivery_option',
             'images',
+            'vehicle_compatibility',
             'created_at',
             'updated_at',
             'rating',
@@ -175,6 +210,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'id',
             'merchant',
             'images',
+            'vehicle_compatibility',
             'created_at',
             'updated_at',
             'category',
@@ -201,51 +237,124 @@ class ProductSerializer(serializers.ModelSerializer):
         return UserSerializer(obj.merchant).data if obj.merchant else None
 
     def get_rating(self, obj):
-        reviews = obj.reviews.all()
-        if not reviews.exists():
-            return None
-        avg = reviews.aggregate(avg_rating=Avg('rating'))['avg_rating']
-        return round(avg, 1) if avg is not None else None
+        """Return pre-annotated average rating if available"""
+        if hasattr(obj, "avg_rating") and obj.avg_rating is not None:
+            return round(obj.avg_rating, 1)
+        return None
 
     def get_merchant_rating(self, obj):
+        """Efficiently compute average rating for merchant’s products"""
         merchant = obj.merchant
         if not merchant:
             return None
-        products = Product.objects.filter(merchant=merchant)
-        reviews = ProductReview.objects.filter(product__in=products)
-        if not reviews.exists():
-            return None
-        avg = reviews.aggregate(avg_rating=Avg('rating'))['avg_rating']
-        return round(avg, 1) if avg is not None else None
-
-    def get_purchased_count(self, obj):
-        from django.db.models import Sum
-        return (
-            OrderItem.objects.filter(
-                product=obj,
-                order__status='paid'
-            ).aggregate(
-                total_purchased=Sum('quantity')
-            )['total_purchased'] or 0
+        avg = (
+            ProductReview.objects.filter(product__merchant=merchant)
+            .aggregate(avg_rating=Avg("rating"))
+            .get("avg_rating")
         )
+        return round(avg, 1) if avg else None
 
-    def get_is_in_cart(self, obj):
-        request = self.context.get('request', None)
-        if request is None or not hasattr(request, "user") or not request.user.is_authenticated:  # noqa
-            return False
-        from .models import CartItem, Cart
-        try:
-            cart = Cart.objects.get(user=request.user)
-        except Cart.DoesNotExist:
-            return False
-        return CartItem.objects.filter(cart=cart, product=obj).exists()
 
-    def get_is_in_favorite_list(self, obj):
-        request = self.context.get('request', None)
-        if request is None or not hasattr(request, "user") or not request.user.is_authenticated: # noqa
-            return False
-        from .models import FavoriteProduct
-        return FavoriteProduct.objects.filter(product=obj, user=request.user).exists() # noqa
+class ProductCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating products with vehicle compatibility support"""
+    vehicle_compatibility = ProductVehicleCompatibilitySerializer(
+        many=True, required=False)
+    
+    class Meta:
+        model = Product
+        fields = [
+            'category_id', 'name', 'make', 'model', 'year', 'condition',
+            'body_type', 'mileage', 'mileage_unit', 'transmission', 
+            'fuel_type', 'engine_size', 'exterior_color', 'interior_color', 
+            'number_of_doors', 'number_of_seats', 'air_conditioning', 
+            'leather_seats', 'navigation_system', 'bluetooth', 
+            'parking_sensors', 'cruise_control', 'keyless_entry',
+            'sunroof', 'alloy_wheels', 'description', 'price', 'currency',
+            'negotiable', 'discount', 'availability', 'stock', 'is_rental',
+            'airbags', 'abs', 'traction_control', 'lane_assist', 
+            'blind_spot_monitor', 'delivery_option', 'vehicle_compatibility'
+        ]
+    
+    def create(self, validated_data):
+        vehicle_compatibility_data = validated_data.pop('vehicle_compatibility', [])
+        product = Product.objects.create(**validated_data)
+        
+        # Create vehicle compatibility entries
+        for compatibility_data in vehicle_compatibility_data:
+            ProductVehicleCompatibility.objects.create(
+                product=product,
+                **compatibility_data
+            )
+        
+        return product
+    
+    def update(self, instance, validated_data):
+        vehicle_compatibility_data = validated_data.pop('vehicle_compatibility', None)
+        
+        # Update product fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update vehicle compatibility if provided
+        if vehicle_compatibility_data is not None:
+            # Clear existing compatibility
+            instance.vehicle_compatibility.all().delete()
+            # Create new compatibility entries
+            for compatibility_data in vehicle_compatibility_data:
+                ProductVehicleCompatibility.objects.create(
+                    product=instance,
+                    **compatibility_data
+                )
+        
+        return instance
+
+    # def get_rating(self, obj):
+    #     reviews = obj.reviews.all()
+    #     if not reviews.exists():
+    #         return None
+    #     avg = reviews.aggregate(avg_rating=Avg('rating'))['avg_rating']
+    #     return round(avg, 1) if avg is not None else None
+
+    # def get_merchant_rating(self, obj):
+    #     merchant = obj.merchant
+    #     if not merchant:
+    #         return None
+    #     products = Product.objects.filter(merchant=merchant)
+    #     reviews = ProductReview.objects.filter(product__in=products)
+    #     if not reviews.exists():
+    #         return None
+    #     avg = reviews.aggregate(avg_rating=Avg('rating'))['avg_rating']
+    #     return round(avg, 1) if avg is not None else None
+
+    # def get_purchased_count(self, obj):
+    #     from django.db.models import Sum
+    #     return (
+    #         OrderItem.objects.filter(
+    #             product=obj,
+    #             order__status='paid'
+    #         ).aggregate(
+    #             total_purchased=Sum('quantity')
+    #         )['total_purchased'] or 0
+    #     )
+
+    # def get_is_in_cart(self, obj):
+    #     request = self.context.get('request', None)
+    #     if request is None or not hasattr(request, "user") or not request.user.is_authenticated:  # noqa
+    #         return False
+    #     from .models import CartItem, Cart
+    #     try:
+    #         cart = Cart.objects.get(user=request.user)
+    #     except Cart.DoesNotExist:
+    #         return False
+    #     return CartItem.objects.filter(cart=cart, product=obj).exists()
+
+    # def get_is_in_favorite_list(self, obj):
+    #     request = self.context.get('request', None)
+    #     if request is None or not hasattr(request, "user") or not request.user.is_authenticated: # noqa
+    #         return False
+    #     from .models import FavoriteProduct
+    #     return FavoriteProduct.objects.filter(product=obj, user=request.user).exists() # noqa
 
 
 class HomeResponseSerializer(serializers.Serializer):
