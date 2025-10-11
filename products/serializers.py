@@ -287,7 +287,8 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         ]
     
     def create(self, validated_data):
-        vehicle_compatibility_data = validated_data.pop('vehicle_compatibility', [])
+        vehicle_compatibility_data = validated_data.pop(
+            'vehicle_compatibility', [])
         product = Product.objects.create(**validated_data)
         
         # Create vehicle compatibility entries
@@ -316,7 +317,8 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         return product
     
     def update(self, instance, validated_data):
-        vehicle_compatibility_data = validated_data.pop('vehicle_compatibility', None)
+        vehicle_compatibility_data = validated_data.pop(
+            'vehicle_compatibility', None)
         
         # Update product fields
         for attr, value in validated_data.items():
@@ -476,18 +478,19 @@ class OrderSerializer(serializers.ModelSerializer):
 
 class CartItemSerializer(serializers.ModelSerializer):
     product = ProductSerializer(read_only=True)
-    product_id = serializers.PrimaryKeyRelatedField(
-        queryset=Product.objects.all(),
-        source='product',
-        write_only=True
-    )
+    # product_id = serializers.PrimaryKeyRelatedField(
+    #     queryset=Product.objects.all(),
+    #     source='product',
+    #     write_only=True
+    # )
 
     class Meta:
         model = CartItem
         fields = [
             'id', 
             'product', 
-            'product_id', 'quantity', 'added_at'
+            # 'product_id', 
+            'quantity', 'added_at'
         ]
         read_only_fields = [
             'id', 

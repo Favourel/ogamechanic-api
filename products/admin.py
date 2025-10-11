@@ -19,7 +19,10 @@ class ProductImageInline(admin.TabularInline):
 class ProductVehicleCompatibilityInline(admin.TabularInline):
     model = models.ProductVehicleCompatibility
     extra = 1
-    fields = ('make', 'model', 'year_from', 'year_to', 'notes')
+    fields = (
+        'make', 'model', 
+        # 'year_from', 'year_to', 
+        'notes')
     autocomplete_fields = ('make', 'model')
 
 
