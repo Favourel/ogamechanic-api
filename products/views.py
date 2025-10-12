@@ -257,7 +257,7 @@ class ProductListCreateView(APIView):
                 or not user.roles.filter(name='merchant').exists()
                 or not hasattr(user, 'merchant_profile')
                 or not user.merchant_profile.is_approved
-                or not user.is_staff
+                # or not user.is_staff
             ):
                 return Response(
                     api_response(
@@ -1996,13 +1996,13 @@ class OrderListView(APIView):
         merchant_id = request.query_params.get('merchant_id', None)
         if merchant_id:
             # Only allow if the current user is the merchant or superuser
-            if not (str(request.user.id) == str(merchant_id) or request.user.is_staff):
+            if not (str(request.user.id) == str(merchant_id) or request.user.is_staff):  # noqa
                 return Response(
-                    api_response(message="Permission denied: You cannot query orders for this merchant.", status=False),
+                    api_response(message="Permission denied: You cannot query orders for this merchant.", status=False), # noqa
                     status=403
                 )
-            # N+1 mindful: fetch orders that include any products belonging to this merchant
-            # Get OrderItems whose product.merchant == merchant_id, then filter for those orders.
+            # N+1 mindful: fetch orders that include any products belonging to this merchant # noqa
+            # Get OrderItems whose product.merchant == merchant_id, then filter for those orders. # noqa
             order_ids = (
                 Order.objects
                 .filter(items__product__merchant_id=merchant_id)

@@ -319,10 +319,9 @@ class ProductCreateSerializer(serializers.ModelSerializer):
             'airbags', 'abs', 'traction_control', 'lane_assist', 
             'blind_spot_monitor', 'delivery_option', 'vehicle_compatibility'
         ]
-    
+
     def validate(self, attrs):
-        # You may need to adjust the below according to how category and subcategory relate: # noqa
-        # The following assumes you have a way to check a category's name or type.  # noqa
+        # Category/Subcategory logic
         category = attrs.get('category_id')
         sub_category = attrs.get('sub_category_id', None)
         
@@ -338,14 +337,46 @@ class ProductCreateSerializer(serializers.ModelSerializer):
                 name = category.name.lower()
             else:
                 name = str(category).lower()
-            if name == 'spare part' or name == 'spare parts':
+            if name in ['spare part', 'spare parts']:
                 if not sub_category:
                     raise serializers.ValidationError({
                         "sub_category_id": "This field is required when Spare Part is selected as the category."  # noqa
                     })
-            elif name == 'car' or name == 'cars':
+            elif name in ['car', 'cars']:
                 attrs['sub_category'] = None
-        
+
+        # Vehicle compatibility validation
+        vehicle_compatibility_data = attrs.get('vehicle_compatibility', [])
+        if vehicle_compatibility_data:
+            from mechanics.models import VehicleMake
+            for idx, compatibility_data in enumerate(vehicle_compatibility_data): # noqa
+                make_id = compatibility_data.get('make')
+                model_ids = compatibility_data.get('model', [])
+                # Validate that make_id exists
+                try:
+                    make_obj = VehicleMake.objects.get(id=make_id)
+                except VehicleMake.DoesNotExist:
+                    raise serializers.ValidationError({
+                        f"vehicle_compatibility[{idx}].make": f"Vehicle make with ID {make_id} does not exist."  # noqa
+                    })
+                # If models provided, ensure each model belongs to the make
+                if model_ids:
+                    for model_id in model_ids:
+                        try:
+                            model_obj = VehicleMake.objects.get(id=model_id)
+                        except VehicleMake.DoesNotExist:
+                            raise serializers.ValidationError({
+                                f"vehicle_compatibility[{idx}].model": f"Vehicle model with ID {model_id} does not exist."  # noqa
+                            })
+                        # Model's parent_make_id field must match
+                        parent_id = getattr(model_obj, 'parent_make_id', None)
+                        if parent_id != make_obj.id:
+                            raise serializers.ValidationError({
+                                f"vehicle_compatibility[{idx}].model": (
+                                    f"Model '{model_obj.name}' (ID {model_id}) does not belong to Make '{make_obj.name}' (ID {make_id})."  # noqa
+                                )
+                            })
+
         return attrs
 
     def create(self, validated_data):
@@ -359,28 +390,48 @@ class ProductCreateSerializer(serializers.ModelSerializer):
             product.save()
         
         # Create vehicle compatibility entries
+        from mechanics.models import VehicleMake
         for compatibility_data in vehicle_compatibility_data:
             make_id = compatibility_data['make']
             model_ids = compatibility_data.get('model', [])
             notes = compatibility_data.get('notes', '')
+
+            # Defensive: ensure make exists
+            try:
+                make_obj = VehicleMake.objects.get(id=make_id)
+            except VehicleMake.DoesNotExist:
+                raise serializers.ValidationError({
+                    "vehicle_compatibility": f"Vehicle make with ID {make_id} does not exist."  # noqa
+                })
             
-            # Create entry for make only (if no specific models)
             if not model_ids:
                 ProductVehicleCompatibility.objects.create(
                     product=product,
-                    make_id=make_id,
+                    make=make_obj,
                     notes=notes
                 )
             else:
-                # Create entries for each specific model
                 for model_id in model_ids:
+                    try:
+                        model_obj = VehicleMake.objects.get(id=model_id)
+                    except VehicleMake.DoesNotExist:
+                        raise serializers.ValidationError({
+                            "vehicle_compatibility": f"Vehicle model with ID {model_id} does not exist."  # noqa
+                        })
+                    # Defensive: ensure model belongs to make
+                    parent_id = getattr(model_obj, 'parent_make_id', None)
+                    if parent_id != make_obj.id:
+                        raise serializers.ValidationError({
+                            "vehicle_compatibility": (
+                                f"Model '{model_obj.name}' (ID {model_id}) does not belong to Make '{make_obj.name}' (ID {make_id})."  # noqa
+                            )
+                        })
                     ProductVehicleCompatibility.objects.create(
                         product=product,
-                        make_id=make_id,
-                        model_id=model_id,
+                        make=make_obj,
+                        model=model_obj,
                         notes=notes
                     )
-        
         return product
 
     def update(self, instance, validated_data):
@@ -395,33 +446,50 @@ class ProductCreateSerializer(serializers.ModelSerializer):
             instance.sub_category = sub_category
         instance.save()
         
-        # Update vehicle compatibility if provided
         if vehicle_compatibility_data is not None:
-            # Clear existing compatibility
+            from mechanics.models import VehicleMake
             instance.vehicle_compatibility.all().delete()
-            # Create new compatibility entries
             for compatibility_data in vehicle_compatibility_data:
                 make_id = compatibility_data['make']
                 model_ids = compatibility_data.get('model', [])
                 notes = compatibility_data.get('notes', '')
-                
-                # Create entry for make only (if no specific models)
+
+                # Defensive: ensure make exists
+                try:
+                    make_obj = VehicleMake.objects.get(id=make_id)
+                except VehicleMake.DoesNotExist:
+                    raise serializers.ValidationError({
+                        "vehicle_compatibility": f"Vehicle make with ID {make_id} does not exist."  # noqa
+                    })
+
                 if not model_ids:
                     ProductVehicleCompatibility.objects.create(
                         product=instance,
-                        make_id=make_id,
+                        make=make_obj,
                         notes=notes
                     )
                 else:
-                    # Create entries for each specific model
                     for model_id in model_ids:
+                        try:
+                            model_obj = VehicleMake.objects.get(id=model_id)
+                        except VehicleMake.DoesNotExist:
+                            raise serializers.ValidationError({
+                                "vehicle_compatibility": f"Vehicle model with ID {model_id} does not exist."
+                            })
+                        # Defensive: ensure model belongs to make
+                        parent_id = getattr(model_obj, 'parent_make_id', None)
+                        if parent_id != make_obj.id:
+                            raise serializers.ValidationError({
+                                "vehicle_compatibility": (
+                                    f"Model '{model_obj.name}' (ID {model_id}) does not belong to Make '{make_obj.name}' (ID {make_id})."
+                                )
+                            })
                         ProductVehicleCompatibility.objects.create(
                             product=instance,
                             make_id=make_id,
                             model_id=model_id,
                             notes=notes
                         )
-        
         return instance
 
     # def get_rating(self, obj):
