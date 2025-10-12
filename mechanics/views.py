@@ -600,9 +600,9 @@ class TrainingSessionParticipantListView(APIView):
 
 class VehicleMakeListView(APIView):
     """
-    API endpoint to get all available vehicle makes and models for mechanic registration.
+    API endpoint to get all available vehicle makes and models for mechanic registration. # noqa
 
-    - GET: List all active vehicle makes (parent_make is null) and their models.
+    - GET: List all active vehicle makes (parent_make is null) and their models. # noqa
     - POST: Create a new vehicle make or model (admin only).
     - PATCH: Update a vehicle make or model (admin only).
     - DELETE: Delete a vehicle make or model (admin only).
@@ -614,7 +614,7 @@ class VehicleMakeListView(APIView):
         operation_description=(
             "Get a list of all available vehicle makes and their models "
             "that mechanics can specialize in. This endpoint is used during "
-            "mechanic registration to show available options. Each make includes "
+            "mechanic registration to show available options. Each make includes " # noqa
             "its models as a nested list."
         ),
         responses={
@@ -643,7 +643,7 @@ class VehicleMakeListView(APIView):
                                         nullable=True,
                                         example=None,
                                         description=(
-                                            "ID of parent make if this is a model, else null"
+                                            "ID of parent make if this is a model, else null" # noqa
                                         )
                                     ),
                                     'description': openapi.Schema(
@@ -674,7 +674,7 @@ class VehicleMakeListView(APIView):
                                                     example=True),
                                             }
                                         ),
-                                        description="List of models for this make"
+                                        description="List of models for this make" # noqa
                                     ),
                                 }
                             )
@@ -686,7 +686,7 @@ class VehicleMakeListView(APIView):
     )
     def get(self, request):
         """
-        Get all active vehicle makes (parent_make is null) and their active models.
+        Get all active vehicle makes (parent_make is null) and their active models. # noqa
         Uses caching to improve performance.
         """
         from django.core.cache import cache
@@ -733,7 +733,7 @@ class VehicleMakeListView(APIView):
         if not request.user.is_authenticated or not request.user.is_staff:
             return Response(
                 api_response(
-                    message="You do not have permission to perform this action.",
+                    message="You do not have permission to perform this action.", # noqa
                     status=False
                 ),
                 status=status.HTTP_403_FORBIDDEN
@@ -762,7 +762,7 @@ class VehicleMakeListView(APIView):
         request_body=VehicleMakeSerializer,
         manual_parameters=[
             openapi.Parameter(
-                'id', openapi.IN_QUERY, description="ID of the vehicle make/model to update",
+                'id', openapi.IN_QUERY, description="ID of the vehicle make/model to update", # noqa
                 type=openapi.TYPE_INTEGER, required=True
             )
         ],
@@ -780,7 +780,7 @@ class VehicleMakeListView(APIView):
         if not request.user.is_authenticated or not request.user.is_staff:
             return Response(
                 api_response(
-                    message="You do not have permission to perform this action.",
+                    message="You do not have permission to perform this action.", # noqa
                     status=False
                 ),
                 status=status.HTTP_403_FORBIDDEN
@@ -804,7 +804,8 @@ class VehicleMakeListView(APIView):
                 ),
                 status=status.HTTP_404_NOT_FOUND
             )
-        serializer = VehicleMakeSerializer(vehicle_make, data=request.data, partial=True)
+        serializer = VehicleMakeSerializer(
+            vehicle_make, data=request.data, partial=True)
         if serializer.is_valid():
             vehicle_make = serializer.save()
             return Response(
@@ -827,7 +828,7 @@ class VehicleMakeListView(APIView):
         operation_summary="Delete a Vehicle Make or Model",
         manual_parameters=[
             openapi.Parameter(
-                'id', openapi.IN_QUERY, description="ID of the vehicle make/model to delete",
+                'id', openapi.IN_QUERY, description="ID of the vehicle make/model to delete", # noqa
                 type=openapi.TYPE_INTEGER, required=True
             )
         ],
@@ -844,7 +845,7 @@ class VehicleMakeListView(APIView):
         if not request.user.is_authenticated or not request.user.is_staff:
             return Response(
                 api_response(
-                    message="You do not have permission to perform this action.",
+                    message="You do not have permission to perform this action.", # noqa
                     status=False
                 ),
                 status=status.HTTP_403_FORBIDDEN
