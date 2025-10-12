@@ -117,7 +117,8 @@ class Product(models.Model):
     body_type = models.CharField(
         max_length=16,
         choices=BODY_TYPE_CHOICES,
-        default='other'
+        null=True,
+        blank=True,
     )
 
     # Mileage / Odometer
@@ -133,7 +134,8 @@ class Product(models.Model):
     mileage_unit = models.CharField(
         max_length=2,
         choices=MILEAGE_UNIT_CHOICES,
-        default='km'
+        null=True,
+        blank=True,
     )
 
     # Transmission
@@ -147,7 +149,8 @@ class Product(models.Model):
     transmission = models.CharField(
         max_length=16,
         choices=TRANSMISSION_CHOICES,
-        default='other'
+        null=True,
+        blank=True,
     )
 
     # Fuel Type
@@ -162,7 +165,8 @@ class Product(models.Model):
     fuel_type = models.CharField(
         max_length=16,
         choices=FUEL_TYPE_CHOICES,
-        default='other'
+        null=True,
+        blank=True,
     )
 
     # Engine Size / Power
