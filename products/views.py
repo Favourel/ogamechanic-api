@@ -156,7 +156,7 @@ class ProductListCreateView(APIView):
                             cart__user=request.user,
                             product=OuterRef("pk"))
                     ) if request.user.is_authenticated else None,
-                )
+                ).order_by('-updated_at', '-created_at')
             )
 
             # Filtering
