@@ -4312,9 +4312,17 @@ class StepByStepRegistrationView(APIView):
                     user.last_name = user_info['last_name']
                 user.save()
 
-            # Update phone number if not set
+            # Set phone number if not already set and phone number provided
             if user_info.get('phone_number') and not user.phone_number:
-                user.phone_number = user_info['phone_number']
+                try:
+                    from ogamechanic.modules.utils import format_phone_number
+                    formatted_phone = format_phone_number(
+                        user_info.get('phone_number'))
+                except Exception as e:
+                    raise ValueError({
+                        "phone_number": f"Invalid phone number format: {str(e)}" # noqa
+                    })
+                user.phone_number = formatted_phone
                 user.save()
 
             # Add car details if primary user has a car and user doesn't have car details   # noqa

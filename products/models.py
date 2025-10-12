@@ -315,6 +315,10 @@ class Product(models.Model):
         choices=DELIVERY_OPTION_CHOICES,
         default='pickup'
     )
+    contact_info = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,)
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -333,6 +337,7 @@ class Product(models.Model):
             models.Index(fields=['availability']),
             models.Index(fields=['is_rental']),
             models.Index(fields=['stock']),
+            models.Index(fields=['contact_info']),
             models.Index(fields=['created_at']),
         ]
         ordering = ['-created_at']
@@ -391,7 +396,7 @@ class ProductVehicleCompatibility(models.Model):
 
     class Meta:
         unique_together = (
-            'product', 'make', 'model', 
+            'product', 'make', 'model',
             # 'year_from', 'year_to'
             )
         indexes = [

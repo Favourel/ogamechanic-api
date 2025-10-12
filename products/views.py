@@ -800,7 +800,8 @@ class ProductDetailView(APIView):
                 ),
                 status=status.HTTP_403_FORBIDDEN
             )
-        serializer = ProductSerializer(product, data=data, partial=False, context={'request': self.request})  # noqa
+        serializer = ProductCreateSerializer(
+            product, data=data, partial=False, context={'request': self.request})  # noqa
         if serializer.is_valid():
             serializer.save()
             return Response(api_response(

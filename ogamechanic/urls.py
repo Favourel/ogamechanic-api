@@ -75,8 +75,8 @@ urlpatterns = [
     #      include('couriers.urls', namespace='couzriers')),
     path('api/v1/mechanics/',
          include('mechanics.urls', namespace='mechanics')),
-    # path('api/v1/rentals/',
-    #      include('rentals.urls', namespace='rentals')),
+    path('api/v1/rentals/',
+         include('rentals.urls', namespace='rentals')),
     # path('api/v1/analytics/',
     #      include('analytics.urls', namespace='analytics')),
 

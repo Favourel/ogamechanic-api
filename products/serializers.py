@@ -237,6 +237,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'rating',
             'merchant_rating',
             'purchased_count',
+            'contact_info',
             'is_in_cart',
             'is_in_favorite_list',
         ]
@@ -300,7 +301,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
     )
     # Subcategory is only required (and visible) when creating a Spare Part product  # noqa
     sub_category_id = serializers.PrimaryKeyRelatedField(
-        queryset=Category.objects.all(), source='category', 
+        queryset=Category.objects.all(), source='category',
         write_only=True, required=False,
     )
 
@@ -317,13 +318,24 @@ class ProductCreateSerializer(serializers.ModelSerializer):
             'sunroof', 'alloy_wheels', 'description', 'price', 'currency',
             'negotiable', 'discount', 'availability', 'stock', 'is_rental',
             'airbags', 'abs', 'traction_control', 'lane_assist', 
-            'blind_spot_monitor', 'delivery_option', 'vehicle_compatibility'
+            'blind_spot_monitor', 'delivery_option', 'vehicle_compatibility',
+            'contact_info'
         ]
 
     def validate(self, attrs):
         # Category/Subcategory logic
         category = attrs.get('category_id')
         sub_category = attrs.get('sub_category_id', None)
+
+        contact_info = attrs.get('contact_info', None)
+        if contact_info:
+            try:
+                from ogamechanic.modules.utils import format_phone_number
+                attrs['contact_info'] = format_phone_number(contact_info)
+            except Exception as e:
+                raise serializers.ValidationError({
+                    "contact_info": f"Invalid phone number format: {str(e)}"
+                })
         
         # Fetch the real category instance if not passed directly
         if isinstance(category, int):
