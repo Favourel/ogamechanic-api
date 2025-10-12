@@ -257,6 +257,7 @@ class ProductListCreateView(APIView):
                 or not user.roles.filter(name='merchant').exists()
                 or not hasattr(user, 'merchant_profile')
                 or not user.merchant_profile.is_approved
+                or not user.is_staff
             ):
                 return Response(
                     api_response(

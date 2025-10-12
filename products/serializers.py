@@ -127,6 +127,7 @@ class ProductSerializer(serializers.ModelSerializer):
     )
     fuel_type = serializers.ChoiceField(
         choices=Product.FUEL_TYPE_CHOICES,
+        required=False,
         error_messages={
             "invalid_choice": (
                 "Invalid fuel type. Allowed values are: " +
@@ -143,6 +144,7 @@ class ProductSerializer(serializers.ModelSerializer):
     )
     condition = serializers.ChoiceField(
         choices=Product.CONDITION_CHOICES,
+        required=False,
         error_messages={
             "invalid_choice": (
                 "Invalid condition. Allowed values are: " +
@@ -152,6 +154,7 @@ class ProductSerializer(serializers.ModelSerializer):
     )
     body_type = serializers.ChoiceField(
         choices=Product.BODY_TYPE_CHOICES,
+        required=False,
         error_messages={
             "invalid_choice": (
                 "Invalid body type. Allowed values are: " +
@@ -161,6 +164,7 @@ class ProductSerializer(serializers.ModelSerializer):
     )
     transmission = serializers.ChoiceField(
         choices=Product.TRANSMISSION_CHOICES,
+        required=False,
         error_messages={
             "invalid_choice": (
                 "Invalid transmission. Allowed values are: " +
@@ -173,6 +177,7 @@ class ProductSerializer(serializers.ModelSerializer):
             ('km', 'Kilometers'),
             ('mi', 'Miles'),
         ],
+        required=False,
         error_messages={
             "invalid_choice": "Invalid mileage unit. Allowed values are: km, mi." # noqa
         }
