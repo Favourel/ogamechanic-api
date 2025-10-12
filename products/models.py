@@ -6,11 +6,20 @@ from django.core.exceptions import ValidationError
 
 class Category(models.Model):
     name = models.CharField(max_length=100, unique=True)
+    parent_category = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='models',
+        help_text="If this is a sub-category, select its name. Leave blank for namess." # noqa
+    )
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        unique_together = ['name', 'parent_category']
         ordering = ['name']
         indexes = [
             models.Index(fields=['name']),
@@ -335,8 +344,8 @@ class Product(models.Model):
 
 class ProductVehicleCompatibility(models.Model):
     """
-    Model to track which vehicle makes/models a product (especially spare parts) 
-    is compatible with. This allows spare parts to be compatible with multiple 
+    Model to track which vehicle makes/models a product (especially spare parts) # noqa
+    is compatible with. This allows spare parts to be compatible with multiple # noqa
     vehicle makes and models.
     """
     product = models.ForeignKey(
@@ -401,7 +410,7 @@ class ProductVehicleCompatibility(models.Model):
                     "Selected model does not belong to the selected make.")
         
         # if self.year_from and self.year_to and self.year_from > self.year_to:
-        #     raise ValidationError("Year from cannot be greater than year to.")
+        #     raise ValidationError("Year from cannot be greater than year to.") # noqa
 
 
 class ProductImage(models.Model):

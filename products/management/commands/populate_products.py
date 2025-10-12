@@ -39,8 +39,8 @@ CATEGORY_NAMES = [
     "Filters",
     "Lights",
     "Interior",
-    "Car",  # For complete cars
-    "Spare Part",  # For spare parts
+    # "Car",  # For complete cars
+    # "Spare Part",  # For spare parts
 ]
 
 PRODUCT_NAMES = [
@@ -215,271 +215,271 @@ class Command(BaseCommand):
             )
 
             # Get or create the merchant role
-            merchant_role, _ = Role.objects.get_or_create(name="merchant")
+            # merchant_role, _ = Role.objects.get_or_create(name="merchant")
 
-            # Create the production merchant user and profile
-            merchant_email = "okorieemmanuel167@gmail.com"
-            merchant_user, created = User.objects.get_or_create(
-                email=merchant_email,
-                defaults={
-                    "email": merchant_email,
-                    "is_active": True,
-                    "is_staff": True,
-                    "first_name": "Emmanuel",
-                    "last_name": "Okorie",
-                },
-            )
-            if created:
-                merchant_user.set_password("StrongPassword!2024")
-                merchant_user.save()
-            merchant_user.roles.add(merchant_role)
-            merchant_user.active_role = merchant_role
-            merchant_user.save()
-            merchant_profile, _ = MerchantProfile.objects.get_or_create(
-                user=merchant_user,
-                defaults={
-                    "cac_number": "RC2024001",
-                    "is_approved": True,
-                    "business_address": "1 Okorie Emmanuel St, Lagos",
-                },
-            )
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Merchant user '{merchant_email}' and profile created."
-                )
-            )
+            # # Create the production merchant user and profile
+            # merchant_email = "okorieemmanuel167@gmail.com"
+            # merchant_user, created = User.objects.get_or_create(
+            #     email=merchant_email,
+            #     defaults={
+            #         "email": merchant_email,
+            #         "is_active": True,
+            #         "is_staff": True,
+            #         "first_name": "Emmanuel",
+            #         "last_name": "Okorie",
+            #     },
+            # )
+            # if created:
+            #     merchant_user.set_password("StrongPassword!2024")
+            #     merchant_user.save()
+            # merchant_user.roles.add(merchant_role)
+            # merchant_user.active_role = merchant_role
+            # merchant_user.save()
+            # merchant_profile, _ = MerchantProfile.objects.get_or_create(
+            #     user=merchant_user,
+            #     defaults={
+            #         "cac_number": "RC2024001",
+            #         "is_approved": True,
+            #         "business_address": "1 Okorie Emmanuel St, Lagos",
+            #     },
+            # )
+            # self.stdout.write(
+            #     self.style.SUCCESS(
+            #         f"Merchant user '{merchant_email}' and profile created."
+            #     )
+            # )
 
-            # Create products for the merchant
-            products = []
-            car_products = []
-            spare_part_products = []
+            # # Create products for the merchant
+            # products = []
+            # car_products = []
+            # spare_part_products = []
 
-            # Regular products
-            for j in range(6):
-                name = f"{random.choice(PRODUCT_NAMES)} {j+1} (okorieemmanuel167@gmail.com)"
-                category = random.choice(
-                    [cat for cat in categories if cat.name not in ["Car", "Spare Part"]]
-                )
-                price = round(random.uniform(5000, 50000), 2)
-                description = random.choice(PRODUCT_DESCRIPTIONS)
-                is_rental = random.choice([True, False])
-                stock = random.randint(5, 100)
-                product = Product.objects.create(
-                    merchant=merchant_user,
-                    category=category,
-                    name=name,
-                    description=description,
-                    price=price,
-                    is_rental=is_rental,
-                    stock=stock,
-                )
-                # Add 2 images per product
-                for img_idx in range(2):
-                    img_file = generate_image_file(
-                        name=f"{name.replace(' ', '_').lower()}_{img_idx+1}.jpg",
-                        color=(
-                            random.randint(0, 255),
-                            random.randint(0, 255),
-                            random.randint(0, 255),
-                        ),
-                    )
-                    ProductImage.objects.create(
-                        product=product, image=img_file, ordering=img_idx
-                    )
-                products.append(product)
+            # # Regular products
+            # for j in range(6):
+            #     name = f"{random.choice(PRODUCT_NAMES)} {j+1} (okorieemmanuel167@gmail.com)"
+            #     category = random.choice(
+            #         [cat for cat in categories if cat.name not in ["Car", "Spare Part"]]
+            #     )
+            #     price = round(random.uniform(5000, 50000), 2)
+            #     description = random.choice(PRODUCT_DESCRIPTIONS)
+            #     is_rental = random.choice([True, False])
+            #     stock = random.randint(5, 100)
+            #     product = Product.objects.create(
+            #         merchant=merchant_user,
+            #         category=category,
+            #         name=name,
+            #         description=description,
+            #         price=price,
+            #         is_rental=is_rental,
+            #         stock=stock,
+            #     )
+            #     # Add 2 images per product
+            #     for img_idx in range(2):
+            #         img_file = generate_image_file(
+            #             name=f"{name.replace(' ', '_').lower()}_{img_idx+1}.jpg",
+            #             color=(
+            #                 random.randint(0, 255),
+            #                 random.randint(0, 255),
+            #                 random.randint(0, 255),
+            #             ),
+            #         )
+            #         ProductImage.objects.create(
+            #             product=product, image=img_file, ordering=img_idx
+            #         )
+            #     products.append(product)
 
-            # Car products
-            car_category = next((cat for cat in categories if cat.name == "Car"), None)
-            if car_category:
-                for j in range(2):
-                    name = f"{random.choice(CAR_NAMES)} {j+1} (okorieemmanuel167@gmail.com)"
-                    price = round(random.uniform(2000000, 15000000), 2)
-                    description = random.choice(CAR_DESCRIPTIONS)
-                    product = Product.objects.create(
-                        merchant=merchant_user,
-                        category=car_category,
-                        name=name,
-                        description=description,
-                        price=price,
-                        is_rental=False,
-                        stock=1,
-                    )
-                    for img_idx in range(3):
-                        img_file = generate_image_file(
-                            name=f"{name.replace(' ', '_').lower()}_{img_idx+1}.jpg",
-                            size=(400, 300),
-                            color=(
-                                random.randint(0, 255),
-                                random.randint(0, 255),
-                                random.randint(0, 255),
-                            ),
-                        )
-                        ProductImage.objects.create(
-                            product=product, image=img_file, ordering=img_idx
-                        )
-                    car_products.append(product)
-                    products.append(product)
+            # # Car products
+            # car_category = next((cat for cat in categories if cat.name == "Car"), None)
+            # if car_category:
+            #     for j in range(2):
+            #         name = f"{random.choice(CAR_NAMES)} {j+1} (okorieemmanuel167@gmail.com)"
+            #         price = round(random.uniform(2000000, 15000000), 2)
+            #         description = random.choice(CAR_DESCRIPTIONS)
+            #         product = Product.objects.create(
+            #             merchant=merchant_user,
+            #             category=car_category,
+            #             name=name,
+            #             description=description,
+            #             price=price,
+            #             is_rental=False,
+            #             stock=1,
+            #         )
+            #         for img_idx in range(3):
+            #             img_file = generate_image_file(
+            #                 name=f"{name.replace(' ', '_').lower()}_{img_idx+1}.jpg",
+            #                 size=(400, 300),
+            #                 color=(
+            #                     random.randint(0, 255),
+            #                     random.randint(0, 255),
+            #                     random.randint(0, 255),
+            #                 ),
+            #             )
+            #             ProductImage.objects.create(
+            #                 product=product, image=img_file, ordering=img_idx
+            #             )
+            #         car_products.append(product)
+            #         products.append(product)
 
-            # Spare part products
-            spare_part_category = next((cat for cat in categories if cat.name == "Spare Part"), None)
-            if spare_part_category:
-                for j in range(3):
-                    name = f"{random.choice(SPARE_PART_NAMES)} {j+1} (okorieemmanuel167@gmail.com)"
-                    price = round(random.uniform(1000, 25000), 2)
-                    description = random.choice(SPARE_PART_DESCRIPTIONS)
-                    stock = random.randint(10, 200)
-                    product = Product.objects.create(
-                        merchant=merchant_user,
-                        category=spare_part_category,
-                        name=name,
-                        description=description,
-                        price=price,
-                        is_rental=False,
-                        stock=stock,
-                    )
-                    for img_idx in range(2):
-                        img_file = generate_image_file(
-                            name=f"{name.replace(' ', '_').lower()}_{img_idx+1}.jpg",
-                            color=(
-                                random.randint(0, 255),
-                                random.randint(0, 255),
-                                random.randint(0, 255),
-                            ),
-                        )
-                        ProductImage.objects.create(
-                            product=product, image=img_file, ordering=img_idx
-                        )
-                    spare_part_products.append(product)
-                    products.append(product)
+            # # Spare part products
+            # spare_part_category = next((cat for cat in categories if cat.name == "Spare Part"), None)
+            # if spare_part_category:
+            #     for j in range(3):
+            #         name = f"{random.choice(SPARE_PART_NAMES)} {j+1} (okorieemmanuel167@gmail.com)"
+            #         price = round(random.uniform(1000, 25000), 2)
+            #         description = random.choice(SPARE_PART_DESCRIPTIONS)
+            #         stock = random.randint(10, 200)
+            #         product = Product.objects.create(
+            #             merchant=merchant_user,
+            #             category=spare_part_category,
+            #             name=name,
+            #             description=description,
+            #             price=price,
+            #             is_rental=False,
+            #             stock=stock,
+            #         )
+            #         for img_idx in range(2):
+            #             img_file = generate_image_file(
+            #                 name=f"{name.replace(' ', '_').lower()}_{img_idx+1}.jpg",
+            #                 color=(
+            #                     random.randint(0, 255),
+            #                     random.randint(0, 255),
+            #                     random.randint(0, 255),
+            #                 ),
+            #             )
+            #             ProductImage.objects.create(
+            #                 product=product, image=img_file, ordering=img_idx
+            #             )
+            #         spare_part_products.append(product)
+            #         products.append(product)
 
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Created {len(products)} products (including cars and spare parts) for merchant '{merchant_email}'."
-                )
-            )
+            # self.stdout.write(
+            #     self.style.SUCCESS(
+            #         f"Created {len(products)} products (including cars and spare parts) for merchant '{merchant_email}'."
+            #     )
+            # )
 
-            # Create customer users for orders
-            num_customers = options["customers"]
-            customer_users = []
-            for i in range(1, num_customers + 1):
-                email = f"customer{i}@example.com"
-                user, created = User.objects.get_or_create(
-                    email=email,
-                    defaults={
-                        "email": email,
-                        "is_active": True,
-                        "first_name": f"Customer{i}",
-                        "last_name": "Demo",
-                    },
-                )
-                if created:
-                    user.set_password("password123")
-                    user.save()
-                customer_users.append(user)
+            # # Create customer users for orders
+            # num_customers = options["customers"]
+            # customer_users = []
+            # for i in range(1, num_customers + 1):
+            #     email = f"customer{i}@example.com"
+            #     user, created = User.objects.get_or_create(
+            #         email=email,
+            #         defaults={
+            #             "email": email,
+            #             "is_active": True,
+            #             "first_name": f"Customer{i}",
+            #             "last_name": "Demo",
+            #         },
+            #     )
+            #     if created:
+            #         user.set_password("password123")
+            #         user.save()
+            #     customer_users.append(user)
 
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Created {len(customer_users)} customer users."
-                )
-            )
+            # self.stdout.write(
+            #     self.style.SUCCESS(
+            #         f"Created {len(customer_users)} customer users."
+            #     )
+            # )
 
-            # Create orders and order items for the merchant's products
-            orders_created = 0
-            for customer in customer_users:
-                # Each customer makes 1-2 orders from the merchant's products
-                for _ in range(random.randint(1, 2)):
-                    order = Order.objects.create(
-                        customer=customer,
-                        status=random.choice(["paid", "completed", "shipped"]),
-                        total_amount=0,
-                    )
-                    # Add 1-3 items per order, only from this merchant's products
-                    order_items = random.sample(products, random.randint(1, min(3, len(products))))
-                    order_total = 0
-                    for product in order_items:
-                        quantity = random.randint(1, 3)
-                        item_total = product.price * quantity
-                        order_total += item_total
-                        OrderItem.objects.create(
-                            order=order,
-                            product=product,
-                            quantity=quantity,
-                            price=product.price,
-                        )
-                    order.total_amount = order_total
-                    order.save()
-                    orders_created += 1
+            # # Create orders and order items for the merchant's products
+            # orders_created = 0
+            # for customer in customer_users:
+            #     # Each customer makes 1-2 orders from the merchant's products
+            #     for _ in range(random.randint(1, 2)):
+            #         order = Order.objects.create(
+            #             customer=customer,
+            #             status=random.choice(["paid", "completed", "shipped"]),
+            #             total_amount=0,
+            #         )
+            #         # Add 1-3 items per order, only from this merchant's products
+            #         order_items = random.sample(products, random.randint(1, min(3, len(products))))
+            #         order_total = 0
+            #         for product in order_items:
+            #             quantity = random.randint(1, 3)
+            #             item_total = product.price * quantity
+            #             order_total += item_total
+            #             OrderItem.objects.create(
+            #                 order=order,
+            #                 product=product,
+            #                 quantity=quantity,
+            #                 price=product.price,
+            #             )
+            #         order.total_amount = order_total
+            #         order.save()
+            #         orders_created += 1
 
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Created {orders_created} orders with order items for merchant '{merchant_email}'."
-                )
-            )
+            # self.stdout.write(
+            #     self.style.SUCCESS(
+            #         f"Created {orders_created} orders with order items for merchant '{merchant_email}'."
+            #     )
+            # )
 
-            # Create dummy reviews for the merchant's products
-            for product in products:
-                for _ in range(random.randint(1, 3)):
-                    reviewer_email = f"user{random.randint(1, 1000)}@example.com"
-                    reviewer, _ = User.objects.get_or_create(
-                        email=reviewer_email,
-                        defaults={"email": reviewer_email, "is_active": True},
-                    )
-                    ProductReview.objects.get_or_create(
-                        product=product,
-                        user=reviewer,
-                        defaults={
-                            "rating": random.randint(3, 5),
-                            "comment": random.choice(PRODUCT_DESCRIPTIONS),
-                        },
-                    )
-            self.stdout.write(self.style.SUCCESS(
-                f"Dummy product reviews created for merchant '{merchant_email}'."
-            ))
+            # # Create dummy reviews for the merchant's products
+            # for product in products:
+            #     for _ in range(random.randint(1, 3)):
+            #         reviewer_email = f"user{random.randint(1, 1000)}@example.com"
+            #         reviewer, _ = User.objects.get_or_create(
+            #             email=reviewer_email,
+            #             defaults={"email": reviewer_email, "is_active": True},
+            #         )
+            #         ProductReview.objects.get_or_create(
+            #             product=product,
+            #             user=reviewer,
+            #             defaults={
+            #                 "rating": random.randint(3, 5),
+            #                 "comment": random.choice(PRODUCT_DESCRIPTIONS),
+            #             },
+            #         )
+            # self.stdout.write(self.style.SUCCESS(
+            #     f"Dummy product reviews created for merchant '{merchant_email}'."
+            # ))
 
-            # Create follow relationships between customers and the merchant
-            follows_created = 0
-            for customer in customer_users:
-                FollowMerchant.objects.get_or_create(
-                    user=customer,
-                    merchant=merchant_user
-                )
-                follows_created += 1
+            # # Create follow relationships between customers and the merchant
+            # follows_created = 0
+            # for customer in customer_users:
+            #     FollowMerchant.objects.get_or_create(
+            #         user=customer,
+            #         merchant=merchant_user
+            #     )
+            #     follows_created += 1
 
-            self.stdout.write(
-                self.style.SUCCESS(f"Created {follows_created} follow relationships for merchant '{merchant_email}'.")
-            )
+            # self.stdout.write(
+            #     self.style.SUCCESS(f"Created {follows_created} follow relationships for merchant '{merchant_email}'.")
+            # )
 
-            # Create favorite products for customers (from merchant's products)
-            favorites_created = 0
-            for customer in customer_users:
-                num_favorites = random.randint(2, min(5, len(products)))
-                favorite_products = random.sample(products, num_favorites)
-                for product in favorite_products:
-                    FavoriteProduct.objects.get_or_create(
-                        user=customer,
-                        product=product
-                    )
-                    favorites_created += 1
+            # # Create favorite products for customers (from merchant's products)
+            # favorites_created = 0
+            # for customer in customer_users:
+            #     num_favorites = random.randint(2, min(5, len(products)))
+            #     favorite_products = random.sample(products, num_favorites)
+            #     for product in favorite_products:
+            #         FavoriteProduct.objects.get_or_create(
+            #             user=customer,
+            #             product=product
+            #         )
+            #         favorites_created += 1
 
-            self.stdout.write(
-                self.style.SUCCESS(f"Created {favorites_created} favorite products for merchant '{merchant_email}'.")
-            )
+            # self.stdout.write(
+            #     self.style.SUCCESS(f"Created {favorites_created} favorite products for merchant '{merchant_email}'.")
+            # )
 
             # Final summary
             self.stdout.write(
                 self.style.SUCCESS(
                     f"\n=== DUMMY DATA POPULATION COMPLETE ===\n"
                     f"Categories: {len(categories)}\n"
-                    f"Merchant: {merchant_email}\n"
-                    f"Customers: {len(customer_users)}\n"
-                    f"Products: {len(products)}\n"
-                    f"  - Cars: {len(car_products)}\n"
-                    f"  - Spare Parts: {len(spare_part_products)}\n"
-                    f"  - Other Products: {len(products) - len(car_products) - len(spare_part_products)}\n"
-                    f"Orders: {orders_created}\n"
-                    f"Reviews: {ProductReview.objects.filter(product__merchant=merchant_user).count()}\n"
-                    f"Images: {ProductImage.objects.filter(product__merchant=merchant_user).count()}\n"
-                    f"Follow Relationships: {follows_created}\n"
-                    f"Favorite Products: {favorites_created}\n"
+                    # f"Merchant: {merchant_email}\n"
+                    # f"Customers: {len(customer_users)}\n"
+                    # f"Products: {len(products)}\n"
+                    # f"  - Cars: {len(car_products)}\n"
+                    # f"  - Spare Parts: {len(spare_part_products)}\n"
+                    # f"  - Other Products: {len(products) - len(car_products) - len(spare_part_products)}\n"
+                    # f"Orders: {orders_created}\n"
+                    # f"Reviews: {ProductReview.objects.filter(product__merchant=merchant_user).count()}\n"
+                    # f"Images: {ProductImage.objects.filter(product__merchant=merchant_user).count()}\n"
+                    # f"Follow Relationships: {follows_created}\n"
+                    # f"Favorite Products: {favorites_created}\n"
                 )
             )

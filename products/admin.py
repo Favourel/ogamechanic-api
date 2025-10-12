@@ -4,8 +4,8 @@ from . import models
 
 @admin.register(models.Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ('name', 'created_at', 'updated_at')
-    search_fields = ('name',)
+    list_display = ('name', 'parent_category', 'created_at', 'updated_at')
+    search_fields = ('name', 'parent_category',)
     readonly_fields = ('created_at', 'updated_at')
 
 

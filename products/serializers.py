@@ -7,10 +7,21 @@ from django.db.models import Avg
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    sub_categories = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Category
-        fields = ['id', 'name', 'description', 'created_at', 'updated_at']
+        fields = [
+            'id', 'name', 'sub_categories', 'description', 
+            'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_sub_categories(self, obj):
+        if obj.parent_category is None:
+            return CategorySerializer(
+                obj.models.all(), many=True
+            ).data
+        return []
 
 
 class ProductVehicleCompatibilitySerializer(serializers.Serializer):
@@ -79,6 +90,9 @@ class ProductSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField(read_only=True)
     category = serializers.SerializerMethodField(read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(
+        queryset=Category.objects.all(), source='category', write_only=True,
+    )
+    sub_category_id = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects.all(), source='category', write_only=True,
     )
     merchant = serializers.SerializerMethodField(read_only=True)
@@ -169,6 +183,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'merchant',
             'category',
             'category_id',
+            'sub_category_id',
             'name',
             'make',
             'model',
@@ -274,7 +289,8 @@ class ProductCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = [
-            'category_id', 'name', 'make', 'model', 'year', 'condition',
+            'category_id', 'sub_category_id', 'name', 'make', 
+            'model', 'year', 'condition',
             'body_type', 'mileage', 'mileage_unit', 'transmission', 
             'fuel_type', 'engine_size', 'exterior_color', 'interior_color', 
             'number_of_doors', 'number_of_seats', 'air_conditioning', 
