@@ -95,7 +95,9 @@ class ProductSerializer(serializers.ModelSerializer):
     sub_category_id = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects.all(), source='category', write_only=True,
     )
-    merchant = serializers.SerializerMethodField(read_only=True)
+    merchant_id = serializers.CharField(source='merchant.id', read_only=True)
+    merchant_email = serializers.CharField(
+        source='merchant.email', read_only=True)
     vehicle_compatibility = ProductVehicleCompatibilityReadSerializer(
         many=True, read_only=True)
 
@@ -180,7 +182,8 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'id',
-            'merchant',
+            'merchant_id',
+            'merchant_email',
             'category',
             'category_id',
             'sub_category_id',
@@ -234,7 +237,8 @@ class ProductSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id',
-            'merchant',
+            'merchant_id',
+            'merchant_email',
             'images',
             'vehicle_compatibility',
             'created_at',
@@ -259,8 +263,8 @@ class ProductSerializer(serializers.ModelSerializer):
     def get_category(self, obj):
         return CategorySerializer(obj.category).data if obj.category else None
 
-    def get_merchant(self, obj):
-        return UserSerializer(obj.merchant).data if obj.merchant else None
+    # def get_merchant(self, obj):
+    #     return UserSerializer(obj.merchant).data if obj.merchant else None
 
     def get_rating(self, obj):
         """Return pre-annotated average rating if available"""
@@ -285,7 +289,13 @@ class ProductCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating products with vehicle compatibility support"""
     vehicle_compatibility = ProductVehicleCompatibilitySerializer(
         many=True, required=False)
-    
+    category_id = serializers.PrimaryKeyRelatedField(
+        queryset=Category.objects.all(), source='category', write_only=True,
+    )
+    sub_category_id = serializers.PrimaryKeyRelatedField(
+        queryset=Category.objects.all(), source='category', write_only=True,
+    )
+
     class Meta:
         model = Product
         fields = [
