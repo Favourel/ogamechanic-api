@@ -288,12 +288,15 @@ class ProductSerializer(serializers.ModelSerializer):
 class ProductCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating products with vehicle compatibility support"""
     vehicle_compatibility = ProductVehicleCompatibilitySerializer(
-        many=True, required=False)
+        many=True, required=False
+    )
     category_id = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects.all(), source='category', write_only=True,
     )
+    # Subcategory is only required (and visible) when creating a Spare Part product  # noqa
     sub_category_id = serializers.PrimaryKeyRelatedField(
-        queryset=Category.objects.all(), source='category', write_only=True,
+        queryset=Category.objects.all(), source='category', 
+        write_only=True, required=False,
     )
 
     class Meta:
@@ -312,10 +315,43 @@ class ProductCreateSerializer(serializers.ModelSerializer):
             'blind_spot_monitor', 'delivery_option', 'vehicle_compatibility'
         ]
     
+    def validate(self, attrs):
+        # You may need to adjust the below according to how category and subcategory relate: # noqa
+        # The following assumes you have a way to check a category's name or type.  # noqa
+        category = attrs.get('category_id')
+        sub_category = attrs.get('sub_category_id', None)
+        
+        # Fetch the real category instance if not passed directly
+        if isinstance(category, int):
+            from .models import Category
+            category = Category.objects.filter(id=category).first()
+
+        # If "Spare Part" (or similar) is chosen as the category, sub_category_id is required  # noqa
+        # If "Car" is chosen, sub_category_id is not required and should be null or absent  # noqa
+        if category is not None:
+            if hasattr(category, 'name'):
+                name = category.name.lower()
+            else:
+                name = str(category).lower()
+            if name == 'spare part' or name == 'spare parts':
+                if not sub_category:
+                    raise serializers.ValidationError({
+                        "sub_category_id": "This field is required when Spare Part is selected as the category."  # noqa
+                    })
+            elif name == 'car' or name == 'cars':
+                attrs['sub_category'] = None
+        
+        return attrs
+
     def create(self, validated_data):
         vehicle_compatibility_data = validated_data.pop(
-            'vehicle_compatibility', [])
+            'vehicle_compatibility', []
+        )
+        sub_category = validated_data.pop('sub_category', None)
         product = Product.objects.create(**validated_data)
+        if sub_category:
+            product.sub_category = sub_category
+            product.save()
         
         # Create vehicle compatibility entries
         for compatibility_data in vehicle_compatibility_data:
@@ -341,14 +377,17 @@ class ProductCreateSerializer(serializers.ModelSerializer):
                     )
         
         return product
-    
+
     def update(self, instance, validated_data):
         vehicle_compatibility_data = validated_data.pop(
             'vehicle_compatibility', None)
+        sub_category = validated_data.pop('sub_category', None)
         
         # Update product fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        if sub_category is not None:
+            instance.sub_category = sub_category
         instance.save()
         
         # Update vehicle compatibility if provided
