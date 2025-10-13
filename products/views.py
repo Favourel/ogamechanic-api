@@ -85,6 +85,13 @@ class ProductListCreateView(APIView):
                 required=False
             ),
             openapi.Parameter(
+                'make',
+                openapi.IN_QUERY,
+                description="Filter by make ID",
+                type=openapi.TYPE_INTEGER,
+                required=False
+            ),
+            openapi.Parameter(
                 'category',
                 openapi.IN_QUERY,
                 description="Filter by category ID",
@@ -165,6 +172,16 @@ class ProductListCreateView(APIView):
             is_rental = request.query_params.get('is_rental')
             min_price = request.query_params.get('min_price')
             max_price = request.query_params.get('max_price')
+            make = request.query_params.get('make')
+
+            if make:
+                try:
+                    queryset = queryset.filter(make__id=make)
+                except (ValueError, TypeError):
+                    return Response(
+                        api_response(message="Invalid make ID.", status=False),
+                        status=400
+                    )
 
             if merchant:
                 try:
@@ -966,6 +983,50 @@ class ProductSearchView(APIView):
                 description="Number of items per page",
                 type=openapi.TYPE_INTEGER, required=False
             ),
+
+            openapi.Parameter(
+                'merchant',
+                openapi.IN_QUERY,
+                description="Filter by merchant user ID",
+                type=openapi.TYPE_STRING,
+                format=openapi.FORMAT_UUID,
+                required=False
+            ),
+            openapi.Parameter(
+                'make',
+                openapi.IN_QUERY,
+                description="Filter by make ID",
+                type=openapi.TYPE_INTEGER,
+                required=False
+            ),
+            openapi.Parameter(
+                'category',
+                openapi.IN_QUERY,
+                description="Filter by category ID",
+                type=openapi.TYPE_INTEGER,
+                required=False
+            ),
+            openapi.Parameter(
+                'is_rental',
+                openapi.IN_QUERY,
+                description="Filter by rental status (true/false)",
+                type=openapi.TYPE_BOOLEAN,
+                required=False
+            ),
+            openapi.Parameter(
+                'min_price',
+                openapi.IN_QUERY,
+                description="Filter by minimum price",
+                type=openapi.TYPE_NUMBER,
+                required=False
+            ),
+            openapi.Parameter(
+                'max_price',
+                openapi.IN_QUERY,
+                description="Filter by maximum price",
+                type=openapi.TYPE_NUMBER,
+                required=False
+            ),
         ],
         responses={200: ProductSerializer(many=True)}
     )
@@ -1015,6 +1076,76 @@ class ProductSearchView(APIView):
                     Q(description__icontains=query) |
                     Q(category__name__icontains=query)
                 )
+
+            # Filtering
+            merchant = request.query_params.get('merchant')
+            category = request.query_params.get('category')
+            is_rental = request.query_params.get('is_rental')
+            min_price = request.query_params.get('min_price')
+            max_price = request.query_params.get('max_price')
+            make = request.query_params.get('make')
+
+            if make:
+                try:
+                    queryset = queryset.filter(make__id=make)
+                except (ValueError, TypeError):
+                    return Response(
+                        api_response(message="Invalid make ID.", status=False),
+                        status=400
+                    )
+
+            if merchant:
+                try:
+                    queryset = queryset.filter(merchant__id=merchant)
+                except (ValueError, TypeError):
+                    return Response(
+                        api_response(
+                            message="Invalid merchant ID.", status=False),
+                        status=400
+                    )
+            if category:
+                try:
+                    queryset = queryset.filter(category__id=category)
+                except (ValueError, TypeError):
+                    return Response(
+                        api_response(
+                            message="Invalid category ID.", status=False),
+                        status=400
+                    )
+            if is_rental is not None:
+                if is_rental.lower() in ['true', '1']:
+                    queryset = queryset.filter(is_rental=True)
+                elif is_rental.lower() in ['false', '0']:
+                    queryset = queryset.filter(is_rental=False)
+                else:
+                    return Response(
+                        api_response(
+                            message="Invalid is_rental value. Use true or false.", # noqa
+                            status=False),
+                        status=400
+                    )
+            if min_price is not None:
+                try:
+                    min_price_val = float(min_price)
+                    queryset = queryset.filter(price__gte=min_price_val)
+                except (ValueError, TypeError):
+                    return Response(
+                        api_response(
+                            message="Invalid min_price value.",
+                            status=False),
+                        status=400
+                    )
+            if max_price is not None:
+                try:
+                    max_price_val = float(max_price)
+                    queryset = queryset.filter(price__lte=max_price_val)
+                except (ValueError, TypeError):
+                    return Response(
+                        api_response(
+                            message="Invalid max_price value.",
+                            status=False),
+                        status=400
+                    )
 
             serializer = self.get_paginated_response(queryset)
 

@@ -95,6 +95,8 @@ class ProductSerializer(serializers.ModelSerializer):
     sub_category_id = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects.all(), source='category', write_only=True,
     )
+    make = serializers.CharField(source='make.name', read_only=True)
+    model = serializers.CharField(source='model.name', read_only=True)
     merchant_id = serializers.CharField(source='merchant.id', read_only=True)
     merchant_email = serializers.CharField(
         source='merchant.email', read_only=True)
@@ -194,7 +196,9 @@ class ProductSerializer(serializers.ModelSerializer):
             'sub_category_id',
             'name',
             'make',
+            'make_id',
             'model',
+            'model_id',
             'year',
             'condition',
             'body_type',
@@ -245,10 +249,14 @@ class ProductSerializer(serializers.ModelSerializer):
             'id',
             'merchant_id',
             'merchant_email',
+            'make',
+            'model',
             'images',
             'vehicle_compatibility',
             'created_at',
             'updated_at',
+            'make_id',
+            'model_id',
             'category',
             'rating',
             'merchant_rating',
@@ -308,10 +316,11 @@ class ProductCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = [
-            'category_id', 'sub_category_id', 'name', 'make', 
+            'category_id', 'sub_category_id', 'name', 'make', 'make_id',
             'model', 'year', 'condition',
             'body_type', 'mileage', 'mileage_unit', 'transmission', 
             'fuel_type', 'engine_size', 'exterior_color', 'interior_color', 
+            'model', 'model_id',
             'number_of_doors', 'number_of_seats', 'air_conditioning', 
             'leather_seats', 'navigation_system', 'bluetooth', 
             'parking_sensors', 'cruise_control', 'keyless_entry',
@@ -336,7 +345,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     "contact_info": f"Invalid phone number format: {str(e)}"
                 })
-        
+
         # Fetch the real category instance if not passed directly
         if isinstance(category, int):
             from .models import Category
