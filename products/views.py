@@ -2101,12 +2101,12 @@ class OrderListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_description="List all orders for the authenticated user, or all orders for one of the user's merchant accounts (if merchant_id is provided as a query parameter).",
+        operation_description="List all orders for the authenticated user, or all orders for one of the user's merchant accounts (if merchant_id is provided as a query parameter).", # noqa
         manual_parameters=[
             openapi.Parameter(
                 name='merchant_id',
                 in_=openapi.IN_QUERY,
-                description="ID of the merchant (user id) whose orders will be listed. If not provided, returns orders for currently authenticated user as a customer.",
+                description="ID of the merchant (user id) whose orders will be listed. If not provided, returns orders for currently authenticated user as a customer.", # noqa
                 type=openapi.TYPE_STRING,
                 required=False
             )
@@ -2117,7 +2117,7 @@ class OrderListView(APIView):
         """
         Returns:
             - All orders where the authenticated user is the customer (default)
-            - If `merchant_id` is provided and belongs to current user (or current user is merchant), returns all orders containing products owned by the merchant
+            - If `merchant_id` is provided and belongs to current user (or current user is merchant), returns all orders containing products owned by the merchant # noqa
         """
         status_, data = get_incoming_request_checks(request)
         if not status_:
@@ -2204,61 +2204,68 @@ class OrderStatusUpdateView(APIView):
         responses={200: OrderSerializer()}
     )
     def post(self, request, order_id):
+        """
+        Update the status of a particular order.
+        Only merchants related to the order or staff are allowed to update.
+        """
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=400
+                status=status.HTTP_400_BAD_REQUEST
             )
 
         new_status = data.get('status')
         if not new_status:
             return Response(
                 api_response(message="Missing status field.", status=False),
-                status=400
+                status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
             with transaction.atomic():
                 order = Order.objects.select_for_update().get(id=order_id)
 
-                # Role checks
-                is_merchant = order.items.filter(product__merchant=request.user).exists() # noqa
-                is_staff = request.user.is_staff
+                # Production role checks
+                is_merchant = order.items.filter(
+                    product__merchant=request.user).exists()
+                is_staff = getattr(request.user, 'is_staff', False)
 
-                # In production, customers should NOT be able to update order status # noqa
                 if not (is_merchant or is_staff):
                     return Response(
-                        api_response(message="You do not have permission to update this order's status.", status=False), # noqa
-                        status=403
+                        api_response(
+                            message="You do not have permission to update this order's status.", # noqa
+                            status=False
+                        ),
+                        status=status.HTTP_403_FORBIDDEN
                     )
 
-                # Allowed status changes
+                # Define allowed statuses for roles
                 merchant_allowed = {'shipped', 'completed', 'cancelled'}
                 staff_allowed = {'pending', 'paid', 'shipped', 'completed', 'cancelled'} # noqa
 
                 if is_merchant:
-                    allowed = merchant_allowed
+                    allowed_statuses = merchant_allowed
                     error_msg = "Merchants can only mark orders as 'shipped', 'completed', or 'cancelled'." # noqa
-                    error_status = 403
+                    error_code = status.HTTP_403_FORBIDDEN
                 elif is_staff:
-                    allowed = staff_allowed
+                    allowed_statuses = staff_allowed
                     error_msg = "Invalid status for staff."
-                    error_status = 400
+                    error_code = status.HTTP_400_BAD_REQUEST
                 else:
-                    # Should never reach here due to above check
+                    # Should not reach here due to previous check
                     return Response(
                         api_response(message="Not allowed.", status=False),
-                        status=403
+                        status=status.HTTP_403_FORBIDDEN
                     )
 
-                if new_status not in allowed:
+                if new_status not in allowed_statuses:
                     return Response(
                         api_response(message=error_msg, status=False),
-                        status=error_status
+                        status=error_code
                     )
 
-                # Valid status transitions
+                # Valid status transitions mapping
                 valid_transitions = {
                     'pending': {'paid', 'cancelled'},
                     'paid': {'shipped', 'cancelled'},
@@ -2270,13 +2277,13 @@ class OrderStatusUpdateView(APIView):
                 if new_status not in valid_transitions.get(current_status, set()): # noqa
                     return Response(
                         api_response(
-                            message=f"Invalid status transition from '{current_status}' to '{new_status}'.", # noqa
+                            message=f"Invalid status transition from '{current_status}' to '{new_status}'.",  # noqa
                             status=False
                         ),
-                        status=400
+                        status=status.HTTP_400_BAD_REQUEST
                     )
 
-                # Update order
+                # Update order status and related fields
                 order.status = new_status
                 if new_status == 'paid':
                     order.payment_status = 'paid'
@@ -2286,21 +2293,21 @@ class OrderStatusUpdateView(APIView):
         except Order.DoesNotExist:
             return Response(
                 api_response(message="Order not found.", status=False),
-                status=404
+                status=status.HTTP_404_NOT_FOUND
             )
         except Exception as exc:
             import logging
             import traceback
             logger = logging.getLogger(__name__)
-            logger.exception(f"Error updating order status for order {order_id}: {exc} \n\n{traceback.format_exc()}") # noqa
+            logger.exception(f"Error updating order status for order {order_id}: {exc}\n{traceback.format_exc()}") # noqa
             return Response(
-                api_response(message="An unexpected error occurred.", status=False),  # noqa
-                status=500
+                api_response(message="An unexpected error occurred.", status=False), # noqa
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
         serializer = OrderSerializer(order)
 
-        # Send notifications asynchronously
+        # Send notifications asynchronously - never block
         try:
             send_order_status_update_email.delay(
                 str(order.id), order.customer.email, order.status
@@ -2317,7 +2324,7 @@ class OrderStatusUpdateView(APIView):
                 merchant_emails = set(
                     item.product.merchant.email
                     for item in order.items.select_related('product__merchant')
-                    if getattr(item.product, 'merchant', None) and item.product.merchant.email # noqa
+                    if getattr(item.product, 'merchant', None) and item.product.merchant.email  # noqa
                 )
                 for merchant_email in merchant_emails:
                     send_merchant_order_cancelled_email.delay(
@@ -2328,10 +2335,10 @@ class OrderStatusUpdateView(APIView):
                     str(order.id), order.customer.email
                 )
         except Exception as exc:
-            import logging 
+            import logging
             import traceback
             logger = logging.getLogger(__name__)
-            logger.warning(f"Order status updated but notification failed for order {order_id}: {exc} \n\n{traceback.format_exc()}") # noqa
+            logger.warning(f"Order status updated but notification failed for order {order_id}: {exc}\n{traceback.format_exc()}")  # noqa
 
         return Response(
             api_response(
@@ -2339,8 +2346,63 @@ class OrderStatusUpdateView(APIView):
                 status=True,
                 data=serializer.data
             ),
-            status=200
+            status=status.HTTP_200_OK
         )
+
+    @swagger_auto_schema(
+        operation_description="Retrieve the details of a particular order.",
+        responses={200: OrderSerializer()}
+    )
+    def get(self, request, order_id):
+        """
+        Retrieve details of a particular order.
+        - Staff can view any order.
+        - Merchants can view orders containing their products.
+        - Customers can view their own orders.
+        """
+        try:
+            order = Order.objects.prefetch_related(
+                'items',
+                'items__product',
+                'items__product__merchant'
+            ).select_related('customer').get(id=order_id)
+
+            user = request.user
+            is_merchant = order.items.filter(product__merchant=user).exists()
+            is_staff = getattr(user, 'is_staff', False)
+            is_customer = order.customer == user
+
+            if not (is_staff or is_merchant or is_customer):
+                return Response(
+                    api_response(
+                        message="You do not have permission to view this order.", # noqa
+                        status=False
+                    ),
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            serializer = OrderSerializer(order)
+            return Response(
+                api_response(
+                    message="Order details retrieved successfully.",
+                    status=True,
+                    data=serializer.data
+                ),
+                status=status.HTTP_200_OK
+            )
+        except Order.DoesNotExist:
+            return Response(
+                api_response(message="Order not found.", status=False),
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as exc:
+            import logging
+            import traceback
+            logger = logging.getLogger(__name__)
+            logger.exception(f"Error retrieving order details for order {order_id}: {exc}\n{traceback.format_exc()}") # noqa
+            return Response(
+                api_response(message="An unexpected error occurred.", status=False), # noqa
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class ProductReviewListCreateView(APIView):

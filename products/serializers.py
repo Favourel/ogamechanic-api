@@ -459,14 +459,14 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         vehicle_compatibility_data = validated_data.pop(
             'vehicle_compatibility', None)
         sub_category = validated_data.pop('sub_category', None)
-        
+
         # Update product fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if sub_category is not None:
             instance.sub_category = sub_category
         instance.save()
-        
+
         if vehicle_compatibility_data is not None:
             from mechanics.models import VehicleMake
             instance.vehicle_compatibility.all().delete()
@@ -495,14 +495,14 @@ class ProductCreateSerializer(serializers.ModelSerializer):
                             model_obj = VehicleMake.objects.get(id=model_id)
                         except VehicleMake.DoesNotExist:
                             raise serializers.ValidationError({
-                                "vehicle_compatibility": f"Vehicle model with ID {model_id} does not exist."
+                                "vehicle_compatibility": f"Vehicle model with ID {model_id} does not exist." # noqa
                             })
                         # Defensive: ensure model belongs to make
                         parent_id = getattr(model_obj, 'parent_make_id', None)
                         if parent_id != make_obj.id:
                             raise serializers.ValidationError({
                                 "vehicle_compatibility": (
-                                    f"Model '{model_obj.name}' (ID {model_id}) does not belong to Make '{make_obj.name}' (ID {make_id})."
+                                    f"Model '{model_obj.name}' (ID {model_id}) does not belong to Make '{make_obj.name}' (ID {make_id})."  # noqa
                                 )
                             })
                         ProductVehicleCompatibility.objects.create(
