@@ -2101,7 +2101,7 @@ class OrderListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_description="List all orders for the authenticated user, or all orders for one of the user's merchant accounts (if merchant_id is provided as a query parameter).", # noqa
+        operation_description="List all orders for the authenticated user, or all orders for one of the user's merchant accounts (if merchant_id is provided as a query parameter). You can also filter by order status (pending, paid, shipped, completed, cancelled) via the 'status' query parameter.", # noqa
         manual_parameters=[
             openapi.Parameter(
                 name='merchant_id',
@@ -2109,7 +2109,14 @@ class OrderListView(APIView):
                 description="ID of the merchant (user id) whose orders will be listed. If not provided, returns orders for currently authenticated user as a customer.", # noqa
                 type=openapi.TYPE_STRING,
                 required=False
-            )
+            ),
+            openapi.Parameter(
+                name='status',
+                in_=openapi.IN_QUERY,
+                description="Filter orders by status (pending, paid, shipped, completed, cancelled).", # noqa
+                type=openapi.TYPE_STRING,
+                required=False
+            ),
         ],
         responses={200: OrderSerializer(many=True)}
     )
@@ -2117,7 +2124,8 @@ class OrderListView(APIView):
         """
         Returns:
             - All orders where the authenticated user is the customer (default)
-            - If `merchant_id` is provided and belongs to current user (or current user is merchant), returns all orders containing products owned by the merchant # noqa
+            - If `merchant_id` is provided and belongs to current user (or current user is merchant), returns all orders containing products owned by the merchant. # noqa
+            - You can also filter the list by order status using the 'status' query parameter. # noqa
         """
         status_, data = get_incoming_request_checks(request)
         if not status_:
@@ -2125,16 +2133,27 @@ class OrderListView(APIView):
                 api_response(message=data, status=False),
                 status=400
             )
+
         merchant_id = request.query_params.get('merchant_id', None)
+        status_filter = request.query_params.get('status', None)
+        VALID_ORDER_STATUSES = {'pending', 'paid', 'shipped', 'completed', 'cancelled'} # noqa
+
+        if status_filter is not None:
+            status_filter = status_filter.lower()
+            if status_filter not in VALID_ORDER_STATUSES:
+                return Response(
+                    api_response(
+                        message=f"Invalid status filter: '{status_filter}'. Allowed values: {', '.join(VALID_ORDER_STATUSES)}.", status=False), # noqa
+                    status=400
+                )
+
         if merchant_id:
             # Only allow if the current user is the merchant or superuser
-            if not (str(request.user.id) == str(merchant_id) or request.user.is_staff):  # noqa
+            if not (str(request.user.id) == str(merchant_id) or request.user.is_staff): # noqa
                 return Response(
                     api_response(message="Permission denied: You cannot query orders for this merchant.", status=False), # noqa
                     status=403
                 )
-            # N+1 mindful: fetch orders that include any products belonging to this merchant # noqa
-            # Get OrderItems whose product.merchant == merchant_id, then filter for those orders. # noqa
             order_ids = (
                 Order.objects
                 .filter(items__product__merchant_id=merchant_id)
@@ -2165,6 +2184,9 @@ class OrderListView(APIView):
                 .select_related('customer')
                 .order_by('-created_at')
             )
+        if status_filter is not None:
+            orders = orders.filter(status=status_filter)
+
         serializer = OrderSerializer(orders, many=True)
         return Response(
             api_response(
