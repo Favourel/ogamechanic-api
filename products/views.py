@@ -174,6 +174,22 @@ class ProductListCreateView(APIView):
             max_price = request.query_params.get('max_price')
             make = request.query_params.get('make')
 
+            # Exclude rented cars (is_rental=True) by default
+            if is_rental is not None:
+                if is_rental.lower() in ['true', '1']:
+                    queryset = queryset.filter(is_rental=True)
+                elif is_rental.lower() in ['false', '0']:
+                    queryset = queryset.filter(is_rental=False)
+                else:
+                    return Response(
+                        api_response(
+                            message="Invalid is_rental value. Use true or false.", # noqa
+                            status=False),
+                        status=400
+                    )
+            else:
+                queryset = queryset.filter(is_rental=False)
+
             if make:
                 try:
                     queryset = queryset.filter(make__id=make)
@@ -199,18 +215,6 @@ class ProductListCreateView(APIView):
                     return Response(
                         api_response(
                             message="Invalid category ID.", status=False),
-                        status=400
-                    )
-            if is_rental is not None:
-                if is_rental.lower() in ['true', '1']:
-                    queryset = queryset.filter(is_rental=True)
-                elif is_rental.lower() in ['false', '0']:
-                    queryset = queryset.filter(is_rental=False)
-                else:
-                    return Response(
-                        api_response(
-                            message="Invalid is_rental value. Use true or false.", # noqa
-                            status=False),
                         status=400
                     )
             if min_price is not None:
