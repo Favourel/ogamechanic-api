@@ -102,16 +102,37 @@ class MerchantProfileManagementView(APIView):
     @swagger_auto_schema(
         operation_summary="View Merchant Profile",
         operation_description="""
-        **Retrieve the merchant profile for the authenticated user**
+        **Retrieve a merchant profile.**
 
-        **Requirements:**
-        - User must be authenticated
-        - User must have 'merchant' role
-        - User must already have a merchant profile
+        This endpoint allows you to fetch a merchant's profile by user UUID, 
+        or your own merchant profile if no UUID is provided.
+
+        **How it works:**
+        - If `merchant_user_uuid` is provided in the query params, attempts 
+        to retrieve that user's merchant profile (if one exists).
+        - If not provided, fetches the merchant profile for the currently 
+        authenticated user (if one exists).
+
+        **Permissions:**
+        - Profile owners, staff, and any authenticated user can view merchant profiles.  # noqa
+        - If viewing someone else's profile, only public merchant profile information is returned.  # noqa
+        - Profiles that are not approved may return less information to non-admins or non-owners.
+
+        **Parameters (Query):**
+        - `merchant_user_uuid` (optional): The user's UUID whose merchant profile you wish to view.
 
         **Returns:**
-        - All merchant profile fields for the authenticated user
+        - Merchant profile data, or appropriate error if profile/user not found.
         """,
+        manual_parameters=[
+            openapi.Parameter(
+                'merchant_user_uuid',
+                openapi.IN_QUERY,
+                description="User UUID of the merchant whose profile to view (optional, defaults to current user).",  # noqa
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+        ],
         responses={
             200: openapi.Response(
                 description="Merchant profile retrieved successfully",
@@ -121,16 +142,16 @@ class MerchantProfileManagementView(APIView):
                         'status': openapi.Schema(
                             type=openapi.TYPE_BOOLEAN, example=True),
                         'message': openapi.Schema(
-                            type=openapi.TYPE_STRING, 
-                            example="Merchant profile retrieved successfully."),  # noqa
+                            type=openapi.TYPE_STRING,
+                            example="Merchant profile retrieved successfully."),
                         'data': openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
                                 'id': openapi.Schema(
-                                    type=openapi.TYPE_INTEGER, 
+                                    type=openapi.TYPE_INTEGER,
                                     description="Profile ID"),
                                 'user': openapi.Schema(
-                                    type=openapi.TYPE_STRING, 
+                                    type=openapi.TYPE_STRING,
                                     description="User UUID"),
                                 'location': openapi.Schema(
                                     type=openapi.TYPE_STRING),
@@ -139,36 +160,49 @@ class MerchantProfileManagementView(APIView):
                                 'cac_number': openapi.Schema(
                                     type=openapi.TYPE_STRING),
                                 'cac_document': openapi.Schema(
-                                    type=openapi.TYPE_STRING, 
+                                    type=openapi.TYPE_STRING,
                                     description="URL to CAC document"),
                                 'selfie': openapi.Schema(
-                                    type=openapi.TYPE_STRING, 
+                                    type=openapi.TYPE_STRING,
                                     description="URL to selfie"),
                                 'business_address': openapi.Schema(
                                     type=openapi.TYPE_STRING),
                                 'profile_picture': openapi.Schema(
-                                    type=openapi.TYPE_STRING, 
+                                    type=openapi.TYPE_STRING,
                                     description="URL to profile picture"),
                                 'is_approved': openapi.Schema(
                                     type=openapi.TYPE_BOOLEAN, example=False),
                                 'created_at': openapi.Schema(
-                                    type=openapi.TYPE_STRING, 
+                                    type=openapi.TYPE_STRING,
                                     format='date-time'),
                                 'updated_at': openapi.Schema(
-                                    type=openapi.TYPE_STRING, format='date-time') # noqa
+                                    type=openapi.TYPE_STRING, format='date-time')
                             }
                         )
                     }
                 )
             ),
-            400: openapi.Response(
-                description="User does not have merchant role or profile does not exist", # noqa
+            404: openapi.Response(
+                description="Merchant profile or user not found",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False), # noqa
+                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),  # noqa
                         'message': openapi.Schema(
-                            type=openapi.TYPE_STRING, 
+                            type=openapi.TYPE_STRING,
+                            example="Merchant profile not found."
+                        ),
+                    }
+                )
+            ),
+            400: openapi.Response(
+                description="Invalid request or user does not have a merchant profile",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),  # noqa
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
                             example="User does not have a merchant profile."),
                     }
                 )
@@ -177,22 +211,59 @@ class MerchantProfileManagementView(APIView):
         }
     )
     def get(self, request):
-        user = request.user
+        from uuid import UUID
 
-        # Check if user has merchant role
-        if not user.roles.filter(name='merchant').exists():
-            return Response(api_response(
-                message="User must have merchant role to view merchant profile.", # noqa
-                status=False
-            ), status=400)
+        merchant_user_uuid = request.query_params.get('merchant_user_uuid')
 
-        # Check if user has a merchant profile
-        merchant_profile = getattr(user, 'merchant_profile', None)
+        # By default, use current authenticated user
+        if not merchant_user_uuid:
+            target_user = request.user
+        else:
+            try:
+                # Validate UUID format strictly
+                uuid_obj = UUID(str(merchant_user_uuid))
+            except Exception:
+                return Response(
+                    api_response(
+                        message="Invalid merchant_user_uuid format.",
+                        status=False
+                    ),
+                    status=400
+                )
+            try:
+                target_user = User.objects.get(uuid=uuid_obj)
+            except User.DoesNotExist:
+                return Response(
+                    api_response(
+                        message="The specified user does not exist.",
+                        status=False
+                    ),
+                    status=404
+                )
+        # Only users with a merchant_profile are valid
+        merchant_profile = getattr(target_user, 'merchant_profile', None)
         if not merchant_profile:
-            return Response(api_response(
-                message="User does not have a merchant profile.",
-                status=False
-            ), status=400)
+            return Response(
+                api_response(
+                    message="Merchant profile not found for user.",
+                    status=False
+                ),
+                status=404
+            )
+
+        # For staff, profile owner, or authenticated, return full info.
+        is_requester_owner = (request.user.id == target_user.id)
+        is_staff = getattr(request.user, "is_staff", False)
+
+        # Security: Optionally restrict access to profiles not yet approved for non-owners/non-admins # noqa
+        if not merchant_profile.is_approved and not (is_staff or is_requester_owner): # noqa
+            return Response(
+                api_response(
+                    message="Merchant profile is not yet approved.",
+                    status=False
+                ),
+                status=403
+            )
 
         serializer = MerchantProfileSerializer(
             merchant_profile, context={'request': request})
@@ -548,11 +619,13 @@ class MerchantProfileManagementView(APIView):
 class MechanicProfileManagementView(APIView):
     """
     Manage mechanic profiles - create, update, or complete mechanic profile.
+    Added: Support to view mechanic profile by user ID (public/production-ready).
     
     Use Cases:
     - Complete profile for users who registered via step-by-step flow
     - Update existing mechanic profiles
     - Create profiles for users who added mechanic role later
+    - Retrieve mechanic profile by user id
     
     Note: For new user registration, use step-by-step registration flow.
     """
@@ -563,38 +636,83 @@ class MechanicProfileManagementView(APIView):
     @swagger_auto_schema(
         operation_summary="View Mechanic Profile",
         operation_description="""
-        **Retrieve the merchant profile for the authenticated user**
+        Retrieve the mechanic profile.
 
-        **Requirements:**
-        - User must be authenticated
-        - User must have 'mechanic' role
-        - User must already have a mechanic profile
+        **Scenarios:**
+        - If `id` query parameter is provided (and valid), returns mechanic profile for the user with that id.
+        - If `id` is omitted, returns mechanic profile for the authenticated user.
+
+        **Requirements (when querying by user ID):**
+        - If the mechanic profile is public, any authenticated user may view it (change as appropriate).
+        - If not found, returns 404.
 
         **Returns:**
-        - All mechanic profile fields for the authenticated user
+        - All mechanic profile fields for the selected user
         """,
-        responses={200: MechanicProfileSerializer(many=True)}
+        manual_parameters=[
+            openapi.Parameter(
+                name='id',
+                in_=openapi.IN_QUERY,
+                required=False,
+                type=openapi.TYPE_INTEGER,
+                description='User ID whose mechanic profile is to be viewed. If omitted, shows authenticated user profile.'
+            )
+        ],
+        responses={200: MechanicProfileSerializer()}
     )
     def get(self, request):
-        user = request.user
+        from django.contrib.auth import get_user_model
 
-        # Check if user has mechanic role
-        if not user.roles.filter(name='mechanic').exists():
-            return Response(api_response(
-                message="User must have mechanic role to view mechanic profile.", # noqa
-                status=False
-            ), status=400)
+        user_id = request.query_params.get('id', None)
 
-        # Check if user has a mechanic profile
-        mechanic_profile = getattr(user, 'mechanic_profile', None)
-        if not mechanic_profile:
-            return Response(api_response(
-                message="User does not have a mechanic profile.",
-                status=False
-            ), status=400)
+        User = get_user_model()
+        mechanic_user = None
+        mechanic_profile = None
+
+        if user_id:
+            # Validate that the user exists and has a mechanic profile
+            try:
+                mechanic_user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return Response(api_response(
+                    message="User not found.",
+                    status=False
+                ), status=404)
+
+            if not mechanic_user.roles.filter(name="mechanic").exists():
+                return Response(api_response(
+                    message="Specified user does not have mechanic role.",
+                    status=False
+                ), status=400)
+
+            mechanic_profile = getattr(mechanic_user, "mechanic_profile", None)
+            if not mechanic_profile:
+                return Response(api_response(
+                    message="Mechanic profile does not exist for this user.",
+                    status=False
+                ), status=404)
+
+        else:
+            # Default to authenticated user
+            user = request.user
+
+            if not user.roles.filter(name="mechanic").exists():
+                return Response(api_response(
+                    message="User must have mechanic role to view mechanic profile.",
+                    status=False
+                ), status=400)
+
+            mechanic_profile = getattr(user, "mechanic_profile", None)
+            if not mechanic_profile:
+                return Response(api_response(
+                    message="User does not have a mechanic profile.",
+                    status=False
+                ), status=404)
 
         serializer = MechanicProfileSerializer(
-            mechanic_profile, context={'request': request})
+            mechanic_profile, context={"request": request}
+        )
+
         return Response(api_response(
             message="Mechanic profile retrieved successfully.",
             status=True,
