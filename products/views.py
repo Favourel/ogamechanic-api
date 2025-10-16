@@ -1647,7 +1647,13 @@ class CheckoutView(APIView):
                             description=(
                                 'Payment method: online (Paystack) or cash_on_delivery' # noqa
                             )
-                        )
+                        ),
+                        'mobile_callback_url': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description=(
+                                'myapp://payment-callback' # noqa
+                            )
+                        ),
                     }
                 ),
             },
@@ -1859,19 +1865,42 @@ class CheckoutView(APIView):
                 ),
                 status=400
             )
-        # Initialize Paystack transaction
+        # Initialize Paystack transaction for both web and mobile apps
+
         paystack_secret = settings.PAYSTACK_SECRET_KEY
         callback_url = settings.PAYSTACK_CALLBACK_URL
+
+        # For mobile: allow a custom callback URL from the app, fallback to default # noqa
+        mobile_callback = (
+            data.get('mobile_callback_url')
+            or request.query_params.get('mobile_callback_url')
+        )
+        # Format: e.g., "myapp://payment-callback" (deep link for mobile)
+        if mobile_callback:
+            callback_url = mobile_callback
+
         headers = {
             'Authorization': f'Bearer {paystack_secret}',
             'Content-Type': 'application/json',
         }
+
+        # Paystack expects callback_url to be HTTP(S) but for mobile apps,
+        # deep links are supported if using webview or app redirection flows.
+        # e.g., mobile_callback_url = "myapp://payment-callback"
+        # or "https://yourfrontend.app.com/payment/callback"
+        metadata = (
+            request.data.get('metadata')
+            or request.query_params.get('metadata')
+        )
         payload = {
             'email': request.user.email,
             'amount': int(order.total_amount * 100),  # Paystack expects kobo
             'reference': str(order.id),
             'callback_url': callback_url,
         }
+        if metadata:
+            payload['metadata'] = metadata
+
         try:
             resp = requests.post(
                 'https://api.paystack.co/transaction/initialize',
@@ -1886,7 +1915,10 @@ class CheckoutView(APIView):
             order.save(update_fields=['status', 'payment_status'])
             return Response(
                 api_response(
-                    message="Network error: Failed to initialize payment. Please try again.", # noqa
+                    message=(
+                        "Network error: Failed to initialize payment. "
+                        "Please try again."
+                    ),
                     status=False,
                     data=str(e)
                 ),

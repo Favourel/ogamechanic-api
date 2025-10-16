@@ -231,7 +231,7 @@ class MerchantProfileManagementView(APIView):
                     status=400
                 )
             try:
-                target_user = User.objects.get(uuid=uuid_obj)
+                target_user = User.objects.get(id=uuid_obj)
             except User.DoesNotExist:
                 return Response(
                     api_response(
