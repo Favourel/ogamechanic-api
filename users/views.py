@@ -4017,6 +4017,8 @@ class StepByStepRegistrationView(APIView):
             
             # Send email
             self.send_verification_email(email, verification_code)
+            print(f"{verification_code} for {email}")
+            logger.info(f"{verification_code} for {email}")
             
             return Response(
                 api_response(
@@ -4089,6 +4091,8 @@ class StepByStepRegistrationView(APIView):
             
             # Send email
             self.send_verification_email(email, verification_code)
+            print(f"{verification_code} for {email}")
+            logger.info(f"{verification_code} for {email}")
             
             return Response(
                 api_response(
