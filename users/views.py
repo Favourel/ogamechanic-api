@@ -3859,7 +3859,7 @@ class StepByStepRegistrationView(APIView):
                         "step_4_driver": {
                             "full_name": "John Driver", 
                             "date_of_birth": "1990-01-01", "gender": "male", "address": "123 Street", "location": "Lagos", "license_number": "LIC123", "license_issue_date": "2015-01-01", "license_expiry_date": "2025-01-01", "license_front_image": "(file upload)", "license_back_image": "(file upload)", "vin": "VIN123", "vehicle_name": "Toyota", "plate_number": "ABC123", "vehicle_model": "Corolla", "vehicle_color": "Red", "vehicle_photo_front": "(file upload)", "vehicle_photo_back": "(file upload)", "vehicle_photo_right": "(file upload)", "vehicle_photo_left": "(file upload)", "bank_name": "GTBank", "account_number": "0123456789" },  # noqa
-                        "step_4_merchant": { "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", "selfie": "(file upload)" }, "step_4_mechanic": { "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", "selfie": "(file upload)", "vehicle_make_ids": [1, 2], "expertise_details": [ { "vehicle_make_id": 1, "years_of_experience": 5, "certification_level": "advanced" }, { "vehicle_make_id": 2, "years_of_experience": 2, "certification_level": "basic" } ] },  # noqa
+                        "step_4_merchant": { "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", "selfie": "(file upload)" }, "step_4_mechanic": { "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", "selfie": "(file upload)", "government_id": "(file upload)", "vehicle_make_ids": [1, 2], "expertise_details": [ { "vehicle_make_id": 1, "years_of_experience": 5, "certification_level": "advanced" }, { "vehicle_make_id": 2, "years_of_experience": 2, "certification_level": "basic" } ] },  # noqa
                         "step_5": { "password": "strongpassword", "confirm_password": "strongpassword" }  # noqa
                     }
                 )
@@ -4269,7 +4269,7 @@ class StepByStepRegistrationView(APIView):
             elif role.name == 'merchant':
                 file_keys = ['cac_document', 'selfie']
             elif role.name == 'mechanic':
-                file_keys = ['cac_document', 'selfie']
+                file_keys = ['cac_document', 'selfie', 'government_id']
             else:
                 file_keys = []
 
@@ -4448,14 +4448,14 @@ class StepByStepRegistrationView(APIView):
                 user.save()
 
             # Add car details if primary user has a car and user doesn't have car details   # noqa
-            if role.name == 'primary_user':
-                car_details = session_data.get('registration_car_details', {})
-                if car_details.get('has_car') and not user.car_make:
-                    user.car_make = car_details.get('car_make', '')
-                    user.car_model = car_details.get('car_model', '')
-                    user.car_year = car_details.get('car_year')
-                    user.license_plate = car_details.get('license_plate', '')
-                    user.save()
+            # if role.name == 'primary_user':
+            #     car_details = session_data.get('registration_car_details', {})
+            #     if car_details.get('has_car') and not user.car_make:
+            #         user.car_make = car_details.get('car_make', '')
+            #         user.car_model = car_details.get('car_model', '')
+            #         user.car_year = car_details.get('car_year')
+            #         user.license_plate = car_details.get('license_plate', '')
+            #         user.save()
         else:
             # Create new user
             # Prepare basic user data
@@ -4479,15 +4479,15 @@ class StepByStepRegistrationView(APIView):
                 }
             
             # Add car details if primary user has a car
-            if role.name == 'primary_user':
-                car_details = session_data.get('registration_car_details', {})
-                if car_details.get('has_car'):
-                    user_data.update({
-                        'car_make': car_details.get('car_make', ''),
-                        'car_model': car_details.get('car_model', ''),
-                        'car_year': car_details.get('car_year'),
-                        'license_plate': car_details.get('license_plate', '')
-                    })
+            # if role.name == 'primary_user':
+            #     car_details = session_data.get('registration_car_details', {})
+            #     if car_details.get('has_car'):
+            #         user_data.update({
+            #             'car_make': car_details.get('car_make', ''),
+            #             'car_model': car_details.get('car_model', ''),
+            #             'car_year': car_details.get('car_year'),
+            #             'license_plate': car_details.get('license_plate', '')
+            #         })
             
             # Create user
             user = User.objects.create_user(
@@ -4584,6 +4584,7 @@ class StepByStepRegistrationView(APIView):
                 cac_number=mechanic_details.get('cac_number', ''),
                 cac_document=mechanic_details.get('cac_document'),
                 selfie=mechanic_details.get('selfie'),
+                government_id=mechanic_details.get('government_id'),
             )
             
             # Create vehicle expertise records

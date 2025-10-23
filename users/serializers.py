@@ -1389,9 +1389,10 @@ class StepFourMechanicDetailsSerializer(serializers.Serializer):
 
     location = serializers.CharField(max_length=255, required=True)
     lga = serializers.CharField(max_length=100, required=True)
-    cac_number = serializers.CharField(max_length=100, required=True)
-    cac_document = serializers.FileField(required=True)
-    selfie = serializers.ImageField(required=True)
+    cac_number = serializers.CharField(max_length=100, required=False)
+    cac_document = serializers.FileField(required=False)
+    selfie = serializers.ImageField(required=False)
+    government_id = serializers.FileField(required=False)
     
     # Vehicle expertise fields
     vehicle_make_ids = serializers.ListField(
