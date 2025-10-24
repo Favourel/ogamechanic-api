@@ -3863,15 +3863,10 @@ class StepByStepRegistrationView(APIView):
                         "step_4_mechanic": {
                             "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", 
                             "selfie": "(file upload)",
-                            "national_id_front": "(file upload)",
-                            "national_id_back": "(file upload)",
-                            "drivers_license_front": "(file upload)",
-                            "drivers_license_back": "(file upload)",
-                            "voters_card_front": "(file upload)",
-                            "voters_card_back": "(file upload)",
-                            "international_passport": "(file upload)",
-                            "pvc_front": "(file upload)",
-                            "pvc_back": "(file upload)",
+                            "govt_id_type": "(choice)",
+                            "government_id_front": "(file upload)",
+                            "government_id_back": "(file upload)",
+                            
                             # "vehicle_make_ids": [1, 2], 
                             "expertise_details": [ {
                                 "vehicle_make_id": 1, "years_of_experience": 5, "certification_level": "advanced" 
@@ -4287,10 +4282,8 @@ class StepByStepRegistrationView(APIView):
             elif role.name == 'mechanic':
                 file_keys = [
                     'cac_document', 'selfie',
-                    'national_id_front', 'national_id_back',
-                    'drivers_license_front', 'drivers_license_back',
-                    'voters_card_front', 'voters_card_back',
-                    'international_passport', 'pvc_front', 'pvc_back'
+                    'govt_id_type', 'government_id_front',
+                    'government_id_back'
                 ]
             else:
                 file_keys = []

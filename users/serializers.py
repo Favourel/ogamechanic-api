@@ -1392,15 +1392,18 @@ class StepFourMechanicDetailsSerializer(serializers.Serializer):
     cac_number = serializers.CharField(max_length=100, required=False)
     cac_document = serializers.FileField(required=False)
     selfie = serializers.ImageField(required=False)
-    national_id_front = serializers.FileField(required=False)
-    national_id_back = serializers.FileField(required=False)
-    drivers_license_front = serializers.FileField(required=False)
-    drivers_license_back = serializers.FileField(required=False)
-    voters_card_front = serializers.FileField(required=False)
-    voters_card_back = serializers.FileField(required=False)
-    international_passport = serializers.FileField(required=False)
-    pvc_front = serializers.FileField(required=False)
-    pvc_back = serializers.FileField(required=False)
+    govt_id_type = serializers.ChoiceField(
+        choices=[
+            ("NIN", "NIN"),
+            ("drivers_license", "Drivers license"),
+            ("voters_card", "Voters card"),
+            ("international_passport", "International passport"),
+            ("permanent_voters_card", "Permanent voter’s card"),
+        ],
+        required=False
+    )
+    government_id_front = serializers.FileField(required=False)
+    government_id_back = serializers.FileField(required=False)
     
     # Vehicle expertise fields
     vehicle_make_ids = serializers.ListField(
