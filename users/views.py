@@ -3859,7 +3859,23 @@ class StepByStepRegistrationView(APIView):
                         "step_4_driver": {
                             "full_name": "John Driver", 
                             "date_of_birth": "1990-01-01", "gender": "male", "address": "123 Street", "location": "Lagos", "license_number": "LIC123", "license_issue_date": "2015-01-01", "license_expiry_date": "2025-01-01", "license_front_image": "(file upload)", "license_back_image": "(file upload)", "vin": "VIN123", "vehicle_name": "Toyota", "plate_number": "ABC123", "vehicle_model": "Corolla", "vehicle_color": "Red", "vehicle_photo_front": "(file upload)", "vehicle_photo_back": "(file upload)", "vehicle_photo_right": "(file upload)", "vehicle_photo_left": "(file upload)", "bank_name": "GTBank", "account_number": "0123456789" },  # noqa
-                        "step_4_merchant": { "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", "selfie": "(file upload)" }, "step_4_mechanic": { "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", "selfie": "(file upload)", "government_id": "(file upload)", "vehicle_make_ids": [1, 2], "expertise_details": [ { "vehicle_make_id": 1, "years_of_experience": 5, "certification_level": "advanced" }, { "vehicle_make_id": 2, "years_of_experience": 2, "certification_level": "basic" } ] },  # noqa
+                        "step_4_merchant": { "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", "selfie": "(file upload)" }, 
+                        "step_4_mechanic": {
+                            "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", 
+                            "selfie": "(file upload)",
+                            "national_id_front": "(file upload)",
+                            "national_id_back": "(file upload)",
+                            "drivers_license_front": "(file upload)",
+                            "drivers_license_back": "(file upload)",
+                            "voters_card_front": "(file upload)",
+                            "voters_card_back": "(file upload)",
+                            "international_passport": "(file upload)",
+                            "pvc_front": "(file upload)",
+                            "pvc_back": "(file upload)",
+                            # "vehicle_make_ids": [1, 2], 
+                            "expertise_details": [ {
+                                "vehicle_make_id": 1, "years_of_experience": 5, "certification_level": "advanced" 
+                            }, { "vehicle_make_id": 2, "years_of_experience": 2, "certification_level": "basic" } ] },  # noqa
                         "step_5": { "password": "strongpassword", "confirm_password": "strongpassword" }  # noqa
                     }
                 )
@@ -4269,7 +4285,13 @@ class StepByStepRegistrationView(APIView):
             elif role.name == 'merchant':
                 file_keys = ['cac_document', 'selfie']
             elif role.name == 'mechanic':
-                file_keys = ['cac_document', 'selfie', 'government_id']
+                file_keys = [
+                    'cac_document', 'selfie',
+                    'national_id_front', 'national_id_back',
+                    'drivers_license_front', 'drivers_license_back',
+                    'voters_card_front', 'voters_card_back',
+                    'international_passport', 'pvc_front', 'pvc_back'
+                ]
             else:
                 file_keys = []
 
@@ -4584,7 +4606,15 @@ class StepByStepRegistrationView(APIView):
                 cac_number=mechanic_details.get('cac_number', ''),
                 cac_document=mechanic_details.get('cac_document'),
                 selfie=mechanic_details.get('selfie'),
-                government_id=mechanic_details.get('government_id'),
+                national_id_front=mechanic_details.get('national_id_front'),
+                national_id_back=mechanic_details.get('national_id_back'),
+                drivers_license_front=mechanic_details.get('drivers_license_front'),
+                drivers_license_back=mechanic_details.get('drivers_license_back'),
+                voters_card_front=mechanic_details.get('voters_card_front'),
+                voters_card_back=mechanic_details.get('voters_card_back'),
+                international_passport=mechanic_details.get('international_passport'),
+                pvc_front=mechanic_details.get('pvc_front'),
+                pvc_back=mechanic_details.get('pvc_back'),
             )
             
             # Create vehicle expertise records

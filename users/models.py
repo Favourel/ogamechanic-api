@@ -364,11 +364,68 @@ class MechanicProfile(models.Model):
         help_text="Live photo of mechanic"
     )
     
-    # Legacy fields for backward compatibility
-    government_id = models.FileField(
-        upload_to='mechanic/ids/',
+    # National ID Card (often requires front and back)
+    national_id_front = models.FileField(
+        upload_to='mechanic/ids/national_id/front/',
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
-        blank=True, null=True
+        blank=True, null=True,
+        help_text="Front of National Identity Card"
+    )
+    national_id_back = models.FileField(
+        upload_to='mechanic/ids/national_id/back/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True,
+        help_text="Back of National Identity Card"
+    )
+    
+    # Driver's License (often requires front and back)
+    drivers_license_front = models.FileField(
+        upload_to='mechanic/ids/drivers_license/front/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True,
+        help_text="Front of Driver's License"
+    )
+    drivers_license_back = models.FileField(
+        upload_to='mechanic/ids/drivers_license/back/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True,
+        help_text="Back of Driver's License"
+    )
+    
+    # Voter's Card (often requires front and back)
+    voters_card_front = models.FileField(
+        upload_to='mechanic/ids/voters_card/front/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True,
+        help_text="Front of Voter's Card"
+    )
+    voters_card_back = models.FileField(
+        upload_to='mechanic/ids/voters_card/back/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True,
+        help_text="Back of Voter's Card"
+    )
+
+    # International Passport (usually just the bio page/front)
+    international_passport = models.FileField(
+        upload_to='mechanic/ids/international_passport/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True,
+        help_text="International Passport Bio Page"
+    )
+
+    # Permanent Voter's Card (PVC) (front and back may be needed)
+    pvc_front = models.FileField(
+        upload_to='mechanic/ids/pvc/front/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True,
+        help_text="Front of Permanent Voter's Card (PVC)"
+    )
+    pvc_back = models.FileField(
+        upload_to='mechanic/ids/pvc/back/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True,
+        help_text="Back of Permanent Voter's Card (PVC)"
     )
     is_approved = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
