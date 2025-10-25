@@ -179,8 +179,7 @@ def incoming_request_checks(request, require_data_field: bool = True) -> tuple:
                 parsed = json.loads(data or "{}")
                 data = parsed
             except Exception:
-                # Keep data as-is (likely empty string); we'll try to recover below # noqa
-                pass
+                data = {}
 
         # Merge uploaded files into data when present
         try:
@@ -190,25 +189,20 @@ def incoming_request_checks(request, require_data_field: bool = True) -> tuple:
         except Exception:
             pass
 
-        # Recover non-file fields submitted as top-level form fields when 'data' JSON isn't parsed # noqa
+        # Recover non-file fields submitted as top-level form fields
         try:
-            # DRF's request.data is a dict-like (QueryDict) for multipart
             if isinstance(request.data, dict):
-                print(request.data)
                 top_level_fields = {}
                 for k, v in request.data.items():
-                    # Exclude control keys and already-handled 'data'
                     if k in ("requestType", "data"):
                         continue
-                    # Skip file keys (already merged)
                     if hasattr(request, "FILES") and k in request.FILES:
                         continue
                     top_level_fields[k] = v
-                # If client sent fields at top-level, merge them into data
+                
                 if top_level_fields:
                     if not isinstance(data, dict):
                         data = {}
-                    # Don't overwrite any keys already present from parsed JSON
                     for k, v in top_level_fields.items():
                         if k not in data:
                             data[k] = v
@@ -223,37 +217,73 @@ def incoming_request_checks(request, require_data_field: bool = True) -> tuple:
                     "It is required to contain all request data",
                 )
 
-        # Normalize known list/object fields that sometimes arrive as JSON strings in multipart # noqa
-        # Normalize known list/object fields
+        # Normalize nested JSON fields (IMPROVED SECTION)
         try:
             import json as _json
-            for key in ['vehicle_make_ids', 'expertise_details']:
+            
+            # List of fields that should be parsed as JSON
+            json_fields = [
+                'expertise_details', 
+                # 'vehicle_make_ids'
+                ]
+            
+            for key in json_fields:
                 if key in data:
-                    if isinstance(data[key], str):
-                        if data[key].strip() == "":
-                            # empty string → normalize to empty list
+                    value = data[key]
+                    
+                    # If it's already a list/dict, keep it
+                    if isinstance(value, (list, dict)):
+                        continue
+                    
+                    # If it's a string, try to parse it
+                    if isinstance(value, str):
+                        if value.strip() == "":
+                            # Empty string → empty list
                             data[key] = []
                         else:
                             try:
-                                data[key] = _json.loads(data[key])
-                            except Exception:
-                                # fallback: wrap string in list
-                                data[key] = [data[key]]
-            # Coerce vehicle_make_ids elements to ints when possible
-            if isinstance(data.get('vehicle_make_ids'), list):
-                coerced = []
-                for item in data['vehicle_make_ids']:
-                    try:
-                        coerced.append(int(item))
-                    except Exception:
-                        coerced.append(item)
-                data['vehicle_make_ids'] = coerced
-        except Exception:
-            pass
+                                data[key] = _json.loads(value)
+                            except _json.JSONDecodeError:
+                                # If JSON parsing fails, treat as error
+                                return False, f"Invalid JSON format for field '{key}'"
+                    else:
+                        # Unexpected type, set to empty list
+                        data[key] = []
+            
+            # Coerce vehicle_make_ids elements to integers
+            # if 'vehicle_make_ids' in data and isinstance(data['vehicle_make_ids'], list):
+            #     try:
+            #         data['vehicle_make_ids'] = [int(item) for item in data['vehicle_make_ids']]
+            #     except (ValueError, TypeError):
+            #         return False, "vehicle_make_ids must contain only integer values"
+            
+            # Validate expertise_details structure
+            if 'expertise_details' in data and isinstance(data['expertise_details'], list):
+                for idx, detail in enumerate(data['expertise_details']):
+                    if not isinstance(detail, dict):
+                        return False, f"expertise_details[{idx}] must be an object"
+                    
+                    # Ensure vehicle_make_id is an integer
+                    if 'vehicle_make_id' in detail:
+                        try:
+                            detail['vehicle_make_id'] = int(detail['vehicle_make_id'])
+                        except (ValueError, TypeError):
+                            return False, f"expertise_details[{idx}].vehicle_make_id must be an integer"
+                    
+                    # Ensure years_of_experience is an integer
+                    if 'years_of_experience' in detail:
+                        try:
+                            detail['years_of_experience'] = int(detail['years_of_experience'])
+                        except (ValueError, TypeError):
+                            return False, f"expertise_details[{idx}].years_of_experience must be an integer"
+                            
+        except Exception as e:
+            return False, f"Error processing request data: {str(e)}"
 
         return True, data
-    except (Exception,) as err:
-        return False, f"{err}"
+        
+    except Exception as err:
+        return False, f"Request processing error: {str(err)}"
 
 
 def get_incoming_request_checks(request) -> tuple:

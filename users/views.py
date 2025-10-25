@@ -4599,15 +4599,9 @@ class StepByStepRegistrationView(APIView):
                 cac_number=mechanic_details.get('cac_number', ''),
                 cac_document=mechanic_details.get('cac_document'),
                 selfie=mechanic_details.get('selfie'),
-                national_id_front=mechanic_details.get('national_id_front'),
-                national_id_back=mechanic_details.get('national_id_back'),
-                drivers_license_front=mechanic_details.get('drivers_license_front'),
-                drivers_license_back=mechanic_details.get('drivers_license_back'),
-                voters_card_front=mechanic_details.get('voters_card_front'),
-                voters_card_back=mechanic_details.get('voters_card_back'),
-                international_passport=mechanic_details.get('international_passport'),
-                pvc_front=mechanic_details.get('pvc_front'),
-                pvc_back=mechanic_details.get('pvc_back'),
+                government_id_front=mechanic_details.get('government_id_front'),
+                government_id_back=mechanic_details.get('government_id_back'),
+                govt_id_type=mechanic_details.get('govt_id_type')
             )
             
             # Create vehicle expertise records
@@ -4615,43 +4609,34 @@ class StepByStepRegistrationView(APIView):
                 mechanic_profile, mechanic_details)
 
     def create_mechanic_vehicle_expertise(self, mechanic_profile, mechanic_details):  # noqa
-        """Create vehicle expertise records for mechanic"""
+        """Create vehicle expertise records for mechanic.
+        No longer uses vehicle_make_ids; only expertise_details.
+        """
         from mechanics.models import VehicleMake, MechanicVehicleExpertise
-        
-        vehicle_make_ids = mechanic_details.get('vehicle_make_ids', [])
+        import logging
+        from rest_framework.exceptions import ValidationError
+
         expertise_details = mechanic_details.get('expertise_details', [])
-        
-        # Create a mapping of vehicle_make_id to expertise details
-        expertise_map = {}
+        logger = logging.getLogger(__name__)
+
         for detail in expertise_details:
             vehicle_make_id = detail.get('vehicle_make_id')
-            if vehicle_make_id:
-                expertise_map[vehicle_make_id] = detail
-        
-        # Create expertise records for each vehicle make
-        for vehicle_make_id in vehicle_make_ids:
+            if not vehicle_make_id:
+                raise ValidationError(
+                    {"vehicle_make_id": "Each expertise detail must contain a vehicle_make_id."}
+                )
             try:
                 vehicle_make = VehicleMake.objects.get(id=vehicle_make_id)
-                
-                # Get expertise details for this vehicle make
-                detail = expertise_map.get(vehicle_make_id, {})
-                
                 MechanicVehicleExpertise.objects.create(
                     mechanic=mechanic_profile,
                     vehicle_make=vehicle_make,
                     years_of_experience=detail.get('years_of_experience', 0),
-                    certification_level=detail.get(
-                        'certification_level', 'basic')
+                    certification_level=detail.get('certification_level', 'basic')
                 )
             except VehicleMake.DoesNotExist as e:
-                import logging
-                from rest_framework.exceptions import ValidationError
-
-                logger = logging.getLogger(__name__)
-                logger.error(f"VehicleMake with id {vehicle_make_id} does not exist: {e}")  # noqa
-
+                logger.error(f"VehicleMake with id {vehicle_make_id} does not exist: {e}")
                 raise ValidationError(
-                    {"vehicle_make_id": f"Vehicle make with id {vehicle_make_id} does not exist."}  # noqa
+                    {"vehicle_make_id": f"Vehicle make with id {vehicle_make_id} does not exist."}
                 )
 
     def clear_registration_session(self, request):

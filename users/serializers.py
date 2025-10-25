@@ -1404,7 +1404,7 @@ class StepFourMechanicDetailsSerializer(serializers.Serializer):
     )
     government_id_front = serializers.FileField(required=False)
     government_id_back = serializers.FileField(required=False)
-    
+
     # Vehicle expertise fields
     vehicle_make_ids = serializers.ListField(
         child=serializers.IntegerField(),
@@ -1417,21 +1417,21 @@ class StepFourMechanicDetailsSerializer(serializers.Serializer):
         required=False,
         help_text="Optional details for each vehicle make expertise"
     )
-    
+
     def validate_vehicle_make_ids(self, value):
         """Validate that all vehicle make IDs exist and are active"""
         from mechanics.models import VehicleMake
-        
+
         vehicle_makes = VehicleMake.objects.filter(
             id__in=value, is_active=True
         )
-        
+
         if len(vehicle_makes) != len(value):
             invalid_ids = set(value) - set(vehicle_makes.values_list('id', flat=True))  # noqa
             raise serializers.ValidationError(
                 f"Invalid or inactive vehicle make IDs: {list(invalid_ids)}"
             )
-        
+
         return value
     
     def validate_expertise_details(self, value):
