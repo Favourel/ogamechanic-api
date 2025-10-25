@@ -1406,33 +1406,33 @@ class StepFourMechanicDetailsSerializer(serializers.Serializer):
     government_id_back = serializers.FileField(required=False)
 
     # Vehicle expertise fields
-    vehicle_make_ids = serializers.ListField(
-        child=serializers.IntegerField(),
-        min_length=1,
-        required=True,
-        help_text="List of vehicle make IDs the mechanic is expert in"
-    )
+    # vehicle_make_ids = serializers.ListField(
+    #     child=serializers.IntegerField(),
+    #     min_length=1,
+    #     required=True,
+    #     help_text="List of vehicle make IDs the mechanic is expert in"
+    # )
     expertise_details = serializers.ListField(
         child=serializers.DictField(),
         required=False,
         help_text="Optional details for each vehicle make expertise"
     )
 
-    def validate_vehicle_make_ids(self, value):
-        """Validate that all vehicle make IDs exist and are active"""
-        from mechanics.models import VehicleMake
+    # def validate_vehicle_make_ids(self, value):
+    #     """Validate that all vehicle make IDs exist and are active"""
+    #     from mechanics.models import VehicleMake
 
-        vehicle_makes = VehicleMake.objects.filter(
-            id__in=value, is_active=True
-        )
+    #     vehicle_makes = VehicleMake.objects.filter(
+    #         id__in=value, is_active=True
+    #     )
 
-        if len(vehicle_makes) != len(value):
-            invalid_ids = set(value) - set(vehicle_makes.values_list('id', flat=True))  # noqa
-            raise serializers.ValidationError(
-                f"Invalid or inactive vehicle make IDs: {list(invalid_ids)}"
-            )
+    #     if len(vehicle_makes) != len(value):
+    #         invalid_ids = set(value) - set(vehicle_makes.values_list('id', flat=True))  # noqa
+    #         raise serializers.ValidationError(
+    #             f"Invalid or inactive vehicle make IDs: {list(invalid_ids)}"
+    #         )
 
-        return value
+    #     return value
     
     def validate_expertise_details(self, value):
         """Validate expertise details if provided"""
