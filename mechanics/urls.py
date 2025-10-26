@@ -37,6 +37,12 @@ urlpatterns = [
         views.MechanicDetailView.as_view(),
         name="mechanic-detail",
     ),
+
+    path(
+        "mechanic-analytics/",
+        views.MechanicAnalyticsView.as_view(),
+        name="mechanic-analytics",
+    ),
     # Training Sessions
     # path(
     #     "training-sessions/",

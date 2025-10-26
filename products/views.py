@@ -1239,7 +1239,13 @@ class HomeView(APIView):
         if request_type == 'mechanics':
             mechanics = (
                 MechanicProfile.objects
+                .select_related('user')
                 .filter(is_approved=True)
+                # INSERT_YOUR_CODE
+                # Annotate with average mechanic rating using MechanicReview
+                .annotate(
+                    rating=Avg('user__mechanic_review_received__rating')
+                )
                 .order_by('?')[:15]
             )
             mechanics_data = MechanicProfileSerializer(

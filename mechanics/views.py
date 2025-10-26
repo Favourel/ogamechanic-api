@@ -951,3 +951,139 @@ class MechanicDetailView(APIView):
             ),
             status=status.HTTP_200_OK,
         )
+
+
+class MechanicAnalyticsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="Get Mechanic Analytics",
+        operation_description=(
+            "Returns analytics data for mechanics, including:\n"
+            "  - Total number of repair requests handled\n"
+            "  - Number of completed repair requests\n"
+            "  - Number of pending repair requests\n"
+            "  - Average mechanic rating\n"
+            "  - Most common vehicle makes serviced\n"
+            "  - Total number of distinct customers served"
+        ),
+        responses={
+            200: openapi.Response(
+                description="Analytics payload",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN,
+                            example=True
+                        ),
+                        "message": openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example=(
+                                "Mechanic analytics retrieved successfully."
+                            ),
+                        ),
+                        "data": openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                "total_repair_requests": openapi.Schema(
+                                    type=openapi.TYPE_INTEGER,
+                                    example=42
+                                ),
+                                "completed_repair_requests": openapi.Schema(
+                                    type=openapi.TYPE_INTEGER,
+                                    example=30
+                                ),
+                                "pending_repair_requests": openapi.Schema(
+                                    type=openapi.TYPE_INTEGER,
+                                    example=6
+                                ),
+                                "avg_rating": openapi.Schema(
+                                    type=openapi.TYPE_NUMBER,
+                                    format="float",
+                                    example=4.7
+                                ),
+                                "common_vehicle_makes": openapi.Schema(
+                                    type=openapi.TYPE_ARRAY,
+                                    items=openapi.Items(
+                                        type=openapi.TYPE_STRING
+                                    ),
+                                    example=["Toyota", "Honda"]
+                                ),
+                                "distinct_customers": openapi.Schema(
+                                    type=openapi.TYPE_INTEGER,
+                                    example=18
+                                ),
+                            },
+                        ),
+                    },
+                ),
+            )
+        },
+    )
+    def get(self, request):
+        user = request.user
+        # Must be mechanic
+        if not user.roles.filter(name="mechanic").exists():
+            return Response(
+                api_response(
+                    message="Only mechanics can access their analytics.",
+                    status=False
+                ),
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        total_repair_requests = RepairRequest.objects.filter(
+            mechanic=user
+        ).count()
+        completed_repair_requests = RepairRequest.objects.filter(
+            mechanic=user, status="completed"
+        ).count()
+        pending_repair_requests = RepairRequest.objects.filter(
+            mechanic=user, status__in=["pending", "in_progress"]
+        ).count()
+
+        from users.models import MechanicReview
+        from django.db.models import Avg
+        from django.db import models
+
+        reviews = MechanicReview.objects.filter(mechanic=user)
+        avg_rating = reviews.aggregate(avg=Avg('rating')).get('avg')
+        avg_rating = round(avg_rating, 1) if avg_rating is not None else None
+
+        make_counts = (
+            RepairRequest.objects.filter(mechanic=user)
+            .values('make__name')
+            .annotate(count=models.Count('id'))
+            .order_by('-count')
+        )
+        common_vehicle_makes = [
+            item['make__name']
+            for item in make_counts[:3]
+            if item['make__name']
+        ]
+
+        distinct_customers = (
+            RepairRequest.objects.filter(mechanic=user)
+            .values('customer')
+            .distinct()
+            .count()
+        )
+
+        data = {
+            "total_repair_requests": total_repair_requests,
+            "completed_repair_requests": completed_repair_requests,
+            "pending_repair_requests": pending_repair_requests,
+            "avg_rating": avg_rating,
+            "common_vehicle_makes": common_vehicle_makes,
+            "distinct_customers": distinct_customers,
+        }
+
+        return Response(
+            api_response(
+                message="Mechanic analytics retrieved successfully.",
+                status=True,
+                data=data
+            ),
+            status=status.HTTP_200_OK,
+        )

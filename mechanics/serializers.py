@@ -5,6 +5,7 @@ from .models import (
     VehicleMake, MechanicVehicleExpertise
 )
 from users.models import MechanicProfile, MechanicReview
+from users.serializers import MechanicProfileSerializer
 
 User = get_user_model()
 
@@ -185,22 +186,6 @@ class TrainingSessionParticipantListSerializer(serializers.ModelSerializer):
             'id', 'participant', 'session', 'status', 'payment_status',
             'registered_at', 'certificate_issued', 'rating'
         ]
-
-
-class MechanicProfileSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
-    average_rating = serializers.ReadOnlyField()
-
-    class Meta:
-        model = MechanicProfile
-        fields = [
-            'id', 'user', 'government_id', 'is_approved', 'created_at',
-            'updated_at', 'average_rating'
-        ]
-        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
-        ref_name = (
-            "MechanicsMechanicProfileSerializer"
-        )
 
 
 class MechanicReviewSerializer(serializers.ModelSerializer):

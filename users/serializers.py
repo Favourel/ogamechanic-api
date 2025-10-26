@@ -367,7 +367,8 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
     cac_document = serializers.SerializerMethodField()
     selfie = serializers.SerializerMethodField()
-    government_id = serializers.SerializerMethodField()
+    government_id_front = serializers.SerializerMethodField()
+    government_id_back = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
 
     class Meta:
@@ -381,25 +382,25 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             "cac_number",
             "cac_document",
             "selfie",
-            "government_id",
-            "rating",
+            "govt_id_type",
+            "government_id_front",
+            "government_id_back",
             "is_approved",
             "created_at",
             "updated_at",
+            "rating",
         ]
         read_only_fields = [
             "id",
             "user",
-            "location",
-            "bio",
-            "lga",
-            "cac_number",
-            "cac_document",
-            "selfie",
-            "government_id",
-            "rating",
             "is_approved",
             "created_at",
+            "updated_at",
+            "rating",
+            "cac_document",
+            "selfie",
+            "government_id_front",
+            "government_id_back",
         ]
         ref_name = "UsersMechanicProfileSerializer"
 
@@ -414,7 +415,6 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             return url
         if request is not None:
             return request.build_absolute_uri(url)
-        # Fallback: try to build absolute URL manually
         from django.conf import settings
         if hasattr(settings, "SITE_DOMAIN"):
             return f"{settings.SITE_DOMAIN}{url}"
@@ -432,10 +432,16 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             return self._get_absolute_url(obj.selfie.url, request)
         return None
 
-    def get_government_id(self, obj):
+    def get_government_id_front(self, obj):
         request = self.context.get('request', None)
-        if obj.government_id and hasattr(obj.government_id, 'url'):
-            return self._get_absolute_url(obj.government_id.url, request)
+        if obj.government_id_front and hasattr(obj.government_id_front, 'url'):
+            return self._get_absolute_url(obj.government_id_front.url, request)
+        return None
+
+    def get_government_id_back(self, obj):
+        request = self.context.get('request', None)
+        if obj.government_id_back and hasattr(obj.government_id_back, 'url'):
+            return self._get_absolute_url(obj.government_id_back.url, request)
         return None
 
     def get_rating(self, obj):
