@@ -1237,14 +1237,21 @@ class HomeView(APIView):
 
         # Only fetch what is needed based on requestType for performance
         if request_type == 'mechanics':
+            from users.models import MechanicReview  # make sure this import is present
+            from django.db.models import Subquery, OuterRef, Avg
             mechanics = (
                 MechanicProfile.objects
                 .select_related('user')
                 .filter(is_approved=True)
-                # INSERT_YOUR_CODE
                 # Annotate with average mechanic rating using MechanicReview
                 .annotate(
-                    rating=Avg('user__mechanic_review_received__rating')
+                    rating=Subquery(
+                        MechanicReview.objects.filter(
+                            mechanic=OuterRef('user')
+                        ).values('mechanic').annotate(
+                            avg_rating=Avg('rating')
+                        ).values('avg_rating')[:1]
+                    )
                 )
                 .order_by('?')[:15]
             )
