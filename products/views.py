@@ -1239,8 +1239,6 @@ class HomeView(APIView):
 
         # Only fetch what is needed based on requestType for performance
         if request_type == 'mechanics':
-            from users.models import MechanicReview  # make sure this import is present
-            from django.db.models import Subquery, OuterRef, Avg
             mechanics = (
                 MechanicProfile.objects
                 .select_related('user')
