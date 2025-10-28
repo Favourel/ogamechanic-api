@@ -1221,6 +1221,8 @@ class HomeView(APIView):
                 api_response(message=data, status=False),
                 status=400
             )
+        from users.models import MechanicReview  # make sure this import is present
+        from django.db.models import Subquery, OuterRef, Avg
 
         request_type = request.query_params.get('requestType', '').strip().lower() # noqa
 

@@ -1033,6 +1033,21 @@ class MechanicAnalyticsView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        from users.models import MechanicProfile, MechanicReview
+        from django.db.models import Avg
+        from django.db import models
+
+        try:
+            mechanic_profile = MechanicProfile.objects.get(user=user)
+        except MechanicProfile.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Mechanic profile not found for this user.",
+                    status=False
+                ),
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
         total_repair_requests = RepairRequest.objects.filter(
             mechanic=user
         ).count()
@@ -1043,24 +1058,21 @@ class MechanicAnalyticsView(APIView):
             mechanic=user, status__in=["pending", "in_progress"]
         ).count()
 
-        from users.models import MechanicReview
-        from django.db.models import Avg
-        from django.db import models
-
-        reviews = MechanicReview.objects.filter(mechanic=user)
+        reviews = MechanicReview.objects.filter(mechanic=mechanic_profile)
         avg_rating = reviews.aggregate(avg=Avg('rating')).get('avg')
         avg_rating = round(avg_rating, 1) if avg_rating is not None else None
 
+        # Use 'vehicle_make' field instead of non-existent related field
         make_counts = (
             RepairRequest.objects.filter(mechanic=user)
-            .values('make__name')
+            .values('vehicle_make')
             .annotate(count=models.Count('id'))
             .order_by('-count')
         )
         common_vehicle_makes = [
-            item['make__name']
+            item['vehicle_make']
             for item in make_counts[:3]
-            if item['make__name']
+            if item['vehicle_make']
         ]
 
         distinct_customers = (
