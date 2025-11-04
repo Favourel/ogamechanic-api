@@ -137,7 +137,7 @@ After=network.target postgresql.service redis-server.service
 Requires=postgresql.service redis-server.service
 
 [Service]
-Type=notify
+Type=simple
 User=$SERVICE_USER
 Group=$SERVICE_USER
 WorkingDirectory=$PROJECT_DIR
@@ -165,7 +165,7 @@ SyslogIdentifier=ogamechanic-web
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome=false
 ReadWritePaths=$PROJECT_DIR/logs $PROJECT_DIR/media $PROJECT_DIR/staticfiles
 
 [Install]
@@ -186,7 +186,7 @@ After=network.target postgresql.service redis-server.service
 Requires=postgresql.service redis-server.service
 
 [Service]
-Type=notify
+Type=simple
 User=$SERVICE_USER
 Group=$SERVICE_USER
 WorkingDirectory=$PROJECT_DIR
@@ -209,7 +209,7 @@ SyslogIdentifier=ogamechanic-worker
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome=false
 ReadWritePaths=$PROJECT_DIR/logs
 
 [Install]
@@ -249,7 +249,7 @@ SyslogIdentifier=ogamechanic-beat
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome=false
 ReadWritePaths=$PROJECT_DIR/logs
 
 [Install]
