@@ -65,7 +65,7 @@ schema_view = get_schema_view(
     ),
     public=settings.DEBUG,
     permission_classes=(AllowAny,) if settings.DEBUG else (DocsAccessPermission,), # noqa
-    # url=API_URL,
+    url=API_URL,
 )
 
 urlpatterns = [
