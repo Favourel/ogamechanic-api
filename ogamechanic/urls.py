@@ -42,6 +42,15 @@ class DocsAccessPermission(BasePermission):
             return True
         return False
 
+# Determine the URL and schemes based on environment
+if 'ogamechanic.twopikin.com' in settings.ALLOWED_HOSTS: # noqa
+    # Production configuration
+    API_URL = 'https://ogamechanic.twopikin.com'
+    API_SCHEMES = ['https']
+else:
+    # Development configuration
+    API_URL = 'http://127.0.0.1:8002'
+    API_SCHEMES = ['http']
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -106,4 +115,3 @@ if settings.DEBUG:
     urlpatterns += static(
         settings.STATIC_URL, document_root=settings.STATIC_ROOT
     )  # noqa
-

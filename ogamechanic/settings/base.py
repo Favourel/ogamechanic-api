@@ -149,7 +149,7 @@ REST_FRAMEWORK = {
     ],
 }
 
-SITE_DOMAIN = 'https://e5d135b397ee.ngrok-free.app'
+SITE_DOMAIN = 'https://ogamechanic.twopikin.com'
 
 # Swagger settings for drf_yasg
 SWAGGER_SETTINGS = {
