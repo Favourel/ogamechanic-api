@@ -52,7 +52,7 @@ class ProductVehicleCompatibilityReadSerializer(serializers.ModelSerializer):
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
-    # For reading: return absolute URL; for writing/updating: accept file upload # noqa
+    # For reading: return absolute HTTPS URL; for writing/updating: accept file upload
     image = serializers.ImageField()
 
     class Meta:
@@ -61,20 +61,36 @@ class ProductImageSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at']
 
     def to_representation(self, instance):
-        """Override to return absolute URL for image field."""
+        """
+        Override to return absolute HTTPS URL for image field,
+        regardless of request scheme.
+        """
         representation = super().to_representation(instance)
         request = self.context.get('request', None)
         image_field = instance.image
         if image_field and hasattr(image_field, 'url'):
             image_url = image_field.url
+
+            def force_https(url):
+                if url.startswith("http://"):
+                    return "https://" + url[len("http://") :]
+                return url
+
             if request is not None:
-                representation['image'] = request.build_absolute_uri(image_url)
+                abs_url = request.build_absolute_uri(image_url)
+                abs_url = force_https(abs_url)
+                representation["image"] = abs_url
             else:
                 from django.conf import settings
-                if hasattr(settings, "SITE_DOMAIN"):
-                    representation['image'] = f"{settings.SITE_DOMAIN}{image_url}" # noqa
+
+                image_base_url = getattr(settings, "SITE_DOMAIN", None)
+                if image_base_url:
+                    abs_url = f"{image_base_url}{image_url}"
+                    abs_url = force_https(abs_url)
+                    representation["image"] = abs_url
                 else:
-                    representation['image'] = image_url
+                    # Might be a relative URL
+                    representation["image"] = image_url
         else:
             representation['image'] = None
         return representation
