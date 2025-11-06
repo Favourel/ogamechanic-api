@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # OGameMechanic Linux Deployment Setup Script
-# This script creates systemd service files for Django, Celery Worker, and Celery Beat
+# This script creates systemd service files for Django, Celery Worker, Celery Beat, AND NGINX + SSL config
 # Run with: sudo ./setup_linux_deployment.sh
 
 set -e  # Exit on error
@@ -126,10 +126,24 @@ chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/media"
 # Create systemd service files directory if it doesn't exist
 SYSTEMD_DIR="/etc/systemd/system"
 
+# Prompt for domain for nginx config
+read -p "Enter your domain name for Nginx config (e.g., ogamechanic.example.com): " DOMAIN
+if [ -z "$DOMAIN" ]; then
+    print_error "Domain name required for Nginx SSL configuration."
+    exit 1
+fi
+
+# Prompt for email for Let's Encrypt SSL registration
+read -p "Enter your email for SSL certificate registration: " EMAIL
+if [ -z "$EMAIL" ]; then
+    print_error "Email required for SSL. Used for Let's Encrypt renewal notices."
+    exit 1
+fi
+
 # Function to create Django/Gunicorn service file
 create_web_service() {
     print_info "Creating Django/Gunicorn systemd service file..."
-    
+
     cat > "$SYSTEMD_DIR/ogamechanic-web.service" <<EOF
 [Unit]
 Description=OGameMechanic Django Web Application
@@ -178,7 +192,7 @@ EOF
 # Function to create Celery worker service file
 create_worker_service() {
     print_info "Creating Celery worker systemd service file..."
-    
+
     cat > "$SYSTEMD_DIR/ogamechanic-worker.service" <<EOF
 [Unit]
 Description=OGameMechanic Celery Worker
@@ -222,7 +236,7 @@ EOF
 # Function to create Celery beat service file
 create_beat_service() {
     print_info "Creating Celery beat systemd service file..."
-    
+
     cat > "$SYSTEMD_DIR/ogamechanic-beat.service" <<EOF
 [Unit]
 Description=OGameMechanic Celery Beat Scheduler
@@ -259,6 +273,81 @@ EOF
     print_info "Created: $SYSTEMD_DIR/ogamechanic-beat.service"
 }
 
+# Function to install and configure nginx
+setup_nginx() {
+    print_info "Installing Nginx and Certbot (Let's Encrypt)..."
+    if command -v apt &>/dev/null; then
+        apt update
+        apt install -y nginx python3-certbot-nginx
+    elif command -v yum &>/dev/null; then
+        yum install -y epel-release
+        yum install -y nginx certbot python3-certbot-nginx
+    else
+        print_warn "Neither apt nor yum found. Please install nginx and certbot manually."
+    fi
+
+    print_info "Creating Nginx config for domain: $DOMAIN"
+    NGINX_CONF_PATH="/etc/nginx/sites-available/$DOMAIN"
+
+    # Make sure static/media logs dirs exist for nginx config
+    mkdir -p "$PROJECT_DIR/staticfiles" "$PROJECT_DIR/media" "$PROJECT_DIR/logs"
+
+    cat > "$NGINX_CONF_PATH" <<EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+
+    client_max_body_size 30M;
+
+    location /static/ {
+        alias $PROJECT_DIR/staticfiles/;
+        expires 30d;
+        access_log off;
+    }
+
+    location /media/ {
+        alias $PROJECT_DIR/media/;
+        expires 30d;
+        access_log off;
+    }
+
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:$PROJECT_DIR/ogamechanic.socket;
+        proxy_read_timeout 120;
+        proxy_connect_timeout 5;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Host \$host;
+    }
+
+    access_log $PROJECT_DIR/logs/nginx-access.log;
+    error_log $PROJECT_DIR/logs/nginx-error.log;
+}
+EOF
+
+    print_info "Linking nginx config and enabling site..."
+    ln -sf "$NGINX_CONF_PATH" "/etc/nginx/sites-enabled/$DOMAIN"
+
+    # Remove default nginx site if present
+    if [ -f /etc/nginx/sites-enabled/default ]; then
+        rm /etc/nginx/sites-enabled/default
+    fi
+
+    print_info "Testing nginx configuration..."
+    nginx -t
+
+    print_info "Reloading nginx..."
+    systemctl restart nginx
+
+    print_info "Obtaining and configuring SSL certificate with Certbot..."
+    certbot --nginx --non-interactive --agree-tos --redirect -d "$DOMAIN" -m "$EMAIL" || \
+        print_warn "Certbot auto SSL failed. You may need to troubleshoot SSL manually later."
+    print_info "If you see a success message above, HTTPS is now enabled for $DOMAIN."
+
+    print_info "Nginx and SSL setup complete."
+}
+
 # Create service files
 create_web_service
 create_worker_service
@@ -275,6 +364,9 @@ fi
 print_info "Reloading systemd daemon..."
 systemctl daemon-reload
 
+# Nginx/SSL setup
+setup_nginx
+
 # Summary
 echo ""
 print_info "====================================="
@@ -285,6 +377,9 @@ print_info "Service files created:"
 echo "  - /etc/systemd/system/ogamechanic-web.service"
 echo "  - /etc/systemd/system/ogamechanic-worker.service"
 echo "  - /etc/systemd/system/ogamechanic-beat.service"
+echo ""
+print_info "Nginx config created at:"
+echo "  - /etc/nginx/sites-available/$DOMAIN"
 echo ""
 print_info "Next steps:"
 echo "  1. Review and update .env file with your configuration"
@@ -304,9 +399,14 @@ echo "     sudo systemctl status ogamechanic-web"
 echo "     sudo systemctl status ogamechanic-worker"
 echo "     sudo systemctl status ogamechanic-beat"
 echo ""
+print_info "Nginx reverse proxy with HTTPS is set for $DOMAIN"
+print_info "If you need to adjust SSL or security settings, edit:"
+echo "  - /etc/nginx/sites-available/$DOMAIN"
+echo ""
 print_info "View logs with:"
 echo "  sudo journalctl -u ogamechanic-web -f"
 echo "  sudo journalctl -u ogamechanic-worker -f"
 echo "  sudo journalctl -u ogamechanic-beat -f"
+echo "  tail -f $PROJECT_DIR/logs/nginx-error.log"
 echo ""
 

@@ -4,7 +4,7 @@ import ssl
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('SECRET_KEY') # noqa
 
-DEBUG = os.getenv('DEBUG') # noqa
+DEBUG = os.getenv.get('DEBUG') # noqa
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') # noqa
 
@@ -19,9 +19,9 @@ DATABASES = {
         'PASSWORD': os.environ.get('DB_PASSWORD'), # noqa
         'HOST': os.environ.get('DB_HOST'), # noqa
         'PORT': os.environ.get('DB_PORT', '5432'), # noqa
-        'OPTIONS': {
-            'sslmode': 'require',
-        },
+        # 'OPTIONS': {
+        #     'sslmode': 'require',
+        # },
     }
 }
 
