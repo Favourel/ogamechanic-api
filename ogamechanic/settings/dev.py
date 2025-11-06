@@ -7,7 +7,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY') # noqa
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true' # noqa
 
-ALLOWED_HOSTS = ['*'] # noqa
+ALLOWED_HOSTS = ['ogamechanic.twopikin.com'] # noqa
 X_API_KEY = os.environ.get('X_API_KEY') # noqa
 
 # WhiteNoise configuration
@@ -25,8 +25,32 @@ DATABASES = {
     }
 }
 
-# CORS settings
-CORS_ALLOW_ALL_ORIGINS = True  # Only for development
+# CORS settings for development
+# Allow specific origins for better security even in development
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",  # React development server
+    "http://127.0.0.1:3000",
+    "http://localhost:8080",  # Vue.js development server
+    "http://127.0.0.1:8080",
+    "http://localhost:4200",  # Angular development server
+    "http://127.0.0.1:4200",
+    "http://localhost:5173",  # Vite development server
+    "https://localhost:5173",  # Vite development server
+    "http://127.0.0.1:5173",
+    "https://*.ngrok-free.dev",  # ngrok tunnel,
+    "https://ogamechanic.twopikin.com"
+]
+
+# Allow localhost with any port for development flexibility
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://localhost:\d+$",
+    r"^http://127\.0\.0\.1:\d+$",
+    r"^https://.*\.ngrok-free\.app$",  # Allow any ngrok tunnel
+]
+
+# For development, you can temporarily enable this if needed
+# CORS_ALLOW_ALL_ORIGINS = True  # Only use this if absolutely necessary
+
 CORS_ALLOW_CREDENTIALS = True
 
 # CSRF trusted origins for development (to allow ngrok and local testing)
@@ -34,6 +58,26 @@ CSRF_TRUSTED_ORIGINS = [
     f"http://{host}" for host in ALLOWED_HOSTS if not host.startswith("http")
 ] + [
     f"https://{host}" for host in ALLOWED_HOSTS if not host.startswith("http")
+]
+
+# Email settings for development
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# include allowed headers
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'x-api-key',
+    'cache-control',
+    'pragma',
+    "ngrok-skip-browser-warning",
 ]
 
 # Email settings for development
