@@ -293,36 +293,76 @@ setup_nginx() {
     mkdir -p "$PROJECT_DIR/staticfiles" "$PROJECT_DIR/media" "$PROJECT_DIR/logs"
 
     cat > "$NGINX_CONF_PATH" <<EOF
+# --- Define upstream backend servers for load balancing
+upstream ogamechanic_backend {
+    server 127.0.0.1:8102 max_fails=3 fail_timeout=30s;
+    # Add more backend servers here as needed
+    # server 127.0.0.1:8103 max_fails=3 fail_timeout=30s;
+}
+
+# --- HTTPS (actual site, using upstream for load balancing)
+# --- HTTP (redirect all to HTTPS)
 server {
     listen 80;
+    server_name ogamechanic.twopikin.com;
+    return 301 https://$host$request_uri;
+}
+
+# --- HTTPS (actual site)
+server {
+    listen 443 ssl;
     server_name $DOMAIN;
 
     client_max_body_size 30M;
+
+    ssl_certificate /etc/letsencrypt/live/ogamechanic.twopikin.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/ogamechanic.twopikin.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    access_log $PROJECT_DIR/logs/nginx-access.log;
+    error_log $PROJECT_DIR/logs/nginx-error.log;
 
     location /static/ {
         alias $PROJECT_DIR/staticfiles/;
         expires 30d;
         access_log off;
+        autoindex on;
+        allow all;
     }
 
     location /media/ {
         alias $PROJECT_DIR/media/;
         expires 30d;
         access_log off;
+        autoindex on;
+        allow all;
     }
 
     location / {
-        include proxy_params;
-        proxy_pass http://unix:$PROJECT_DIR/ogamechanic.socket;
+        proxy_pass http://localhost:8102;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
         proxy_read_timeout 120;
         proxy_connect_timeout 5;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header Host \$host;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_cache_bypass $http_upgrade;
     }
 
-    access_log $PROJECT_DIR/logs/nginx-access.log;
-    error_log $PROJECT_DIR/logs/nginx-error.log;
+    # WebSocket support
+    location /ws/ {
+        proxy_pass http://localhost:8102;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
 }
 EOF
 
@@ -398,6 +438,16 @@ echo "  7. Check service status:"
 echo "     sudo systemctl status ogamechanic-web"
 echo "     sudo systemctl status ogamechanic-worker"
 echo "     sudo systemctl status ogamechanic-beat"
+echo "  8. Check Nginx status:"
+echo "     sudo chmod 755 $PROJECT_DIR"
+echo "     sudo chown -R ogamechanic:www-data $PROJECT_DIR/media"
+echo "     sudo chmod -R 755 $PROJECT_DIR/media"
+echo "     sudo systemctl restart nginx"
+echo "  9. Check Security Checklist"
+echo "     sudo ufw allow 22/tcp  # SSH"
+echo "     sudo ufw allow 80/tcp  # HTTP"
+echo "     sudo ufw allow 443/tcp # HTTPS"
+echo "     sudo ufw enable"
 echo ""
 print_info "Nginx reverse proxy with HTTPS is set for $DOMAIN"
 print_info "If you need to adjust SSL or security settings, edit:"

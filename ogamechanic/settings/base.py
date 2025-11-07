@@ -147,8 +147,10 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.FormParser',
         'rest_framework.parsers.MultiPartParser',
     ],
+    # Disable slash redirects
+    'APPEND_SLASH': True,
 }
-
+APPEND_SLASH = True
 SITE_DOMAIN = 'https://ogamechanic.twopikin.com'
 
 # Swagger settings for drf_yasg

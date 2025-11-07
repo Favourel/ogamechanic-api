@@ -4,7 +4,7 @@ import ssl
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('SECRET_KEY') # noqa
 
-DEBUG = os.getenv.get('DEBUG') # noqa
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'false' # noqa
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') # noqa
 
@@ -240,7 +240,7 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_SAVE_EVERY_REQUEST = True
 
 # CSRF Protection
-CSRF_FAILURE_VIEW = 'users.views.csrf_failure'
+# CSRF_FAILURE_VIEW = 'users.views.csrf_failure'
 
 # Rate Limiting
 RATELIMIT_ENABLE = True
