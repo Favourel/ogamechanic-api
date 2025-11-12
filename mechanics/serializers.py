@@ -4,7 +4,7 @@ from .models import (
     RepairRequest, TrainingSession, TrainingSessionParticipant,
     VehicleMake, MechanicVehicleExpertise
 )
-from users.models import MechanicProfile, MechanicReview
+from users.models import MechanicReview
 from users.serializers import MechanicProfileSerializer
 
 User = get_user_model()
@@ -23,6 +23,8 @@ class RepairRequestSerializer(serializers.ModelSerializer):
     mechanic = UserSerializer(read_only=True)
     mechanic_id = serializers.UUIDField(
         write_only=True, required=False, allow_null=True)
+    notified_mechanics = UserSerializer(many=True, read_only=True)
+    can_accept = serializers.SerializerMethodField()
 
     class Meta:
         model = RepairRequest
@@ -40,13 +42,21 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             'priority', 'requested_at', 'accepted_at',
             'started_at', 'completed_at', 'cancelled_at', 'notes',
             'cancellation_reason', 'actual_cost', 'is_active',
-            'can_be_cancelled'
+            'can_be_cancelled', 'notified_mechanics', 'can_accept'
         ]
         read_only_fields = [
             'id', 'customer', 'mechanic', 'requested_at', 'accepted_at',
             'started_at', 'completed_at', 'cancelled_at', 'is_active',
-            'can_be_cancelled'
+            'can_be_cancelled', 'notified_mechanics', 'can_accept'
         ]
+    
+    def get_can_accept(self, obj):
+        """Check if current user (mechanic) can accept this request"""
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if request.user.roles.filter(name="mechanic").exists():
+                return obj.can_mechanic_accept(request.user)
+        return False
 
     def validate_mechanic_id(self, value):
         if value is not None and not User.objects.filter(id=value).exists():
@@ -292,5 +302,6 @@ class MechanicVehicleExpertiseSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError(
                         f"Invalid certification level. Must be one of: {valid_levels}"  # noqa
                     )
-        
-        return value 
+
+        return value
+

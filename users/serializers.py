@@ -377,6 +377,8 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             "id",
             "user",
             "location",
+            "latitude",
+            "longitude",
             "bio",
             "lga",
             "cac_number",

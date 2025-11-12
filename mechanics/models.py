@@ -43,6 +43,14 @@ class RepairRequest(models.Model):
         related_name="assigned_repair_requests",
         limit_choices_to={"roles__name": "mechanic"},
     )
+    # Track mechanics who were notified about this request
+    notified_mechanics = models.ManyToManyField(
+        User,
+        related_name="notified_repair_requests",
+        limit_choices_to={"roles__name": "mechanic"},
+        blank=True,
+        help_text="Mechanics who were notified about this repair request"
+    )
 
     # Service details
     service_type = models.CharField(max_length=100)
@@ -116,15 +124,43 @@ class RepairRequest(models.Model):
         """Check if repair request can be cancelled"""
         return self.status in ["pending", "accepted"]
 
-    def assign_mechanic(self, mechanic):
-        """Assign a mechanic to this repair request"""
-        if mechanic.roles.filter(name="mechanic").exists():
-            self.mechanic = mechanic
-            self.status = "accepted"
-            self.accepted_at = timezone.now()
-            self.save()
-            return True
-        return False
+    def assign_mechanic(self, mechanic, skip_notification_check=False):
+        """
+        Assign a mechanic to this repair request.
+        
+        Args:
+            mechanic: The mechanic user to assign
+            skip_notification_check: If True, allows assignment even if
+                mechanic wasn't notified (for manual customer assignment)
+        
+        Returns:
+            bool: True if assignment successful, False otherwise
+        """
+        if not mechanic.roles.filter(name="mechanic").exists():
+            return False
+        
+        # If request already has a mechanic, cannot reassign
+        if self.mechanic and self.mechanic != mechanic:
+            return False
+        
+        # For automatic acceptance (mechanic accepting), check if notified
+        if not skip_notification_check:
+            if not self.notified_mechanics.filter(id=mechanic.id).exists():
+                return False
+        
+        self.mechanic = mechanic
+        self.status = "accepted"
+        self.accepted_at = timezone.now()
+        self.save()
+        return True
+    
+    def can_mechanic_accept(self, mechanic):
+        """Check if a mechanic can accept this request"""
+        return (
+            self.status == "pending" and
+            self.mechanic is None and
+            self.notified_mechanics.filter(id=mechanic.id).exists()
+        )
 
     def start_repair(self):
         """Start the repair work"""
@@ -434,3 +470,5 @@ class MechanicVehicleExpertise(models.Model):
 
     def __str__(self):
         return f"{self.mechanic.user.email} - {self.vehicle_make.name} ({self.certification_level})"  # noqa
+
+

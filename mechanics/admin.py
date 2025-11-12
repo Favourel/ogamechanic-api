@@ -7,8 +7,14 @@ from . import models
 class RepairRequestAdmin(admin.ModelAdmin):
     list_display = [
         'id', 'customer', 'mechanic', 'service_type', 'vehicle_make',
-        'vehicle_model', 'status', 'priority', 'requested_at'
+        'vehicle_model', 'status', 'priority', 'requested_at',
+        'notified_mechanics_count'
     ]
+    
+    def notified_mechanics_count(self, obj):
+        """Count of mechanics notified about this request"""
+        return obj.notified_mechanics.count()
+    notified_mechanics_count.short_description = "Notified Mechanics"
     list_filter = [
         'status', 'priority', 'service_type', 'preferred_time_slot',
         'requested_at', 'accepted_at', 'completed_at'
@@ -26,7 +32,10 @@ class RepairRequestAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('Basic Information', {
-            'fields': ('id', 'customer', 'mechanic', 'status', 'priority')
+            'fields': (
+                'id', 'customer', 'mechanic', 'notified_mechanics',
+                'status', 'priority'
+            )
         }),
         ('Vehicle Details', {
             'fields': (

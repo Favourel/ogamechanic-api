@@ -279,3 +279,17 @@ SPATIALITE_LIBRARY_PATH = 'mod_spatialite'
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 1000
+
+# File Upload Settings
+FILE_UPLOAD_PERMISSIONS = 0o644
+
+# Limit the number of data upload fields to prevent DoS via massive POST/GET field counts. # noqa
+# See: https://docs.djangoproject.com/en/stable/ref/settings/#data-upload-max-number-fields # noqa
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 1000  # Default is 1000; adjust as needed for your forms/APIs # noqa
+
+DATA_UPLOAD_MAX_NUMBER_FILES = 100  # Adjust as per your application's needs; default is 100 # noqa
+
+ADMINS = [
+    # ("IT Support", "it-support@example.com"),
+    ("Favour", "favourelodimuor16@gmail.com"),
+]

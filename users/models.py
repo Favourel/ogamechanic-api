@@ -347,6 +347,14 @@ class MechanicProfile(models.Model):
     )
     # Updated fields for new onboarding (same as merchant)
     location = models.CharField(max_length=255, blank=True, null=True)
+    latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True,
+        help_text="Mechanic's location latitude for proximity-based requests"
+    )
+    longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True,
+        help_text="Mechanic's location longitude for proximity-based requests"
+    )
     bio = models.TextField(null=True, blank=True)
     lga = models.CharField(
         max_length=100, blank=True, null=True
