@@ -1247,7 +1247,7 @@ class HomeView(APIView):
                 .annotate(
                     rating=Subquery(
                         MechanicReview.objects.filter(
-                            mechanic=OuterRef('user')
+                            mechanic=OuterRef('pk')
                         ).values('mechanic').annotate(
                             avg_rating=Avg('rating')
                         ).values('avg_rating')[:1]
