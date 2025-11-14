@@ -55,3 +55,4 @@ ogamechanic-bbbb2-firebase-adminsdk-fbsvc-b5ecd1c17d.json
 *.md
 
 render-build.sh
+db.sqlite3
