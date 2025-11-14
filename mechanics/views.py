@@ -124,27 +124,27 @@ class RepairRequestListView(APIView):
                         'vehicle_make',
                         'vehicle_model',
                         'vehicle_year',
+                        'problem_description',
                         'service_address',
                         'service_latitude',
                         'service_longitude',
                         'preferred_date',
                         'preferred_time_slot',
-                        'problem_description',
                     ],
                     properties={
                         'mechanic_id': openapi.Schema(
                             type=openapi.TYPE_STRING,
                             format='uuid',
-                            description="UUID of the mechanic (optional)"
+                            description="UUID of the mechanic (optional)",
                         ),
                         'service_type': openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            description="Type of service requested"
+                            description="Type of service requested",
                         ),
-                        # 'vehicle_make': openapi.Schema(
-                        #     type=openapi.TYPE_STRING,
-                        #     description="Vehicle make"
-                        # ),
+                        'vehicle_make': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description="Vehicle make"
+                        ),
                         'vehicle_model': openapi.Schema(
                             type=openapi.TYPE_STRING,
                             description="Vehicle model"
@@ -153,10 +153,10 @@ class RepairRequestListView(APIView):
                             type=openapi.TYPE_INTEGER,
                             description="Vehicle year"
                         ),
-                        # 'vehicle_registration': openapi.Schema(
-                        #     type=openapi.TYPE_STRING,
-                        #     description="Vehicle registration (optional)"
-                        # ),
+                        'vehicle_registration': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description="Vehicle registration (optional)"
+                        ),
                         'problem_description': openapi.Schema(
                             type=openapi.TYPE_STRING,
                             description="Description of the problem"
@@ -165,11 +165,11 @@ class RepairRequestListView(APIView):
                         #     type=openapi.TYPE_STRING,
                         #     description="Symptoms (optional)"
                         # ),
-                        # 'estimated_cost': openapi.Schema(
-                        #     type=openapi.TYPE_NUMBER,
-                        #     format='decimal',
-                        #     description="Estimated cost (optional)"
-                        # ),
+                        'estimated_cost': openapi.Schema(
+                            type=openapi.TYPE_NUMBER,
+                            format='decimal',
+                            description="Estimated cost (optional)"
+                        ),
                         'service_address': openapi.Schema(
                             type=openapi.TYPE_STRING,
                             description="Service address"
@@ -210,11 +210,11 @@ class RepairRequestListView(APIView):
                             type=openapi.TYPE_STRING,
                             description="Cancellation reason (optional)"
                         ),
-                        # 'actual_cost': openapi.Schema(
-                        #     type=openapi.TYPE_NUMBER,
-                        #     format='decimal',
-                        #     description="Actual cost (optional)"
-                        # ),
+                        'actual_cost': openapi.Schema(
+                            type=openapi.TYPE_NUMBER,
+                            format='decimal',
+                            description="Actual cost (optional)"
+                        ),
                     }
                 )
             },
