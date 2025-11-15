@@ -21,6 +21,7 @@ from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from rest_framework.permissions import BasePermission, AllowAny
 from django.conf.urls.static import static
+import os
 # from ogamechanic.health_views import (
 #     health_check, readiness_check)
 
@@ -42,15 +43,21 @@ class DocsAccessPermission(BasePermission):
             return True
         return False
 
-# Determine the URL and schemes based on environment
-if 'ogamechanic.twopikin.com' in settings.ALLOWED_HOSTS: # noqa
-    # Production configuration
-    API_URL = 'https://ogamechanic.twopikin.com'
-    API_SCHEMES = ['https']
-else:
-    # Development configuration
-    API_URL = 'http://127.0.0.1:8002'
-    API_SCHEMES = ['http']
+
+if os.getenv('env', 'dev') == 'prod':
+    # Determine the URL and schemes based on environment
+    if 'ogamechanic.twopikin.com' in settings.ALLOWED_HOSTS: # noqa
+        # Production configuration
+        API_URL = 'https://ogamechanic.twopikin.com'
+        API_SCHEMES = ['https']
+    else:
+        # Development configuration
+        API_URL = 'http://127.0.0.1:9090'
+        API_SCHEMES = ['http']
+
+
+API_URL = 'http://127.0.0.1:9090'
+API_SCHEMES = ['http']
 
 schema_view = get_schema_view(
     openapi.Info(

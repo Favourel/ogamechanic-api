@@ -638,16 +638,19 @@ class DriverLocationUpdateSerializer(serializers.ModelSerializer):
 
 class MechanicReviewSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
-    mechanic_id = serializers.PrimaryKeyRelatedField(
-        queryset=MechanicProfile.objects.all(), source="mechanic", write_only=True  # noqa
-    )
+    # mechanic_id = serializers.PrimaryKeyRelatedField(
+    #     read_only=True,
+    #     source="mechanic",
+    # )
+    mechanic_info = serializers.SerializerMethodField()
 
     class Meta:
         model = MechanicReview
         fields = [
             "id",
-            "mechanic",
-            "mechanic_id",
+            # "mechanic",
+            # "mechanic_id",
+            "mechanic_info",
             "user",
             "rating",
             "comment",
@@ -661,30 +664,54 @@ class MechanicReviewSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         user = self.context["request"].user
         mechanic = attrs.get("mechanic")
-        if (
-            self.instance is None
-            and MechanicReview.objects.filter(
-                user=user, mechanic=mechanic
-            ).exists()  # noqa
-        ):
-            raise serializers.ValidationError(
-                "You have already reviewed this mechanic."
-            )
+        
+        # Only validate if mechanic is provided (from URL or body)
+        if mechanic:
+            if (
+                self.instance is None
+                and MechanicReview.objects.filter(
+                    user=user, mechanic=mechanic
+                ).exists()  # noqa
+            ):
+                raise serializers.ValidationError(
+                    "You have already reviewed this mechanic."
+                )
         return attrs
+    
+    def get_mechanic_info(self, obj):
+        """
+        Return selected info of the mechanic profile.
+        """
+        mech = getattr(obj, "mechanic", None)
+        if mech is None:
+            return None
+        # Example fields: id, full_name, phone_number
+        return {
+            "id": getattr(mech, "id", None),
+            "full_name": getattr(mech, "full_name", None),
+            "phone_number": getattr(mech, "phone_number", None),
+            "city": getattr(mech, "city", None),
+            "is_approved": getattr(mech, "is_approved", None),
+        }
 
 
 class DriverReviewSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
-    driver_id = serializers.PrimaryKeyRelatedField(
-        queryset=DriverProfile.objects.all(), source="driver", write_only=True
-    )
+    # driver_id = serializers.PrimaryKeyRelatedField(
+    #     queryset=DriverProfile.objects.all(), 
+    #     source="driver", 
+    #     write_only=True,
+    #     required=False  # Make it optional since it comes from URL
+    # )
+    driver_info = serializers.SerializerMethodField()
 
     class Meta:
         model = DriverReview
         fields = [
             "id",
-            "driver",
-            "driver_id",
+            # "driver",
+            # "driver_id",
+            "driver_info",
             "user",
             "rating",
             "comment",
@@ -696,13 +723,32 @@ class DriverReviewSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         user = self.context["request"].user
         driver = attrs.get("driver")
-        if (
-            self.instance is None
-            and DriverReview.objects.filter(user=user, driver=driver).exists()
-        ):
-            raise serializers.ValidationError(
-                "You have already reviewed this driver.")
+        
+        # Only validate if driver is provided (from URL or body)
+        if driver:
+            if (
+                self.instance is None
+                and DriverReview.objects.filter(user=user, driver=driver).exists()
+            ):
+                raise serializers.ValidationError(
+                    "You have already reviewed this driver.")
         return attrs
+
+    def get_driver_info(self, obj):
+        """
+        Return selected info of the driver profile.
+        """
+        mech = getattr(obj, "driver", None)
+        if mech is None:
+            return None
+        # Example fields: id, full_name, phone_number
+        return {
+            "id": getattr(mech, "id", None),
+            "full_name": getattr(mech, "full_name", None),
+            "phone_number": getattr(mech, "phone_number", None),
+            "city": getattr(mech, "city", None),
+            "is_approved": getattr(mech, "is_approved", None),
+        }
 
 
 class BankAccountSerializer(serializers.ModelSerializer):

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from datetime import timedelta
+from celery.schedules import crontab
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -246,34 +247,36 @@ AUTH_USER_MODEL = 'users.User'
 # Choose your database backend based on environment
 
 # SQLite with SpatiaLite (Development)
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.contrib.gis.db.backends.spatialite',
-        'NAME': BASE_DIR / 'db.sqlite3',
-        'OPTIONS': {
-            'timeout': 20,
-        },
-    }
-}
-
-# PostgreSQL with PostGIS (Production)
-# Uncomment and configure for production
 # DATABASES = {
 #     'default': {
-#         'ENGINE': 'django.contrib.gis.db.backends.postgis',
-#         'NAME': 'ogamechanic_db',
-#         'USER': 'ogamechanic_user',
-#         'PASSWORD': 'your_secure_password',
-#         'HOST': 'localhost',
-#         'PORT': '5432',
+#         'ENGINE': 'django.contrib.gis.db.backends.spatialite',
+#         'NAME': BASE_DIR / 'db.sqlite3',
 #         'OPTIONS': {
-#             'sslmode': 'require',
+#             'timeout': 20,
 #         },
 #     }
 # }
 
-# GeoDjango Configuration
-SPATIALITE_LIBRARY_PATH = 'mod_spatialite'
+# # PostgreSQL with PostGIS (Production)
+# # Uncomment and configure for production
+# # DATABASES = {
+# #     'default': {
+# #         'ENGINE': 'django.contrib.gis.db.backends.postgis',
+# #         'NAME': 'ogamechanic_db',
+# #         'USER': 'ogamechanic_user',
+# #         'PASSWORD': 'your_secure_password',
+# #         'HOST': 'localhost',
+# #         'PORT': '5432',
+# #         'OPTIONS': {
+# #             'sslmode': 'require',
+# #         },
+# #     }
+# # }
+
+# # GeoDjango Configuration
+# SPATIALITE_LIBRARY_PATH = 'mod_spatialite'
+
+# print(DATABASES)
 
 # File upload settings
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB
@@ -293,3 +296,21 @@ ADMINS = [
     # ("IT Support", "it-support@example.com"),
     ("Favour", "favourelodimuor16@gmail.com"),
 ]
+
+CELERY_BEAT_SCHEDULE = {
+    'cleanup-expired-tokens': {
+        'task': 'cleanup_expired_tokens',
+        'schedule': crontab(hour=0, minute=0),  # Run daily at midnight
+    },
+
+    'unlock-expired-accounts': {
+        'task': 'users.tasks.unlock_expired_accounts',
+        'schedule': crontab(minute='*/15'),  # Every 15 minutes
+    },
+    # Add more periodic tasks here
+
+    'delete-expired-pending-rides': {
+        'task': 'rides.tasks.delete_expired_pending_rides',
+        'schedule': crontab(minute='*/30'),  # Every 30 minutes
+    },
+}

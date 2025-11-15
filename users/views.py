@@ -2023,13 +2023,35 @@ class MechanicReviewListCreateView(APIView):
     pagination_class = CustomLimitOffsetPagination
 
     @swagger_auto_schema(
-        operation_description="List and create reviews for a mechanic",
+        operation_description="List reviews for a mechanic. Get the MechanicProfile from the User UUID.",
         responses={200: MechanicReviewSerializer(many=True)},
     )
-    def get(self, request, mechanic_id):
+    def get(self, request, user_id):
+        # Get the MechanicProfile from the User UUID
+        try:
+            from users.models import User
+            mechanic_user = User.objects.get(id=user_id)
+            mechanic_profile = getattr(mechanic_user, 'mechanic_profile', None)
+            if not mechanic_profile:
+                return Response(
+                    api_response(
+                        message="User does not have a mechanic profile.",
+                        status=False,
+                    ),
+                    status=404,
+                )
+        except User.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Mechanic not found.",
+                    status=False,
+                ),
+                status=404,
+            )
+        
         reviews = (
             MechanicReview.objects
-            .filter(mechanic_id=mechanic_id)
+            .filter(mechanic=mechanic_profile)
             .order_by('-created_at')
         )
         paginator = self.pagination_class()
@@ -2045,23 +2067,72 @@ class MechanicReviewListCreateView(APIView):
         )
 
     @swagger_auto_schema(
-        operation_description="Create a review for a mechanic",
+        operation_description="Create a review for a mechanic. Get the MechanicProfile from the User UUID.",
         request_body=MechanicReviewSerializer,
         responses={201: MechanicReviewSerializer()},
     )
-    def post(self, request, mechanic_id):
+    def post(self, request, user_id):
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
                 status=400,
             )
+        
+        # Get the MechanicProfile from the User UUID
+        try:
+            from users.models import User, MechanicReview
+            mechanic_user = User.objects.get(id=user_id)
+            mechanic_profile = getattr(mechanic_user, 'mechanic_profile', None)
+            if not mechanic_profile:
+                return Response(
+                    api_response(
+                        message="User does not have a mechanic profile.",
+                        status=False,
+                    ),
+                    status=404,
+                )
+            # Only allow reviewing of approved mechanics
+            if not getattr(mechanic_profile, "is_approved", False):
+                return Response(
+                    api_response(
+                        message="You can only review an approved mechanic.",
+                        status=False,
+                    ),
+                    status=403,
+                )
+        except User.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Mechanic not found.",
+                    status=False,
+                ),
+                status=404,
+            )
+
+        # Check if user has already reviewed this mechanic
+        if MechanicReview.objects.filter(
+            user=request.user, 
+            mechanic=mechanic_profile
+        ).exists():
+            return Response(
+                api_response(
+                    message="You have already reviewed this mechanic.",
+                    status=False,
+                ),
+                status=400,
+            )
+
+        # Remove user_id from data if present (it's in the URL)
+        data.pop('user_id', None)
+
         serializer = MechanicReviewSerializer(
             data=data,
             context={"request": request},
         )
         if serializer.is_valid():
-            serializer.save(user=request.user, mechanic_id=mechanic_id)
+            # Use the MechanicProfile's ID (integer) instead of UUID
+            serializer.save(user=request.user, mechanic=mechanic_profile)
             return Response(
                 api_response(
                     message="Review created successfully.",
@@ -2097,11 +2168,42 @@ class MechanicReviewDetailView(APIView):
         request_body=MechanicReviewSerializer,
         responses={200: MechanicReviewSerializer()}
     )
-    def put(self, request, mechanic_id, pk):
+    def put(self, request, user_id, pk):
+        # Use the same incoming_request_checks as in the POST logic
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=400,
+            )
+
+        # Get the MechanicProfile from the User UUID
+        from users.models import MechanicReview, User
+        try:
+            mechanic_user = User.objects.get(id=user_id)
+            mechanic_profile = getattr(mechanic_user, 'mechanic_profile', None)
+            if not mechanic_profile:
+                return Response(
+                    api_response(
+                        message="User does not have a mechanic profile.",
+                        status=False
+                    ),
+                    status=404
+                )
+        except User.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Mechanic not found.",
+                    status=False
+                ),
+                status=404
+            )
+
+        # Get the MechanicReview, ensure ownership
         try:
             review = MechanicReview.objects.get(
                 pk=pk,
-                mechanic_id=mechanic_id,
+                mechanic=mechanic_profile,  # Use mechanic object, not mechanic_id with UUID
                 user=request.user
             )
         except MechanicReview.DoesNotExist:
@@ -2112,11 +2214,28 @@ class MechanicReviewDetailView(APIView):
                 ),
                 status=404
             )
+
+        # Remove mechanic_id and user from data if present (since those can't be updated)
+        data.pop('mechanic', None)
+        data.pop('mechanic_id', None)
+        data.pop('user', None)
+        data.pop('user_id', None)
+        
+        # Validate mechanic profile is still reviewable/approved (like in the POST)
+        if not getattr(mechanic_profile, "is_approved", False):
+            return Response(
+                api_response(
+                    message="You can only update a review for an approved mechanic.",
+                    status=False,
+                ),
+                status=403,
+            )
+
         serializer = MechanicReviewSerializer(
             review,
-            data=request.data,
+            data=data,
             partial=True,
-            context={'request': request}
+            context={"request": request},
         )
         if serializer.is_valid():
             serializer.save()
@@ -2125,7 +2244,8 @@ class MechanicReviewDetailView(APIView):
                     message="Review updated successfully.",
                     status=True,
                     data=serializer.data
-                )
+                ),
+                status=200,
             )
         return Response(
             api_response(
@@ -2134,22 +2254,42 @@ class MechanicReviewDetailView(APIView):
                         [
                             f"{field}: {', '.join(errors)}"
                             for field, errors in serializer.errors.items()
-                        ]  # noqa
-                    )
-                    if serializer.errors
-                    else "Invalid data"
+                        ]
+                    ) if serializer.errors else "Invalid data"
                 ),
                 status=False,
                 errors=serializer.errors,
             ),
-            status=400
+            status=400,
         )
 
-    def delete(self, request, mechanic_id, pk):
+    def delete(self, request, user_id, pk):
+        # Get the MechanicProfile from the User UUID
+        from users.models import MechanicReview, User
+        try:
+            mechanic_user = User.objects.get(id=user_id)
+            mechanic_profile = getattr(mechanic_user, 'mechanic_profile', None)
+            if not mechanic_profile:
+                return Response(
+                    api_response(
+                        message="User does not have a mechanic profile.",
+                        status=False
+                    ),
+                    status=404
+                )
+        except User.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Mechanic not found.",
+                    status=False
+                ),
+                status=404
+            )
+        
         try:
             review = MechanicReview.objects.get(
                 pk=pk,
-                mechanic_id=mechanic_id,
+                mechanic=mechanic_profile,  # Use mechanic object, not mechanic_id with UUID
                 user=request.user
             )
         except MechanicReview.DoesNotExist:
@@ -2164,9 +2304,9 @@ class MechanicReviewDetailView(APIView):
         return Response(
             api_response(
                 message="Review deleted successfully.",
-                status=True,
-                data={}
-            )
+                status=True
+            ),
+            status=200
         )
 
 
@@ -2178,9 +2318,31 @@ class DriverReviewListCreateView(APIView):
         responses={200: DriverReviewSerializer(many=True)},
     )
     def get(self, request, driver_id):
+        # Get the DriverProfile from the User UUID
+        try:
+            from users.models import User
+            driver_user = User.objects.get(id=driver_id)
+            driver_profile = getattr(driver_user, 'driver_profile', None)
+            if not driver_profile:
+                return Response(
+                    api_response(
+                        message="User does not have a driver profile.",
+                        status=False,
+                    ),
+                    status=404,
+                )
+        except User.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Driver not found.",
+                    status=False,
+                ),
+                status=404,
+            )
+        
         reviews = (
             DriverReview.objects
-            .filter(driver_id=driver_id)
+            .filter(driver=driver_profile)
             .order_by('-created_at')
         )
         serializer = DriverReviewSerializer(reviews, many=True)
@@ -2192,6 +2354,16 @@ class DriverReviewListCreateView(APIView):
             )
         )
 
+    @swagger_auto_schema(
+        operation_description="Create a review for a specific driver.",
+        request_body=DriverReviewSerializer,
+        responses={
+            201: DriverReviewSerializer,
+            400: 'Bad Request',
+            403: 'Forbidden',
+            404: 'Not Found',
+        }
+    )
     def post(self, request, driver_id):
         status_, data = incoming_request_checks(request)
         if not status_:
@@ -2199,12 +2371,60 @@ class DriverReviewListCreateView(APIView):
                 api_response(message=data, status=False),
                 status=400
             )
+        
+        # Get the DriverProfile from the User UUID
+        try:
+            from users.models import User, DriverReview
+            driver_user = User.objects.get(id=driver_id)
+            driver_profile = getattr(driver_user, 'driver_profile', None)
+            if not driver_profile:
+                return Response(
+                    api_response(
+                        message="User does not have a driver profile.",
+                        status=False,
+                    ),
+                    status=404,
+                )
+            # Only allow reviewing of approved drivers
+            if not getattr(driver_profile, "is_approved", False):
+                return Response(
+                    api_response(
+                        message="You can only review an approved driver.",
+                        status=False,
+                    ),
+                    status=403,
+                )
+        except User.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Driver not found.",
+                    status=False,
+                ),
+                status=404,
+            )
+        
+        # Check if user has already reviewed this driver
+        if DriverReview.objects.filter(
+            user=request.user, 
+            driver=driver_profile
+        ).exists():
+            return Response(
+                api_response(
+                    message="You have already reviewed this driver.",
+                    status=False,
+                ),
+                status=400,
+            )
+        
+        # Remove driver_id from data if present (it's in the URL)
+        data.pop('driver_id', None)
+        
         serializer = DriverReviewSerializer(
             data=data,
             context={'request': request}
         )
         if serializer.is_valid():
-            serializer.save(user=request.user, driver_id=driver_id)
+            serializer.save(user=request.user, driver=driver_profile)
             return Response(
                 api_response(
                     message="Review created successfully.",
@@ -2241,10 +2461,33 @@ class DriverReviewDetailView(APIView):
         responses={200: DriverReviewSerializer()}
     )
     def put(self, request, driver_id, pk):
+        # Get the DriverProfile from the User UUID
+        from users.models import User, DriverReview
+        try:
+            driver_user = User.objects.get(id=driver_id)
+            driver_profile = getattr(driver_user, 'driver_profile', None)
+            if not driver_profile:
+                return Response(
+                    api_response(
+                        message="User does not have a driver profile.",
+                        status=False
+                    ),
+                    status=404
+                )
+        except User.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Driver not found.",
+                    status=False
+                ),
+                status=404
+            )
+
+        # Get the DriverReview, ensure ownership
         try:
             review = DriverReview.objects.get(
                 pk=pk,
-                driver_id=driver_id,
+                driver=driver_profile,  # Use driver object, not driver_id with UUID
                 user=request.user
             )
         except DriverReview.DoesNotExist:
@@ -2255,9 +2498,27 @@ class DriverReviewDetailView(APIView):
                 ),
                 status=404
             )
+        
+        # Validate driver profile is still reviewable/approved
+        if not getattr(driver_profile, "is_approved", False):
+            return Response(
+                api_response(
+                    message="You can only update a review for an approved driver.",
+                    status=False,
+                ),
+                status=403,
+            )
+        
+        # Remove driver_id and user from data if present (since those can't be updated)
+        data = request.data.copy() if hasattr(request, 'data') else {}
+        data.pop('driver', None)
+        data.pop('driver_id', None)
+        data.pop('user', None)
+        data.pop('user_id', None)
+        
         serializer = DriverReviewSerializer(
             review,
-            data=request.data,
+            data=data,
             partial=True,
             context={'request': request}
         )
@@ -2288,11 +2549,59 @@ class DriverReviewDetailView(APIView):
             status=400
         )
 
+    @swagger_auto_schema(
+        operation_description="Delete a review for a driver by its ID (pk) and the driver's user ID (driver_id). Only allows the author to delete their own review.",
+        responses={
+            200: openapi.Response(
+                description="Review deleted successfully.",
+                examples={
+                    "application/json": {
+                        "message": "Review deleted successfully.",
+                        "status": True,
+                        "data": {}
+                    }
+                }
+            ),
+            404: openapi.Response(
+                description="Driver or review not found.",
+                examples={
+                    "application/json": {
+                        "message": "Review not found.",
+                        "status": False
+                    }
+                }
+            ),
+        }
+    )
     def delete(self, request, driver_id, pk):
+        """
+        Delete a review for a driver.
+        """
+        from users.models import User, DriverReview
+        try:
+            driver_user = User.objects.get(id=driver_id)
+            driver_profile = getattr(driver_user, 'driver_profile', None)
+            if not driver_profile:
+                return Response(
+                    api_response(
+                        message="User does not have a driver profile.",
+                        status=False
+                    ),
+                    status=404
+                )
+        except User.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Driver not found.",
+                    status=False
+                ),
+                status=404
+            )
+        
         try:
             review = DriverReview.objects.get(
                 pk=pk,
-                driver_id=driver_id,
+                driver=driver_profile,  # Use driver object, not driver_id with UUID
                 user=request.user
             )
         except DriverReview.DoesNotExist:

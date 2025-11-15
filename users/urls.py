@@ -78,12 +78,12 @@ urlpatterns = [
 
     # Reviews
     path(
-        'mechanics/<uuid:mechanic_id>/reviews/',
+        'mechanics/<uuid:user_id>/reviews/',
         views.MechanicReviewListCreateView.as_view(),
         name='mechanic_reviews'
     ),
     path(
-        'mechanics/<uuid:mechanic_id>/reviews/<int:pk>/',
+        'mechanics/<uuid:user_id>/reviews/<int:pk>/',
         views.MechanicReviewDetailView.as_view(),
         name='mechanic_review_detail'
     ),

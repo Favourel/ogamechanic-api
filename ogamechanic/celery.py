@@ -1,6 +1,6 @@
 import os
 from celery import Celery
-from celery.schedules import crontab
+# from celery.schedules import crontab
 from datetime import timedelta # noqa
 from dotenv import load_dotenv
 
@@ -64,24 +64,24 @@ def cleanup_expired_tokens():
 
 
 # Configure Celery Beat schedule
-app.conf.beat_schedule = {
-    'cleanup-expired-tokens': {
-        'task': 'cleanup_expired_tokens',
-        'schedule': crontab(hour=0, minute=0),  # Run daily at midnight
-    },
+# app.conf.beat_schedule = {
+#     'cleanup-expired-tokens': {
+#         'task': 'cleanup_expired_tokens',
+#         'schedule': crontab(hour=0, minute=0),  # Run daily at midnight
+#     },
 
-    'unlock-expired-accounts': {
-        'task': 'users.tasks.unlock_expired_accounts',
-        'schedule': crontab(minute='*/15'),  # Every 15 minutes
-    },
-    # Add more periodic tasks here
+#     'unlock-expired-accounts': {
+#         'task': 'users.tasks.unlock_expired_accounts',
+#         'schedule': crontab(minute='*/15'),  # Every 15 minutes
+#     },
+#     # Add more periodic tasks here
 
-    'delete-expired-pending-rides': {
-        'task': 'rides.tasks.delete_expired_pending_rides',
-        'schedule': crontab(minute='*/30'),  # Every 30 minutes
-    },
+#     'delete-expired-pending-rides': {
+#         'task': 'rides.tasks.delete_expired_pending_rides',
+#         'schedule': crontab(minute='*/30'),  # Every 30 minutes
+#     },
 
-}
+# }
 
 
 @app.task(bind=True, ignore_result=True)
