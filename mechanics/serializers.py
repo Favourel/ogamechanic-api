@@ -92,13 +92,41 @@ class RepairRequestSerializer(serializers.ModelSerializer):
 class RepairRequestListSerializer(serializers.ModelSerializer):
     customer = UserSerializer(read_only=True)
     mechanic = UserSerializer(read_only=True)
+    is_active = serializers.ReadOnlyField()
+    can_be_cancelled = serializers.ReadOnlyField()
+    notified_mechanics = UserSerializer(many=True, read_only=True)
 
     class Meta:
         model = RepairRequest
         fields = [
-            'id', 'customer', 'mechanic', 'service_type', 'vehicle_make',
-            'vehicle_model', 'status', 'priority', 'requested_at',
-            'estimated_cost', 'is_active'
+            'id',
+            'customer',
+            'mechanic',
+            'notified_mechanics',
+            'service_type',
+            'vehicle_make',
+            'vehicle_model',
+            'vehicle_year',
+            'vehicle_registration',
+            'problem_description',
+            'estimated_cost',
+            'service_address',
+            'service_latitude',
+            'service_longitude',
+            'preferred_date',
+            'preferred_time_slot',
+            'status',
+            'priority',
+            'requested_at',
+            'accepted_at',
+            'started_at',
+            'completed_at',
+            'cancelled_at',
+            'notes',
+            'cancellation_reason',
+            'actual_cost',
+            'is_active',
+            'can_be_cancelled'
         ]
 
 

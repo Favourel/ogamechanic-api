@@ -151,7 +151,7 @@ def send_new_review_notification_email(product_id, merchant_email):
 def send_merchant_new_order_email(self, order_id, merchant_email):
     """
     Sends an email notification to the merchant when a new order is received.
-    Retries up to 3 times in case of failure.
+    Retries up to 3 times in case of failure with exponential backoff.
     """
 
     logger = logging.getLogger(__name__)
@@ -190,7 +190,9 @@ def send_merchant_new_order_email(self, order_id, merchant_email):
         logger.error(
             f"Failed to send merchant new order email to {merchant_email} for order {order_id}: {exc}"  # noqa
         )  # noqa
-        self.retry(exc=exc)
+        # Exponential backoff: delay = 60 * (2 ** (self.request.retries - 1))
+        retry_delay = 60 * (2 ** (self.request.retries)) if self.request.retries else 60  # noqa
+        self.retry(exc=exc, countdown=retry_delay)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)

@@ -370,6 +370,7 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
     government_id_front = serializers.SerializerMethodField()
     government_id_back = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
+    has_active_repair_request = serializers.SerializerMethodField()
 
     class Meta:
         model = MechanicProfile
@@ -391,6 +392,7 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "rating",
+            "has_active_repair_request",
         ]
         read_only_fields = [
             "id",
@@ -403,6 +405,7 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             "selfie",
             "government_id_front",
             "government_id_back",
+            "has_active_repair_request",
         ]
         ref_name = "UsersMechanicProfileSerializer"
 
@@ -455,6 +458,23 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
         if avg_rating is not None:
             return round(avg_rating, 1)
         return None
+
+    def get_has_active_repair_request(self, obj):
+        """
+        Check if the mechanic is currently working on a repair request.
+        Returns True if mechanic has any repair requests with status
+        'accepted' or 'in_progress'.
+        """
+        # Check if the field was already annotated in the queryset
+        if hasattr(obj, 'has_active_repair_request'):
+            return obj.has_active_repair_request
+
+        # Fallback: query the database if not annotated
+        from mechanics.models import RepairRequest
+        return RepairRequest.objects.filter(
+            mechanic=obj.user,
+            status__in=['accepted', 'in_progress']
+        ).exists()
 
 
 class DriverProfileSerializer(serializers.ModelSerializer):

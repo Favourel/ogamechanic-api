@@ -30,7 +30,6 @@ from users.serializers import MechanicProfileSerializer
 from users.models import User
 from users.services import NotificationService
 from django.db import models
-from django.contrib.auth import get_user_model
 
 
 class RepairRequestListView(APIView):
@@ -248,7 +247,9 @@ class RepairRequestListView(APIView):
                                     "mechanic assigned successfully."
                                 ),
                                 status=True,
-                                data=RepairRequestSerializer(repair_request).data,
+                                data=RepairRequestSerializer(
+                                    repair_request, 
+                                    context={'request': self.request}).data,
                             ),
                             status=status.HTTP_201_CREATED,
                         )
@@ -279,7 +280,10 @@ class RepairRequestListView(APIView):
                 api_response(
                     message=message,
                     status=True,
-                    data=RepairRequestSerializer(repair_request).data,
+                    data=RepairRequestSerializer(
+                        repair_request, 
+                        context={'request': self.request}
+                    ).data,
                 ),
                 status=status.HTTP_201_CREATED,
             )
@@ -382,9 +386,24 @@ class AvailableMechanicsView(APIView):
             )
 
         from users.models import MechanicProfile
+        from django.db.models import Exists, OuterRef
 
-        mechanics = MechanicProfile.objects.filter(is_approved=True)
-        serializer = MechanicProfileSerializer(mechanics, many=True, context={'request': self.request}) # noqa
+        mechanics = (
+            MechanicProfile.objects
+            .select_related('user')
+            .filter(is_approved=True)
+            .annotate(
+                has_active_repair_request=Exists(
+                    RepairRequest.objects.filter(
+                        mechanic=OuterRef('user'),
+                        status__in=['accepted', 'in_progress']
+                    )
+                )
+            )
+        )
+        serializer = MechanicProfileSerializer(
+            mechanics, many=True, context={'request': self.request}
+        )
 
         return Response(
             api_response(
@@ -400,20 +419,14 @@ class AssignMechanicView(APIView):
 
     @swagger_auto_schema(
         operation_description=(
-            "Assign a mechanic to a repair request. "
-            "Customers can manually assign a mechanic, or mechanics can "
-            "accept requests they were notified about."
+            "Mechanics can accept (assign themselves to) repair requests they were notified about. "
+            "Customers cannot manually assign a mechanic."
         ),
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                "mechanic_id": openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description=(
-                        "Mechanic ID (required for customer assignment, "
-                        "ignored if mechanic is accepting)"
-                    ),
-                ),
+                # mechanic_id can still be present in schema for backward compatibility,
+                # but is ignored for everyone except mechanics accepting.
             },
         ),
         responses={200: RepairRequestSerializer()},
@@ -428,7 +441,7 @@ class AssignMechanicView(APIView):
 
         repair_request = get_object_or_404(RepairRequest, id=repair_id)
 
-        # Check if user is a mechanic trying to accept
+        # Only mechanics can accept/assign themselves to the request.
         if request.user.roles.filter(name="mechanic").exists():
             # Mechanic is accepting the request
             if repair_request.can_mechanic_accept(request.user):
@@ -480,47 +493,14 @@ class AssignMechanicView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        # Customer manually assigning a mechanic
-        if repair_request.customer != request.user:
-            return Response(
-                api_response(
-                    message="Only the customer can assign mechanics.",
-                    status=False
-                ),
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        mechanic_id = data.get("mechanic_id")
-        if not mechanic_id:
-            return Response(
-                api_response(message="Mechanic ID is required.", status=False),
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        UserModel = get_user_model()
-        mechanic = get_object_or_404(UserModel, id=mechanic_id)
-
-        # Customer manual assignment - skip notification check
-        if repair_request.assign_mechanic(
-            mechanic, skip_notification_check=True
-        ):
-            return Response(
-                api_response(
-                    message="Mechanic assigned successfully.",
-                    status=True,
-                    data=RepairRequestSerializer(
-                        repair_request, context={'request': request}
-                    ).data,
-                )
-            )
-        else:
-            return Response(
-                api_response(
-                    message="Failed to assign mechanic.",
-                    status=False
-                ),
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # If not a mechanic, return forbidden
+        return Response(
+            api_response(
+                message="Only mechanics can accept and assign themselves to requests. Customers cannot assign mechanics.",
+                status=False
+            ),
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
 
 class TrainingSessionListView(APIView):
@@ -1078,6 +1058,25 @@ class MechanicDetailView(APIView):
                 ),
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Annotate with active repair request status for optimization
+        from django.db.models import Exists, OuterRef
+        from users.models import MechanicProfile
+
+        mechanic_profile = (
+            MechanicProfile.objects
+            .select_related('user')
+            .filter(id=mechanic_profile.id)
+            .annotate(
+                has_active_repair_request=Exists(
+                    RepairRequest.objects.filter(
+                        mechanic=OuterRef('user'),
+                        status__in=['accepted', 'in_progress']
+                    )
+                )
+            )
+        ).first()
+
         serializer = MechanicProfileSerializer(
             mechanic_profile, context={"request": request}
         )
@@ -1237,5 +1236,3 @@ class MechanicAnalyticsView(APIView):
             ),
             status=status.HTTP_200_OK,
         )
-
-

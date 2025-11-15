@@ -1221,7 +1221,8 @@ class HomeView(APIView):
                 api_response(message=data, status=False),
                 status=400
             )
-        from users.models import MechanicReview  # make sure this import is present
+        # Import MechanicReview for annotation
+        from users.models import MechanicReview
         from django.db.models import Subquery, OuterRef, Avg
 
         request_type = request.query_params.get('requestType', '').strip().lower() # noqa
@@ -1239,6 +1240,8 @@ class HomeView(APIView):
 
         # Only fetch what is needed based on requestType for performance
         if request_type == 'mechanics':
+            from mechanics.models import RepairRequest
+
             mechanics = (
                 MechanicProfile.objects
                 .select_related('user')
@@ -1251,6 +1254,13 @@ class HomeView(APIView):
                         ).values('mechanic').annotate(
                             avg_rating=Avg('rating')
                         ).values('avg_rating')[:1]
+                    ),
+                    # Annotate with active repair request status
+                    has_active_repair_request=Exists(
+                        RepairRequest.objects.filter(
+                            mechanic=OuterRef('user'),
+                            status__in=['accepted', 'in_progress']
+                        )
                     )
                 )
                 .order_by('?')[:15]
