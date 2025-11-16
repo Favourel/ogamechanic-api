@@ -301,6 +301,12 @@ class RepairRequestDetailView(APIView):
         responses={200: RepairRequestSerializer()},
     )
     def get(self, request, repair_id):
+        status_, data = get_incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         repair_request = get_object_or_404(RepairRequest, id=repair_id)
 
         # Check permissions
@@ -338,6 +344,12 @@ class RepairRequestDetailView(APIView):
         responses={200: RepairRequestSerializer()},
     )
     def patch(self, request, repair_id):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         repair_request = get_object_or_404(RepairRequest, id=repair_id)
 
         # Check permissions
@@ -351,7 +363,7 @@ class RepairRequestDetailView(APIView):
             )
 
         serializer = RepairRequestStatusUpdateSerializer(
-            repair_request, data=request.data, partial=True
+            repair_request, data=data, partial=True
         )
         if serializer.is_valid():
             serializer.save()

@@ -2019,7 +2019,7 @@ class EmailVerificationAPIView(APIView):
 
 
 class MechanicReviewListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
     pagination_class = CustomLimitOffsetPagination
 
     @swagger_auto_schema(
@@ -2078,7 +2078,7 @@ class MechanicReviewListCreateView(APIView):
                 api_response(message=data, status=False),
                 status=400,
             )
-        
+
         # Get the MechanicProfile from the User UUID
         try:
             from users.models import User, MechanicReview
@@ -2311,7 +2311,7 @@ class MechanicReviewDetailView(APIView):
 
 
 class DriverReviewListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="List and create reviews for a driver",
