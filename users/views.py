@@ -5214,5 +5214,3 @@ class PrimaryUserProfileView(APIView):
     def patch(self, request):
         """Partial update of primary user profile details"""
         return self.put(request)
-
-

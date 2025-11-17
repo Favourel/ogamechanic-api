@@ -69,7 +69,8 @@ class RepairRequestSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if not request or not hasattr(request, 'user') or not request.user.is_authenticated: # noqa
             raise serializers.ValidationError(
-                "Authenticated user required to create a repair request.")
+                "Authenticated user required to create a repair request."
+            )
 
         customer = request.user
 
@@ -87,6 +88,23 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             validated_data['mechanic'] = mechanic
 
         return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        # Optionally support updating mechanic if mechanic_id provided (write_only) # noqa
+        mechanic_id = validated_data.pop('mechanic_id', None)
+        if mechanic_id is not None:
+            try:
+                mechanic = User.objects.get(id=mechanic_id)
+                instance.mechanic = mechanic
+            except User.DoesNotExist:
+                raise serializers.ValidationError(
+                    {"mechanic_id": "Mechanic not found."})
+
+        # Handle normal update for other fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
 
 
 class RepairRequestListSerializer(serializers.ModelSerializer):

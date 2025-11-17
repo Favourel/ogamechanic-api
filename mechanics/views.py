@@ -30,6 +30,9 @@ from users.serializers import MechanicProfileSerializer
 from users.models import User
 from users.services import NotificationService
 from django.db import models
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class RepairRequestListView(APIView):
@@ -228,38 +231,101 @@ class RepairRequestListView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # If mechanic_id was provided, validate it early (fail fast)
+        mechanic_id = data.get('mechanic_id')
+        mechanic = None
+        if mechanic_id:
+            try:
+                mechanic = User.objects.get(id=mechanic_id)
+            except User.DoesNotExist:
+                return Response(
+                    api_response(
+                        message="Provided mechanic_id does not exist.",
+                        status=False,
+                    ),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Optional: ensure the selected user is actually a mechanic and approved
+            if not mechanic.roles.filter(name="mechanic").exists():
+                return Response(
+                    api_response(
+                        message="Provided user is not a mechanic.",
+                        status=False,
+                    ),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # If using MechanicProfile/approval:
+            mechanic_profile = getattr(mechanic, "mechanicprofile", None)
+            if (
+                mechanic_profile is None
+                or not getattr(mechanic_profile, "is_approved", False)
+            ):
+                return Response(
+                    api_response(
+                        message="Selected mechanic is not approved to receive requests.",
+                        status=False,
+                    ),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         serializer = RepairRequestSerializer(
             data=data, context={'request': request}
         )
         if serializer.is_valid():
             repair_request = serializer.save()
 
-            # If mechanic_id is provided, assign directly (old flow)
-            mechanic_id = data.get('mechanic_id')
-            if mechanic_id:
+            # If mechanic was provided and validated above, assign and return
+            if mechanic:
+                assigned = False
                 try:
-                    mechanic = User.objects.get(id=mechanic_id)
-                    if repair_request.assign_mechanic(mechanic):
-                        return Response(
-                            api_response(
-                                message=(
-                                    "Repair request created and "
-                                    "mechanic assigned successfully."
-                                ),
-                                status=True,
-                                data=RepairRequestSerializer(
-                                    repair_request, 
-                                    context={'request': self.request}).data,
+                    assigned = repair_request.assign_mechanic(mechanic)
+                except Exception as e:
+                    # Log error if assign_mechanic raises
+                    logger.exception(f"Error assigning mechanic {mechanic.id}: {e}")
+                    return Response(
+                        api_response(
+                            message="Failed to assign selected mechanic.",
+                            status=False,
+                        ),
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+
+                if assigned:
+                    # Ensure no other mechanics will see this request via notified_mechanics
+                    # (this clears any accidental pre-populated entries)
+                    repair_request.notified_mechanics.clear()
+
+                    # If you keep track of notification jobs, cancel them here (if possible)
+                    # e.g. revoke celery tasks if you stored task IDs on the model
+
+                    return Response(
+                        api_response(
+                            message=(
+                                "Repair request created and "
+                                "mechanic assigned successfully."
                             ),
-                            status=status.HTTP_201_CREATED,
-                        )
-                except User.DoesNotExist:
-                    pass
-            
-            # New flow: Automatically find and notify mechanics within 5km
-            # Only if no mechanic was manually assigned
+                            status=True,
+                            data=RepairRequestSerializer(
+                                repair_request,
+                                context={'request': self.request}
+                            ).data,
+                        ),
+                        status=status.HTTP_201_CREATED,
+                    )
+                else:
+                    # assign_mechanic returned False (business rule prevented assignment)
+                    return Response(
+                        api_response(
+                            message="Could not assign the selected mechanic.",
+                            status=False,
+                        ),
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # New flow: no mechanic was manually assigned -> notify local mechanics
             if not repair_request.mechanic:
-                # Trigger async task to find and notify mechanics
                 find_and_notify_mechanics_task.delay(
                     str(repair_request.id),
                     radius_km=5.0
@@ -275,18 +341,19 @@ class RepairRequestListView(APIView):
                     "Repair request created and "
                     "mechanic assigned successfully."
                 )
-            
+
             return Response(
                 api_response(
                     message=message,
                     status=True,
                     data=RepairRequestSerializer(
-                        repair_request, 
+                        repair_request,
                         context={'request': self.request}
                     ).data,
                 ),
                 status=status.HTTP_201_CREATED,
             )
+
         return Response(
             api_response(message=serializer.errors, status=False),
             status=status.HTTP_400_BAD_REQUEST,
@@ -340,9 +407,72 @@ class RepairRequestDetailView(APIView):
 
     @swagger_auto_schema(
         operation_description="Update repair request status",
-        request_body=RepairRequestStatusUpdateSerializer,
+        request_body=RepairRequestSerializer,
         responses={200: RepairRequestSerializer()},
     )
+    def put(self, request, repair_id):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            repair_request = RepairRequest.objects.get(pk=repair_id)
+        except RepairRequest.DoesNotExist:
+            return Response(
+                api_response(
+                    message="Repair request not found.", status=False),
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Restrict customer updates based on status
+        user_is_customer = repair_request.customer == request.user
+        forbidden_statuses_for_customer = [
+            "accepted",
+            "in_transit",
+            "in_progress",
+            "completed",
+            "cancelled",
+            "rejected"
+        ]
+        if (
+            user_is_customer
+            and repair_request.status in forbidden_statuses_for_customer
+        ):
+            return Response(
+                api_response(
+                    message=(
+                        "You cannot update this repair request in its current status."
+                    ),
+                    status=False,
+                ),
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = RepairRequestSerializer(
+            repair_request, data=data, partial=False,
+            context={'request': request}
+        )
+
+        if serializer.is_valid():
+            updated_instance = serializer.save()  # <--- DRF calls update()
+
+            return Response(
+                api_response(
+                    message="Repair request updated successfully.",
+                    status=True,
+                    data=RepairRequestSerializer(
+                        updated_instance, context={'request': request}).data
+                ),
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            api_response(message=serializer.errors, status=False),
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     def patch(self, request, repair_id):
         status_, data = incoming_request_checks(request)
         if not status_:
@@ -350,35 +480,59 @@ class RepairRequestDetailView(APIView):
                 api_response(message=data, status=False),
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        repair_request = get_object_or_404(RepairRequest, id=repair_id)
+        try:
+            repair_request = RepairRequest.objects.get(pk=repair_id)
+        except RepairRequest.DoesNotExist:
+            return Response(
+                api_response(message="Repair request not found.", status=False),
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        # Check permissions
+        # Restrict customer updates based on status
+        user_is_customer = repair_request.customer == request.user
+        forbidden_statuses_for_customer = [
+            "accepted",
+            "in_transit",
+            "in_progress",
+            "completed",
+            "cancelled",
+            "rejected",
+        ]
         if (
-            repair_request.customer != request.user
-            and repair_request.mechanic != request.user
+            user_is_customer
+            and repair_request.status in forbidden_statuses_for_customer
         ):
             return Response(
-                api_response(message="Access denied.", status=False),
+                api_response(
+                    message=(
+                        "You cannot update this repair request in its current status."
+                    ),
+                    status=False,
+                ),
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        serializer = RepairRequestStatusUpdateSerializer(
-            repair_request, data=data, partial=True
+        serializer = RepairRequestSerializer(
+            repair_request, data=data, partial=True,
+            context={'request': request}
         )
+
         if serializer.is_valid():
-            serializer.save()
+            updated_instance = serializer.save()   # <-- calls update()
+
             return Response(
                 api_response(
                     message="Repair request updated successfully.",
                     status=True,
                     data=RepairRequestSerializer(
-                        repair_request, context={'request': request}
-                    ).data,
-                )
+                        updated_instance, context={'request': request}).data
+                ),
+                status=status.HTTP_200_OK
             )
+
         return Response(
             api_response(message=serializer.errors, status=False),
-            status=status.HTTP_400_BAD_REQUEST,
+            status=status.HTTP_400_BAD_REQUEST
         )
 
 

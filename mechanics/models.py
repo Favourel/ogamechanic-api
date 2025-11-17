@@ -15,6 +15,7 @@ class RepairRequest(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pending"),
         ("accepted", "Accepted by Mechanic"),
+        ("in_transit", "In Transit"),
         ("in_progress", "In Progress"),
         ("completed", "Completed"),
         ("cancelled", "Cancelled"),
@@ -470,5 +471,4 @@ class MechanicVehicleExpertise(models.Model):
 
     def __str__(self):
         return f"{self.mechanic.user.email} - {self.vehicle_make.name} ({self.certification_level})"  # noqa
-
 
