@@ -44,7 +44,7 @@ class RepairRequestAdmin(admin.ModelAdmin):
             )
         }),
         ('Problem Description', {
-            'fields': ('problem_description', 'symptoms', 'estimated_cost')
+            'fields': ('problem_description', 'estimated_cost')
         }),
         ('Location & Scheduling', {
             'fields': (

@@ -18,7 +18,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.sites',
-    
+
     # Third party apps
     'rest_framework',
     'rest_framework_simplejwt',
@@ -27,7 +27,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_filters',
     "django_celery_beat",
-    
+
     # Local apps
     'users.apps.UsersConfig',
     'adminpanel',
@@ -313,3 +313,7 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute='*/30'),  # Every 30 minutes
     },
 }
+
+ADMINS = [
+    ("Favour", "favourelodimuor16@gmail.com"),
+]

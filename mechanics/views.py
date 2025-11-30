@@ -648,10 +648,17 @@ class MechanicResponseView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Check if mechanic was notified about this request
-        if not repair_request.notified_mechanics.filter(
+        # Check if mechanic can respond to this request
+        # Allow if: mechanic was notified OR is the assigned mechanic
+        is_notified = repair_request.notified_mechanics.filter(
             id=request.user.id
-        ).exists():
+        ).exists()
+        is_assigned = (
+            repair_request.mechanic and
+            repair_request.mechanic.id == request.user.id
+        )
+
+        if not (is_notified or is_assigned):
             return Response(
                 api_response(
                     message=(
