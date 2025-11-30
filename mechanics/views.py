@@ -67,11 +67,15 @@ class RepairRequestListView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Filter based on user role
-        if request.user.roles.filter(name="primary_user").exists():
+        # Filter based on user's active role
+        active_role = getattr(request.user, 'active_role', None)
+        active_role_name = active_role.name if active_role else None
+
+        if active_role_name == "primary_user":
+            # Customers see only their own requests
             repair_requests = RepairRequest.objects.filter(
                 customer=request.user)
-        elif request.user.roles.filter(name="mechanic").exists():
+        elif active_role_name == "mechanic":
             # Mechanics can see:
             # 1. Requests assigned to them
             # 2. Requests they were notified about (pending, no mechanic)
@@ -84,6 +88,7 @@ class RepairRequestListView(APIView):
                 )
             ).distinct()
         else:
+            # No active role or unsupported role
             repair_requests = RepairRequest.objects.none()
 
         # Apply filters
@@ -256,12 +261,22 @@ class RepairRequestListView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # If using MechanicProfile/approval:
-            mechanic_profile = getattr(mechanic, "mechanicprofile", None)
-            if (
-                mechanic_profile is None
-                or not getattr(mechanic_profile, "is_approved", False)
-            ):
+            # If using MechanicProfile/approval, ensure we fetch the correct profile
+            from users.models import MechanicProfile
+
+            mechanic_profile = None
+            try:
+                mechanic_profile = MechanicProfile.objects.get(user=mechanic)
+            except MechanicProfile.DoesNotExist:
+                return Response(
+                    api_response(
+                        message="Mechanic profile not found for the given user.",
+                        status=False,
+                    ),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if mechanic_profile is None or mechanic_profile.is_approved is not True:
                 return Response(
                     api_response(
                         message="Selected mechanic is not approved to receive requests.",
