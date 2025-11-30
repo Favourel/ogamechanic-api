@@ -16,9 +16,9 @@ urlpatterns = [
         name="repair-request-detail",
     ),
     path(
-        "repair-requests/<uuid:repair_id>/assign-mechanic/",
-        views.AssignMechanicView.as_view(),
-        name="assign-mechanic",
+        "repair-requests/<uuid:repair_id>/respond/",
+        views.MechanicResponseView.as_view(),
+        name="mechanic-respond",
     ),
     # Available Mechanics
     path(

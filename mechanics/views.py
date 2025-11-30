@@ -580,19 +580,36 @@ class AvailableMechanicsView(APIView):
         )
 
 
-class AssignMechanicView(APIView):
+class MechanicResponseView(APIView):
+    """
+    Consolidated view for mechanics to respond to repair requests.
+    Supports both accepting and declining requests.
+    """
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description=(
-            "Mechanics can accept (assign themselves to) repair requests they were notified about. "
-            "Customers cannot manually assign a mechanic."
+            "Mechanics can accept or decline repair requests they were "
+            "notified about. Use 'action' field to specify 'accept' or "
+            "'decline'. When declining, an optional 'reason' can be provided."
         ),
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
+            required=['action'],
             properties={
-                # mechanic_id can still be present in schema for backward compatibility,
-                # but is ignored for everyone except mechanics accepting.
+                'action': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Action to perform: 'accept' or 'decline'",
+                    enum=['accept', 'decline'],
+                ),
+                'reason': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description=(
+                        "Optional reason for declining the request "
+                        "(only used when action is 'decline')"
+                    ),
+                    required=False,
+                ),
             },
         ),
         responses={200: RepairRequestSerializer()},
@@ -605,68 +622,136 @@ class AssignMechanicView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Validate action parameter
+        action = data.get('action')
+        if action not in ['accept', 'decline']:
+            return Response(
+                api_response(
+                    message=(
+                        "Invalid action. Must be 'accept' or 'decline'."
+                    ),
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         repair_request = get_object_or_404(RepairRequest, id=repair_id)
 
-        # Only mechanics can accept/assign themselves to the request.
-        if request.user.roles.filter(name="mechanic").exists():
-            # Mechanic is accepting the request
-            if repair_request.can_mechanic_accept(request.user):
-                if repair_request.assign_mechanic(request.user):
-                    # Notify customer
-                    mechanic_name = (
-                        request.user.get_full_name() or request.user.email
-                    )
-                    NotificationService.create_notification(
-                        user=repair_request.customer,
-                        title="Mechanic Accepted Your Request",
-                        message=(
-                            f"{mechanic_name} has accepted your repair request. " # noqa
-                            f"They will contact you soon."
-                        ),
-                        notification_type='success',
-                        related_object=repair_request,
-                        related_object_type='RepairRequest'
-                    )
+        # Only mechanics can respond to requests
+        if not request.user.roles.filter(name="mechanic").exists():
+            return Response(
+                api_response(
+                    message=(
+                        "Only mechanics can respond to repair requests."
+                    ),
+                    status=False
+                ),
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
-                    return Response(
-                        api_response(
-                            message="Request accepted successfully.",
-                            status=True,
-                            data=RepairRequestSerializer(
-                                repair_request,
-                                context={'request': request}
-                            ).data,
-                        )
+        # Check if mechanic was notified about this request
+        if not repair_request.notified_mechanics.filter(
+            id=request.user.id
+        ).exists():
+            return Response(
+                api_response(
+                    message=(
+                        f"You cannot {action} this request. "
+                        f"You were not notified about it."
+                    ),
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check if request is still pending and unassigned
+        if (repair_request.status != "pending" or
+                repair_request.mechanic is not None):
+            return Response(
+                api_response(
+                    message=(
+                        "This request has already been accepted by another "
+                        "mechanic or is no longer pending."
+                    ),
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        mechanic_name = request.user.get_full_name() or request.user.email
+
+        # Handle accept action
+        if action == 'accept':
+            if repair_request.assign_mechanic(request.user):
+                # Notify customer
+                NotificationService.create_notification(
+                    user=repair_request.customer,
+                    title="Mechanic Accepted Your Request",
+                    message=(
+                        f"{mechanic_name} has accepted your repair request. "
+                        f"They will contact you soon."
+                    ),
+                    notification_type='success',
+                    related_object=repair_request,
+                    related_object_type='RepairRequest'
+                )
+
+                return Response(
+                    api_response(
+                        message="Request accepted successfully.",
+                        status=True,
+                        data=RepairRequestSerializer(
+                            repair_request,
+                            context={'request': request}
+                        ).data,
                     )
-                else:
-                    return Response(
-                        api_response(
-                            message="Failed to accept request.",
-                            status=False
-                        ),
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+                )
             else:
                 return Response(
                     api_response(
-                        message=(
-                            "You cannot accept this request. It may have "
-                            "already been assigned or you were not notified "
-                            "about it."
-                        ),
+                        message="Failed to accept request.",
                         status=False
                     ),
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        # If not a mechanic, return forbidden
-        return Response(
-            api_response(
-                message="Only mechanics can accept and assign themselves to requests. Customers cannot assign mechanics.",
-                status=False
-            ),
-            status=status.HTTP_403_FORBIDDEN,
-        )
+        # Handle decline action
+        elif action == 'decline':
+            # Remove mechanic from notified list
+            repair_request.notified_mechanics.remove(request.user)
+
+            # Optional: Log the decline reason
+            decline_reason = data.get('reason', '')
+            if decline_reason:
+                logger.info(
+                    f"Mechanic {request.user.id} declined repair request "
+                    f"{repair_request.id}. Reason: {decline_reason}"
+                )
+
+            # Notify customer that a mechanic declined
+            NotificationService.create_notification(
+                user=repair_request.customer,
+                title="Mechanic Declined Request",
+                message=(
+                    f"{mechanic_name} is unable to accept your repair "
+                    f"request. We are still searching for available "
+                    f"mechanics."
+                ),
+                notification_type='info',
+                related_object=repair_request,
+                related_object_type='RepairRequest'
+            )
+
+            return Response(
+                api_response(
+                    message="Request declined successfully.",
+                    status=True,
+                    data=RepairRequestSerializer(
+                        repair_request,
+                        context={'request': request}
+                    ).data,
+                )
+            )
 
 
 class TrainingSessionListView(APIView):
