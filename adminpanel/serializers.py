@@ -13,7 +13,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'email', 'first_name', 'last_name']
-        ref_name = "AnalyticsUserSerializer"
+        ref_name = "AdminPanelUserSerializer"
 
 
 class AnalyticsDashboardSerializer(serializers.ModelSerializer):
@@ -110,4 +110,4 @@ class AnalyticsSummarySerializer(serializers.Serializer):
     total_mechanics = serializers.IntegerField()
     revenue_by_month = serializers.JSONField()
     top_merchants = serializers.ListField(child=serializers.CharField())
-    top_drivers = serializers.ListField(child=serializers.CharField()) 
+    top_drivers = serializers.ListField(child=serializers.CharField())

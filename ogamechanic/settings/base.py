@@ -37,7 +37,6 @@ INSTALLED_APPS = [
     'couriers',
     'mechanics',
     'rentals',
-    'analytics',
 ]
 
 MIDDLEWARE = [

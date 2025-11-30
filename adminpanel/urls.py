@@ -8,7 +8,13 @@ from .views import (
     AdminAnalyticsView,
     AdminCategoryCreateView,
     AdminNotificationView,
-    RoleNotificationView
+    RoleNotificationView,
+    # Analytics views
+    DashboardView,
+    AnalyticsSummaryView,
+    AnalyticsReportView,
+    RealTimeAnalyticsView,
+    AnalyticsCacheView,
 )
 
 app_name = 'adminpanel'
@@ -31,6 +37,13 @@ urlpatterns = [
         name='sales-analytics',
     ),
     path('analytics/', AdminAnalyticsView.as_view(), name='admin-analytics'),
+
+    # Analytics Dashboard Routes (moved from analytics app)
+    path('dashboard/', DashboardView.as_view(), name='dashboard'),
+    path('summary/', AnalyticsSummaryView.as_view(), name='summary'),
+    path('reports/', AnalyticsReportView.as_view(), name='reports'),
+    path('realtime/', RealTimeAnalyticsView.as_view(), name='realtime'),
+    path('cache/', AnalyticsCacheView.as_view(), name='cache'),
 
     path(
         'verifications/pending/',
