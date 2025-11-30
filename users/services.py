@@ -14,12 +14,28 @@ class NotificationService:
     
     @staticmethod
     def create_notification(user, title, message, notification_type='info', 
-                          related_object=None, related_object_type=None): # noqa
+                          related_object=None, related_object_type=None,
+                          role=None): # noqa
         """
-        Create an in-app notification for a user
+        Create an in-app notification for a user.
+        
+        Args:
+            user: User to receive the notification
+            title: Notification title
+            message: Notification message
+            notification_type: Type of notification (info, warning, error, success)
+            related_object: Related object (optional)
+            related_object_type: Type of related object (optional)
+            role: Role for which this notification is intended (optional)
+                  If not provided, uses user's active_role
         """
+        # Use provided role or fall back to user's active role
+        if role is None and hasattr(user, 'active_role'):
+            role = user.active_role
+        
         notification = Notification.objects.create(
             user=user,
+            role=role,
             title=title,
             message=message,
             notification_type=notification_type
@@ -43,14 +59,26 @@ class NotificationService:
         return notification
     
     @staticmethod
-    def create_bulk_notifications(users, title, message, notification_type='info'): # noqa
+    def create_bulk_notifications(users, title, message,
+                                notification_type='info', role=None): # noqa
         """
-        Create notifications for multiple users
+        Create notifications for multiple users.
+        
+        Args:
+            users: List of users to receive notifications
+            title: Notification title
+            message: Notification message
+            notification_type: Type of notification
+            role: Role for which notifications are intended (optional)
         """
         notifications = []
         for user in users:
+            # Use provided role or fall back to user's active role
+            user_role = role if role else getattr(user, 'active_role', None)
+            
             notification = Notification.objects.create(
                 user=user,
+                role=user_role,
                 title=title,
                 message=message,
                 notification_type=notification_type

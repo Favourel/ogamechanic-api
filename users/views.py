@@ -3,6 +3,7 @@ import traceback
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.db import models
 from rest_framework import status as http_status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -1717,13 +1718,24 @@ class NotificationListView(APIView):
         status_, data = get_incoming_request_checks(request)
         if not status_:
             return Response(
-                api_response(message=data, status=False), 
+                api_response(message=data, status=False),
                 status=http_status.HTTP_400_BAD_REQUEST
             )
-            
+
+        # Filter notifications by authenticated user and their active role
         notifications = Notification.objects.filter(
-            user=request.user).order_by('-created_at')
-        
+            user=request.user
+        )
+
+        # Filter by active role if user has one
+        if request.user.active_role:
+            notifications = notifications.filter(
+                models.Q(role=request.user.active_role) |
+                models.Q(role__isnull=True)  # Include role-agnostic notifs
+            )
+
+        notifications = notifications.order_by('-created_at')
+
         is_read = request.query_params.get('is_read')
         if is_read is not None:
             is_read = is_read.lower() == 'true'

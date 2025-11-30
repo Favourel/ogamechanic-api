@@ -217,6 +217,14 @@ class Notification(models.Model):
         on_delete=models.CASCADE,
         related_name='notifications'
     )
+    role = models.ForeignKey(
+        Role,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='notifications',
+        help_text=_('Role for which this notification is intended')
+    )
     title = models.CharField(_('title'), max_length=200, default="Enter title")
     message = models.TextField(_('message'))
     notification_type = models.CharField(

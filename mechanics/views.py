@@ -608,7 +608,6 @@ class MechanicResponseView(APIView):
                         "Optional reason for declining the request "
                         "(only used when action is 'decline')"
                     ),
-                    required=False,
                 ),
             },
         ),
