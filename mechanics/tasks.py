@@ -14,14 +14,14 @@ User = get_user_model()
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def find_and_notify_mechanics_task(self, repair_request_id, radius_km=5.0):
+def find_and_notify_mechanics_task(self, repair_request_id, radius_km=10.0):
     """
     Asynchronously find mechanics within the specified radius and send them
     requests.
 
     Args:
         repair_request_id: UUID of the RepairRequest instance
-        radius_km: Radius in kilometers (default: 5.0)
+        radius_km: Radius in kilometers (default: 10.0)
 
     Returns:
         int: Number of mechanics found and notified

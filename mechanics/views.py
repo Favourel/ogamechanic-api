@@ -343,12 +343,12 @@ class RepairRequestListView(APIView):
             if not repair_request.mechanic:
                 find_and_notify_mechanics_task.delay(
                     str(repair_request.id),
-                    radius_km=5.0
+                    radius_km=10.0
                 )
 
                 message = (
                     "Repair request created successfully. "
-                    "Searching for mechanics within 5km radius. "
+                    "Searching for mechanics within 10km radius. "
                     "You will be notified when mechanics respond."
                 )
             else:
