@@ -59,18 +59,26 @@ def find_and_notify_mechanics_task(self, repair_request_id, radius_km=5.0):
         logger.info(
             f"Found {mechanics.count()} mechanics for notification"
         )
-        print("Found {} mechanics for notification".format(mechanics.count()))
 
         mechanics_within_radius = []
+        logger.info(
+            f"Found {mechanics_within_radius.count()} mechanics within radius - {mechanics_within_radius}" # noqa
+        )
 
         for mechanic_profile in mechanics:
             mechanic_lat = float(mechanic_profile.latitude)
             mechanic_lon = float(mechanic_profile.longitude)
+            logger.info(
+                f"Found {mechanic_profile.user} mechanics within radius - {mechanic_profile.latitude}, {mechanic_profile.longitude}" # noqa
+            )
 
             # Calculate distance using haversine formula
             distance = LocationService.haversine_distance(
                 customer_lat, customer_lon,
                 mechanic_lat, mechanic_lon
+            )
+            logger.info(
+                f"Distance: {distance} - Radius: {radius_km}" # noqa
             )
 
             if distance <= radius_km:
