@@ -42,19 +42,35 @@ class NotificationService:
         )
         
         # Send real-time notification if user is online
-        NotificationService.send_realtime_notification(user, notification)
+        if hasattr(NotificationService, 'send_realtime_notification'):
+            try:
+                NotificationService.send_realtime_notification(
+                    user, notification
+                )
+            except Exception:
+                pass  # Fail silently for real-time notifications
         
         # Send email notification if user has email notifications enabled
-        if user.email_notifications:
-            NotificationService.send_email_notification.delay(
-                user.id, title, message, notification_type
-            )
+        if (hasattr(user, 'email_notifications') and
+                user.email_notifications and
+                hasattr(NotificationService, 'send_email_notification')):
+            try:
+                NotificationService.send_email_notification.delay(
+                    user.id, title, message, notification_type
+                )
+            except Exception:
+                pass  # Fail silently for email notifications
         
         # Send push notification if user has devices
-        if user.devices.filter(is_active=True).exists():
-            NotificationService.send_push_notification.delay(
-                user.id, title, message, notification_type
-            )
+        if hasattr(user, 'devices'):
+            try:
+                if user.devices.filter(is_active=True).exists():
+                    if hasattr(NotificationService, 'send_push_notification'):
+                        NotificationService.send_push_notification.delay(
+                            user.id, title, message, notification_type
+                        )
+            except Exception:
+                pass  # Fail silently for push notifications
         
         return notification
     
