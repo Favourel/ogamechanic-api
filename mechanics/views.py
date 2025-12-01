@@ -70,6 +70,7 @@ class RepairRequestListView(APIView):
         # Filter based on user's active role
         active_role = getattr(request.user, 'active_role', None)
         active_role_name = active_role.name if active_role else None
+        logger.info(f"Active role: {active_role_name} for user {request.user}")
 
         if active_role_name == "primary_user":
             # Customers see only their own requests
@@ -90,6 +91,8 @@ class RepairRequestListView(APIView):
         else:
             # No active role or unsupported role
             repair_requests = RepairRequest.objects.none()
+
+        logger.info(f"Repair requests: {repair_requests}")
 
         # Apply filters
         status_filter = request.query_params.get("status")
