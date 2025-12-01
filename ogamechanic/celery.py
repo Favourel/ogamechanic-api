@@ -57,7 +57,7 @@ def cleanup_expired_tokens():
     from rest_framework_simplejwt.token_blacklist.models import (
         OutstandingToken
     )
-    
+
     OutstandingToken.objects.filter(
         expires_at__lt=timezone.now()
     ).delete()

@@ -56,6 +56,10 @@ def find_and_notify_mechanics_task(self, repair_request_id, radius_km=5.0):
             latitude__isnull=False,
             longitude__isnull=False
         ).select_related('user')
+        logger.info(
+            f"Found {mechanics.count()} mechanics for notification"
+        )
+        print("Found {} mechanics for notification".format(mechanics.count()))
 
         mechanics_within_radius = []
 
