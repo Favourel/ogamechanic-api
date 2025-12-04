@@ -457,12 +457,32 @@ class RepairRequestDetailView(APIView):
         # Get user's active role
         active_role = getattr(request.user, 'active_role', None)
         active_role_name = active_role.name if active_role else None
+        logger.info(
+            f"PUT request by user {request.user.id} with active_role: "
+            f"{active_role_name}"
+        )
 
-        # Restrict customer updates based on status
+        # Check permissions based on active role
         user_is_customer = (
             active_role_name == "primary_user" and
             repair_request.customer == request.user
         )
+        user_is_mechanic = (
+            active_role_name == "mechanic" and
+            repair_request.mechanic == request.user
+        )
+
+        # Only customer or assigned mechanic can update
+        if not (user_is_customer or user_is_mechanic):
+            return Response(
+                api_response(
+                    message="You don't have permission to update this request.",
+                    status=False,
+                ),
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Restrict customer updates based on status
         forbidden_statuses_for_customer = [
             "accepted",
             "in_transit",
@@ -478,7 +498,8 @@ class RepairRequestDetailView(APIView):
             return Response(
                 api_response(
                     message=(
-                        "You cannot update this repair request in its current status."
+                        "You cannot update this repair request in its "
+                        "current status."
                     ),
                     status=False,
                 ),
@@ -491,7 +512,12 @@ class RepairRequestDetailView(APIView):
         )
 
         if serializer.is_valid():
+            logger.info(f"Serializer valid. Validated data: {serializer.validated_data}")
             updated_instance = serializer.save()  # <--- DRF calls update()
+            logger.info(
+                f"Updated instance status: {updated_instance.status}, "
+                f"ID: {updated_instance.id}"
+            )
 
             return Response(
                 api_response(
@@ -502,6 +528,8 @@ class RepairRequestDetailView(APIView):
                 ),
                 status=status.HTTP_200_OK
             )
+        else:
+            logger.error(f"Serializer errors: {serializer.errors}")
 
         return Response(
             api_response(message=serializer.errors, status=False),
@@ -526,12 +554,32 @@ class RepairRequestDetailView(APIView):
         # Get user's active role
         active_role = getattr(request.user, 'active_role', None)
         active_role_name = active_role.name if active_role else None
+        logger.info(
+            f"PATCH request by user {request.user.id} with active_role: "
+            f"{active_role_name}"
+        )
 
-        # Restrict customer updates based on status
+        # Check permissions based on active role
         user_is_customer = (
             active_role_name == "primary_user" and
             repair_request.customer == request.user
         )
+        user_is_mechanic = (
+            active_role_name == "mechanic" and
+            repair_request.mechanic == request.user
+        )
+
+        # Only customer or assigned mechanic can update
+        if not (user_is_customer or user_is_mechanic):
+            return Response(
+                api_response(
+                    message="You don't have permission to update this request.",
+                    status=False,
+                ),
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Restrict customer updates based on status
         forbidden_statuses_for_customer = [
             "accepted",
             "in_transit",
@@ -547,7 +595,8 @@ class RepairRequestDetailView(APIView):
             return Response(
                 api_response(
                     message=(
-                        "You cannot update this repair request in its current status."
+                        "You cannot update this repair request in its "
+                        "current status."
                     ),
                     status=False,
                 ),
@@ -560,7 +609,15 @@ class RepairRequestDetailView(APIView):
         )
 
         if serializer.is_valid():
+            logger.info(
+                f"Serializer valid. Validated data: "
+                f"{serializer.validated_data}"
+            )
             updated_instance = serializer.save()   # <-- calls update()
+            logger.info(
+                f"Updated instance status: {updated_instance.status}, "
+                f"ID: {updated_instance.id}"
+            )
 
             return Response(
                 api_response(
@@ -571,6 +628,8 @@ class RepairRequestDetailView(APIView):
                 ),
                 status=status.HTTP_200_OK
             )
+        else:
+            logger.error(f"Serializer errors: {serializer.errors}")
 
         return Response(
             api_response(message=serializer.errors, status=False),
