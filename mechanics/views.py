@@ -394,11 +394,21 @@ class RepairRequestDetailView(APIView):
             )
         repair_request = get_object_or_404(RepairRequest, id=repair_id)
 
-        # Check permissions
-        is_customer = repair_request.customer == request.user
-        is_assigned_mechanic = repair_request.mechanic == request.user
+        # Get user's active role
+        active_role = getattr(request.user, 'active_role', None)
+        active_role_name = active_role.name if active_role else None
+
+        # Check permissions based on active role
+        is_customer = (
+            active_role_name == "primary_user" and
+            repair_request.customer == request.user
+        )
+        is_assigned_mechanic = (
+            active_role_name == "mechanic" and
+            repair_request.mechanic == request.user
+        )
         is_notified_mechanic = (
-            request.user.roles.filter(name="mechanic").exists() and
+            active_role_name == "mechanic" and
             repair_request.notified_mechanics.filter(
                 id=request.user.id
             ).exists() and
@@ -444,8 +454,15 @@ class RepairRequestDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # Get user's active role
+        active_role = getattr(request.user, 'active_role', None)
+        active_role_name = active_role.name if active_role else None
+
         # Restrict customer updates based on status
-        user_is_customer = repair_request.customer == request.user
+        user_is_customer = (
+            active_role_name == "primary_user" and
+            repair_request.customer == request.user
+        )
         forbidden_statuses_for_customer = [
             "accepted",
             "in_transit",
@@ -506,8 +523,15 @@ class RepairRequestDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # Get user's active role
+        active_role = getattr(request.user, 'active_role', None)
+        active_role_name = active_role.name if active_role else None
+
         # Restrict customer updates based on status
-        user_is_customer = repair_request.customer == request.user
+        user_is_customer = (
+            active_role_name == "primary_user" and
+            repair_request.customer == request.user
+        )
         forbidden_statuses_for_customer = [
             "accepted",
             "in_transit",
