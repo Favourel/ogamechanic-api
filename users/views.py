@@ -1723,15 +1723,32 @@ class NotificationListView(APIView):
             )
 
         # Filter notifications by authenticated user and their active role
+        active_role = getattr(request.user, 'active_role', None)
+        active_role_name = active_role.name if active_role else None
+        
+        logger.info(
+            f"Fetching notifications for user {request.user.id} "
+            f"with active_role: {active_role_name}"
+        )
+        
         notifications = Notification.objects.filter(
             user=request.user
         )
 
         # Filter by active role if user has one
-        if request.user.active_role:
+        if active_role:
             notifications = notifications.filter(
-                models.Q(role=request.user.active_role) |
+                models.Q(role=active_role) |
                 models.Q(role__isnull=True)  # Include role-agnostic notifs
+            )
+            logger.info(
+                f"Filtered notifications by role: {active_role_name}. "
+                f"Count: {notifications.count()}"
+            )
+        else:
+            logger.warning(
+                f"User {request.user.id} has no active_role set. "
+                f"Showing all notifications."
             )
 
         notifications = notifications.order_by('-created_at')
