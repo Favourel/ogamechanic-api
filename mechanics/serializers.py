@@ -39,14 +39,31 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             'estimated_cost', 'service_address', 'service_latitude',
             'service_longitude', 'preferred_date', 'preferred_time_slot',
             'status', 
-            'priority', 'requested_at', 'accepted_at',
-            'started_at', 'completed_at', 'cancelled_at', 'notes',
+            'priority',
+            'requested_at', 'accepted_at',
+            'started_at', 'completed_at', 'cancelled_at',
+            'rejected_at',
+            'in_transit_at',
+            'in_progress_at',
+            'created_at',
+            'updated_at',
+            'notes',
             'cancellation_reason', 'actual_cost', 'is_active',
             'can_be_cancelled', 'notified_mechanics', 'can_accept'
         ]
         read_only_fields = [
-            'id', 'customer', 'mechanic', 'requested_at', 'accepted_at',
-            'started_at', 'completed_at', 'cancelled_at', 'is_active',
+            'id', 'customer', 'mechanic',
+            'requested_at',
+            'accepted_at',
+            'started_at',
+            'completed_at',
+            'cancelled_at',
+            'rejected_at',
+            'in_transit_at',
+            'in_progress_at',
+            'created_at',
+            'updated_at',
+            'is_active',
             'can_be_cancelled', 'notified_mechanics', 'can_accept'
         ]
     

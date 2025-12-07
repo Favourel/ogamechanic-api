@@ -54,8 +54,16 @@ class RepairRequestAdmin(admin.ModelAdmin):
         }),
         ('Timestamps', {
             'fields': (
-                'requested_at', 'accepted_at', 'started_at',
-                'completed_at', 'cancelled_at'
+                'requested_at',
+                'accepted_at',
+                'started_at',
+                'in_transit_at',
+                'in_progress_at',
+                'completed_at',
+                'cancelled_at',
+                'rejected_at',
+                'created_at',
+                'updated_at',
             ),
             'classes': ('collapse',)
         }),
