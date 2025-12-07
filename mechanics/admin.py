@@ -10,11 +10,12 @@ class RepairRequestAdmin(admin.ModelAdmin):
         'vehicle_model', 'status', 'priority', 'requested_at',
         'notified_mechanics_count'
     ]
-    
+
     def notified_mechanics_count(self, obj):
         """Count of mechanics notified about this request"""
         return obj.notified_mechanics.count()
     notified_mechanics_count.short_description = "Notified Mechanics"
+
     list_filter = [
         'status', 'priority', 'service_type', 'preferred_time_slot',
         'requested_at', 'accepted_at', 'completed_at'
@@ -25,7 +26,8 @@ class RepairRequestAdmin(admin.ModelAdmin):
     ]
     readonly_fields = [
         'id', 'requested_at', 'accepted_at', 'started_at',
-        'completed_at', 'cancelled_at'
+        'completed_at', 'cancelled_at', 'created_at', 'updated_at',
+        'in_transit_at', 'in_progress_at'
     ]
     date_hierarchy = 'requested_at'
     list_per_page = 25
