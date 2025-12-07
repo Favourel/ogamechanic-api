@@ -1898,9 +1898,14 @@ class CheckoutView(APIView):
             data.get('mobile_callback_url')
             or request.query_params.get('mobile_callback_url')
         )
-        # Format: e.g., "myapp://payment-callback" (deep link for mobile)
+        # Format: e.g., "ogamechanic://payment?reference={reference}&status={status}"
+        # Paystack will replace {reference} and {status} with actual values
         if mobile_callback:
-            callback_url = mobile_callback
+            # Format the deep link with placeholders for Paystack
+            callback_url = mobile_callback.format(
+                reference=str(order.id),
+                status='{status}'  # Paystack replaces this
+            )
 
         headers = {
             'Authorization': f'Bearer {paystack_secret}',
