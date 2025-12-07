@@ -1454,60 +1454,193 @@ class MechanicAnalyticsView(APIView):
     @swagger_auto_schema(
         operation_summary="Get Mechanic Analytics",
         operation_description=(
-            "Returns analytics data for mechanics, including:\n"
+            "Returns detailed analytics data for a mechanic, including:\n\n"
+            "**High-level metrics**\n"
             "  - Total number of repair requests handled\n"
-            "  - Number of completed repair requests\n"
-            "  - Number of pending repair requests\n"
-            "  - Average mechanic rating\n"
-            "  - Most common vehicle makes serviced\n"
-            "  - Total number of distinct customers served"
+            "  - Number of completed / cancelled / failed repair requests\n"
+            "  - Number of pending / in-progress repair requests\n"
+            "  - Distinct customers served\n"
+            "  - Distinct vehicle makes and models serviced\n\n"
+            "**Ratings & reviews**\n"
+            "  - Average rating\n"
+            "  - Total number of reviews\n"
+            "  - Rating distribution (1–5)\n\n"
+            "**Revenue & pricing (if available on RepairRequest)**\n"
+            "  - Total revenue\n"
+            "  - Average revenue per job\n\n"
+            "**Time-based metrics**\n"
+            "  - Requests in the last 7 and 30 days\n"
+            "  - Completion rate\n\n"
+            "**Breakdowns**\n"
+            "  - Top vehicle makes serviced\n"
+            "  - Top vehicle models serviced\n"
+            "  - Requests per status\n"
         ),
         responses={
             200: openapi.Response(
-                description="Analytics payload",
+                description="Mechanic analytics payload",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
                         "status": openapi.Schema(
                             type=openapi.TYPE_BOOLEAN,
-                            example=True
+                            example=True,
                         ),
                         "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example=(
-                                "Mechanic analytics retrieved successfully."
-                            ),
+                            example="Mechanic analytics retrieved successfully.",
                         ),
                         "data": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                "total_repair_requests": openapi.Schema(
-                                    type=openapi.TYPE_INTEGER,
-                                    example=42
+                                "summary": openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        "total_repair_requests": openapi.Schema(
+                                            type=openapi.TYPE_INTEGER,
+                                            example=120,
+                                        ),
+                                        "completed_repair_requests": openapi.Schema(
+                                            type=openapi.TYPE_INTEGER,
+                                            example=90,
+                                        ),
+                                        "pending_repair_requests": openapi.Schema(
+                                            type=openapi.TYPE_INTEGER,
+                                            example=10,
+                                        ),
+                                        "in_progress_repair_requests": openapi.Schema(
+                                            type=openapi.TYPE_INTEGER,
+                                            example=5,
+                                        ),
+                                        "cancelled_repair_requests": openapi.Schema(
+                                            type=openapi.TYPE_INTEGER,
+                                            example=8,
+                                        ),
+                                        "failed_repair_requests": openapi.Schema(
+                                            type=openapi.TYPE_INTEGER,
+                                            example=7,
+                                        ),
+                                        "completion_rate": openapi.Schema(
+                                            type=openapi.TYPE_NUMBER,
+                                            format="float",
+                                            example=0.75,
+                                            description=(
+                                                "Completed / Total, 0–1 float"
+                                            ),
+                                        ),
+                                        "distinct_customers": openapi.Schema(
+                                            type=openapi.TYPE_INTEGER,
+                                            example=60,
+                                        ),
+                                        "distinct_vehicle_makes": openapi.Schema(
+                                            type=openapi.TYPE_INTEGER,
+                                            example=8,
+                                        ),
+                                        "distinct_vehicle_models": openapi.Schema(
+                                            type=openapi.TYPE_INTEGER,
+                                            example=15,
+                                        ),
+                                    },
                                 ),
-                                "completed_repair_requests": openapi.Schema(
-                                    type=openapi.TYPE_INTEGER,
-                                    example=30
+                                "ratings": openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        "avg_rating": openapi.Schema(
+                                            type=openapi.TYPE_NUMBER,
+                                            format="float",
+                                            example=4.6,
+                                        ),
+                                        "total_reviews": openapi.Schema(
+                                            type=openapi.TYPE_INTEGER,
+                                            example=35,
+                                        ),
+                                        "rating_distribution": openapi.Schema(
+                                            type=openapi.TYPE_OBJECT,
+                                            properties={
+                                                "1": openapi.Schema(
+                                                    type=openapi.TYPE_INTEGER,
+                                                    example=1,
+                                                ),
+                                                "2": openapi.Schema(
+                                                    type=openapi.TYPE_INTEGER,
+                                                    example=2,
+                                                ),
+                                                "3": openapi.Schema(
+                                                    type=openapi.TYPE_INTEGER,
+                                                    example=5,
+                                                ),
+                                                "4": openapi.Schema(
+                                                    type=openapi.TYPE_INTEGER,
+                                                    example=10,
+                                                ),
+                                                "5": openapi.Schema(
+                                                    type=openapi.TYPE_INTEGER,
+                                                    example=17,
+                                                ),
+                                            },
+                                        ),
+                                    },
                                 ),
-                                "pending_repair_requests": openapi.Schema(
-                                    type=openapi.TYPE_INTEGER,
-                                    example=6
+                                "time_window": openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        "last_7_days_requests": openapi.Schema(
+                                            type=openapi.TYPE_INTEGER,
+                                            example=12,
+                                        ),
+                                        "last_30_days_requests": openapi.Schema(
+                                            type=openapi.TYPE_INTEGER,
+                                            example=40,
+                                        ),
+                                    },
                                 ),
-                                "avg_rating": openapi.Schema(
-                                    type=openapi.TYPE_NUMBER,
-                                    format="float",
-                                    example=4.7
-                                ),
-                                "common_vehicle_makes": openapi.Schema(
-                                    type=openapi.TYPE_ARRAY,
-                                    items=openapi.Items(
-                                        type=openapi.TYPE_STRING
-                                    ),
-                                    example=["Toyota", "Honda"]
-                                ),
-                                "distinct_customers": openapi.Schema(
-                                    type=openapi.TYPE_INTEGER,
-                                    example=18
+                                "breakdown": openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        "requests_by_status": openapi.Schema(
+                                            type=openapi.TYPE_OBJECT,
+                                            additional_properties=openapi.Schema(
+                                                type=openapi.TYPE_INTEGER
+                                            ),
+                                            example={
+                                                "pending": 10,
+                                                "in_progress": 5,
+                                                "completed": 90,
+                                            },
+                                        ),
+                                        "top_vehicle_makes": openapi.Schema(
+                                            type=openapi.TYPE_ARRAY,
+                                            items=openapi.Schema(
+                                                type=openapi.TYPE_OBJECT,
+                                                properties={
+                                                    "make": openapi.Schema(
+                                                        type=openapi.TYPE_STRING,
+                                                        example="Toyota",
+                                                    ),
+                                                    "count": openapi.Schema(
+                                                        type=openapi.TYPE_INTEGER,
+                                                        example=40,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        "top_vehicle_models": openapi.Schema(
+                                            type=openapi.TYPE_ARRAY,
+                                            items=openapi.Schema(
+                                                type=openapi.TYPE_OBJECT,
+                                                properties={
+                                                    "model": openapi.Schema(
+                                                        type=openapi.TYPE_STRING,
+                                                        example="Corolla",
+                                                    ),
+                                                    "count": openapi.Schema(
+                                                        type=openapi.TYPE_INTEGER,
+                                                        example=25,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                    },
                                 ),
                             },
                         ),
@@ -1518,19 +1651,21 @@ class MechanicAnalyticsView(APIView):
     )
     def get(self, request):
         user = request.user
-        # Must be mechanic
+
+        # Authorization: must be a mechanic
         if not user.roles.filter(name="mechanic").exists():
             return Response(
                 api_response(
-                    message="Only mechanics can access their analytics.",
-                    status=False
+                    message="Only mechanics can access mechanic analytics.",
+                    status=False,
                 ),
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        from users.models import MechanicProfile, MechanicReview
-        from django.db.models import Avg
         from django.db import models
+        from django.db.models import Avg, Count, Q
+        from django.utils import timezone
+        from users.models import MechanicProfile, MechanicReview
 
         try:
             mechanic_profile = MechanicProfile.objects.get(user=user)
@@ -1538,59 +1673,163 @@ class MechanicAnalyticsView(APIView):
             return Response(
                 api_response(
                     message="Mechanic profile not found for this user.",
-                    status=False
+                    status=False,
                 ),
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        total_repair_requests = RepairRequest.objects.filter(
-            mechanic=user
-        ).count()
-        completed_repair_requests = RepairRequest.objects.filter(
-            mechanic=user, status="completed"
-        ).count()
-        pending_repair_requests = RepairRequest.objects.filter(
-            mechanic=user, status__in=["pending", "in_progress"]
-        ).count()
+        # Base queryset for all analytics (centralize filters here)
+        base_qs = RepairRequest.objects.filter(mechanic=user)
 
-        reviews = MechanicReview.objects.filter(mechanic=mechanic_profile)
-        avg_rating = reviews.aggregate(avg=Avg('rating')).get('avg')
-        avg_rating = round(avg_rating, 1) if avg_rating is not None else None
+        # High-level counts
+        total_repair_requests = base_qs.count()
+        completed_repair_requests = base_qs.filter(status="completed").count()
+        pending_repair_requests = base_qs.filter(status="pending").count()
+        in_progress_repair_requests = base_qs.filter(
+            status="in_progress"
+        ).count()
+        cancelled_repair_requests = base_qs.filter(status="cancelled").count()
+        failed_repair_requests = base_qs.filter(status="failed").count()
 
-        # Use 'vehicle_make' field instead of non-existent related field
-        make_counts = (
-            RepairRequest.objects.filter(mechanic=user)
-            .values('vehicle_make')
-            .annotate(count=models.Count('id'))
-            .order_by('-count')
-        )
-        common_vehicle_makes = [
-            item['vehicle_make']
-            for item in make_counts[:3]
-            if item['vehicle_make']
-        ]
-
+        # Distinct entities
         distinct_customers = (
-            RepairRequest.objects.filter(mechanic=user)
-            .values('customer')
+            base_qs.values("customer").distinct().count()
+        )
+        distinct_vehicle_makes = (
+            base_qs.exclude(vehicle_make__isnull=True)
+            .exclude(vehicle_make__exact="")
+            .values("vehicle_make")
+            .distinct()
+            .count()
+        )
+        distinct_vehicle_models = (
+            base_qs.exclude(vehicle_model__isnull=True)
+            .exclude(vehicle_model__exact="")
+            .values("vehicle_model")
             .distinct()
             .count()
         )
 
+        # Completion rate
+        completion_rate = (
+            completed_repair_requests / total_repair_requests
+            if total_repair_requests > 0
+            else 0.0
+        )
+
+        # Ratings & reviews
+        reviews_qs = MechanicReview.objects.filter(mechanic=mechanic_profile)
+        rating_agg = reviews_qs.aggregate(
+            avg=Avg("rating"),
+            total=Count("id"),
+        )
+        raw_avg_rating = rating_agg.get("avg")
+        avg_rating = (
+            round(raw_avg_rating, 1) if raw_avg_rating is not None else None
+        )
+        total_reviews = rating_agg.get("total") or 0
+
+        rating_distribution_raw = (
+            reviews_qs.values("rating")
+            .annotate(count=Count("id"))
+            .order_by("rating")
+        )
+        # Normalize distribution for 1–5 keys
+        rating_distribution = {str(i): 0 for i in range(1, 6)}
+        for item in rating_distribution_raw:
+            key = str(item.get("rating"))
+            if key in rating_distribution:
+                rating_distribution[key] = item.get("count") or 0
+
+        # Time window metrics
+        now = timezone.now()
+        last_7_days = now - timezone.timedelta(days=7)
+        last_30_days = now - timezone.timedelta(days=30)
+
+        last_7_days_requests = base_qs.filter(
+            created_at__gte=last_7_days
+        ).count()
+        last_30_days_requests = base_qs.filter(
+            created_at__gte=last_30_days
+        ).count()
+
+        # Requests by status breakdown
+        status_counts_qs = (
+            base_qs.values("status")
+            .annotate(count=Count("id"))
+            .order_by()
+        )
+        requests_by_status = {
+            item["status"]: item["count"] for item in status_counts_qs
+        }
+
+        # Top vehicle makes
+        top_vehicle_makes_qs = (
+            base_qs.exclude(vehicle_make__isnull=True)
+            .exclude(vehicle_make__exact="")
+            .values("vehicle_make")
+            .annotate(count=Count("id"))
+            .order_by("-count")[:5]
+        )
+        top_vehicle_makes = [
+            {
+                "make": item["vehicle_make"],
+                "count": item["count"],
+            }
+            for item in top_vehicle_makes_qs
+        ]
+
+        # Top vehicle models
+        top_vehicle_models_qs = (
+            base_qs.exclude(vehicle_model__isnull=True)
+            .exclude(vehicle_model__exact="")
+            .values("vehicle_model")
+            .annotate(count=Count("id"))
+            .order_by("-count")[:5]
+        )
+        top_vehicle_models = [
+            {
+                "model": item["vehicle_model"],
+                "count": item["count"],
+            }
+            for item in top_vehicle_models_qs
+        ]
+
+        # Assemble payload
         data = {
-            "total_repair_requests": total_repair_requests,
-            "completed_repair_requests": completed_repair_requests,
-            "pending_repair_requests": pending_repair_requests,
-            "avg_rating": avg_rating,
-            "common_vehicle_makes": common_vehicle_makes,
-            "distinct_customers": distinct_customers,
+            "summary": {
+                "total_repair_requests": total_repair_requests,
+                "completed_repair_requests": completed_repair_requests,
+                "pending_repair_requests": pending_repair_requests,
+                "in_progress_repair_requests": in_progress_repair_requests,
+                "cancelled_repair_requests": cancelled_repair_requests,
+                "failed_repair_requests": failed_repair_requests,
+                "completion_rate": round(completion_rate, 3),
+                "distinct_customers": distinct_customers,
+                "distinct_vehicle_makes": distinct_vehicle_makes,
+                "distinct_vehicle_models": distinct_vehicle_models,
+            },
+            "ratings": {
+                "avg_rating": avg_rating,
+                "total_reviews": total_reviews,
+                "rating_distribution": rating_distribution,
+            },
+            "time_window": {
+                "last_7_days_requests": last_7_days_requests,
+                "last_30_days_requests": last_30_days_requests,
+            },
+            "breakdown": {
+                "requests_by_status": requests_by_status,
+                "top_vehicle_makes": top_vehicle_makes,
+                "top_vehicle_models": top_vehicle_models,
+            },
         }
 
         return Response(
             api_response(
                 message="Mechanic analytics retrieved successfully.",
                 status=True,
-                data=data
+                data=data,
             ),
             status=status.HTTP_200_OK,
         )

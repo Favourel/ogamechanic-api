@@ -3,8 +3,11 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
+import logging
 
 User = get_user_model()
+
+logger = logging.getLogger(__name__)
 
 
 class RepairRequest(models.Model):
@@ -94,6 +97,20 @@ class RepairRequest(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+    # failed_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    in_transit_at = models.DateTimeField(null=True, blank=True)
+    in_progress_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        null=True,
+        blank=True
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        null=True,
+        blank=True
+    )
 
     # Additional fields
     notes = models.TextField(blank=True)
@@ -196,9 +213,53 @@ class RepairRequest(models.Model):
         if self.status == "pending":
             self.status = "rejected"
             self.cancellation_reason = reason
+            self.rejected_at = timezone.now()
             self.save()
             return True
         return False
+
+    def save(self, *args, **kwargs):
+        """
+        Override save to automatically update timestamp fields
+        based on status changes
+        """
+        # Track if this is an update (has pk) or new instance
+        is_update = self.pk is not None
+        
+        if is_update:
+            # Get the old instance to check if status changed
+            try:
+                old_instance = RepairRequest.objects.get(pk=self.pk)
+                old_status = old_instance.status
+                
+                # Only update timestamps if status actually changed
+                if old_status != self.status:
+                    now = timezone.now()
+                    
+                    # Update timestamp based on new status
+                    if self.status == "accepted" and not self.accepted_at:
+                        self.accepted_at = now
+                    elif self.status == "in_transit" and not self.in_transit_at:  # noqa
+                        self.in_transit_at = now
+                    elif self.status == "in_progress" and not self.in_progress_at:  # noqa
+                        self.in_progress_at = now
+                    elif self.status == "in_progress" and not self.started_at:  # noqa
+                        self.started_at = now
+                    elif self.status == "completed" and not self.completed_at:
+                        self.completed_at = now
+                    elif self.status == "cancelled" and not self.cancelled_at:
+                        self.cancelled_at = now
+                    elif self.status == "rejected" and not self.rejected_at:
+                        self.rejected_at = now
+            except RepairRequest.DoesNotExist:
+                logger.warning(
+                    "Previous RepairRequest instance with id %s not found "
+                    "while attempting to update status timestamps.",
+                    self.pk
+                )
+                pass
+        
+        super().save(*args, **kwargs)
 
 
 class TrainingSession(models.Model):
