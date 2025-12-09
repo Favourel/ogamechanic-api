@@ -82,6 +82,832 @@ User = get_user_model()
 # All new user registration should use the step-by-step flow at /api/users/register/step/<step>/  # noqa
 
 
+class UserRegistrationView(APIView):
+    """
+    Unified user registration endpoint.
+    
+    This endpoint provides a simple, single-step registration flow for users.
+    It creates a user account with basic information and assigns a role.
+    
+    **Features:**
+    - Single API call registration
+    - Email validation and verification
+    - Password strength validation
+    - Role assignment
+    - Automatic JWT token generation
+    - Email verification code sent automatically
+    
+    **Required Fields:**
+    - email: Valid email address
+    - password: Strong password (min 8 chars, uppercase, lowercase, number)
+    - confirm_password: Must match password
+    - first_name: User's first name
+    - last_name: User's last name
+    - phone_number: Valid phone number
+    - role: Role name (primary_user, driver, merchant, mechanic)
+    
+    **Response:**
+    - Returns JWT access and refresh tokens
+    - Returns user information
+    - Sends verification email with code
+    """
+    permission_classes = [AllowAny]
+    throttle_classes = [AuthRateThrottle]
+    
+    @swagger_auto_schema(
+        operation_summary="Register New User",
+        operation_description="""
+        Register a new user account with basic information.
+        
+        **Process:**
+        1. Validates all input data
+        2. Checks if email is already registered
+        3. Creates user account with provided information
+        4. Assigns selected role to user
+        5. Sends email verification code
+        6. Returns JWT tokens for immediate login
+        
+        **Password Requirements:**
+        - Minimum 8 characters
+        - At least one uppercase letter
+        - At least one lowercase letter
+        - At least one number
+        - At least one special character
+        
+        **Phone Number Format:**
+        - Nigerian phone numbers accepted
+        - Format: 080XXXXXXXX or +234XXXXXXXXXX
+        
+        **Role Selection:**
+        - Accepted roles: primary_user, driver, merchant, mechanic
+        
+        **Note:** After registration, users with roles like merchant, mechanic,
+        or driver will need to complete their profile using the respective
+        profile management endpoints.
+        """,
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=[
+                'email', 'password', 'confirm_password',
+                'first_name', 'last_name', 'phone_number', 'role'
+            ],
+            properties={
+                'email': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format='email',
+                    description='Valid email address',
+                    example='user@example.com'
+                ),
+                'password': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format='password',
+                    description='Strong password (min 8 chars)',
+                    example='SecurePass123!'
+                ),
+                'confirm_password': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format='password',
+                    description='Must match password',
+                    example='SecurePass123!'
+                ),
+                'first_name': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='User first name',
+                    example='John'
+                ),
+                'last_name': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='User last name',
+                    example='Doe'
+                ),
+                'phone_number': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='Valid Nigerian phone number',
+                    example='08012345678'
+                ),
+                'role': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='Role name (primary_user, driver, merchant, mechanic)',
+                    example='primary_user'
+                ),
+            }
+        ),
+        responses={
+            201: openapi.Response(
+                description='User registered successfully',
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN,
+                            example=True
+                        ),
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example='Registration successful! Verification email sent.'
+                        ),
+                        'data': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'access': openapi.Schema(
+                                    type=openapi.TYPE_STRING,
+                                    description='JWT access token'
+                                ),
+                                'refresh': openapi.Schema(
+                                    type=openapi.TYPE_STRING,
+                                    description='JWT refresh token'
+                                ),
+                                'user': openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        'id': openapi.Schema(type=openapi.TYPE_STRING),
+                                        'email': openapi.Schema(type=openapi.TYPE_STRING),
+                                        'first_name': openapi.Schema(type=openapi.TYPE_STRING),
+                                        'last_name': openapi.Schema(type=openapi.TYPE_STRING),
+                                        'phone_number': openapi.Schema(type=openapi.TYPE_STRING),
+                                        'role': openapi.Schema(type=openapi.TYPE_STRING),
+                                        'is_verified': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                    }
+                                )
+                            }
+                        )
+                    }
+                )
+            ),
+            400: openapi.Response(
+                description='Invalid input data',
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN,
+                            example=False
+                        ),
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example='Validation error'
+                        ),
+                        'errors': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            description='Field-specific validation errors'
+                        )
+                    }
+                )
+            ),
+            409: openapi.Response(
+                description='User already exists',
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN,
+                            example=False
+                        ),
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example='User with this email already exists'
+                        )
+                    }
+                )
+            ),
+            429: openapi.Response(
+                description='Too many requests',
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN,
+                            example=False
+                        ),
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example='Rate limit exceeded. Please try again later.'
+                        )
+                    }
+                )
+            )
+        }
+    )
+    def post(self, request):
+        """Handle user registration"""
+        try:
+            # Extract data from request
+            data = request.data
+            
+            # Validate required fields
+            required_fields = [
+                'email', 'password', 'confirm_password',
+                'first_name', 'last_name', 'phone_number', 'role'
+            ]
+            
+            missing_fields = [
+                field for field in required_fields
+                if field not in data or not data.get(field)
+            ]
+
+            if missing_fields:
+                return Response(
+                    api_response(
+                        message=(
+                            f"Missing required fields: "
+                            f"{', '.join(missing_fields)}"
+                        ),
+                        status=False,
+                        errors={'missing_fields': missing_fields}
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Extract and validate data
+            email = data.get('email', '').lower().strip()
+            password = data.get('password')
+            confirm_password = data.get('confirm_password')
+            first_name = data.get('first_name', '').strip()
+            last_name = data.get('last_name', '').strip()
+            phone_number = data.get('phone_number', '').strip()
+            role_name = data.get('role', '').lower().strip()
+            
+            # Validate email format
+            try:
+                from django.core.validators import (
+                    validate_email as django_validate_email
+                )
+                django_validate_email(email)
+            except ValidationError:
+                return Response(
+                    api_response(
+                        message="Invalid email format",
+                        status=False,
+                        errors={'email': ['Enter a valid email address']}
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check if user already exists
+            if User.objects.filter(email=email).exists():
+                return Response(
+                    api_response(
+                        message="User with this email already exists",
+                        status=False,
+                        errors={'email': ['This email is already registered']}
+                    ),
+                    status=http_status.HTTP_409_CONFLICT
+                )
+            
+            # Validate password match
+            if password != confirm_password:
+                return Response(
+                    api_response(
+                        message="Passwords do not match",
+                        status=False,
+                        errors={'confirm_password': ['Passwords must match']}
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Validate password strength
+            try:
+                validate_password(password)
+            except ValidationError as e:
+                return Response(
+                    api_response(
+                        message="Password does not meet requirements",
+                        status=False,
+                        errors={'password': list(e.messages)}
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Validate and format phone number
+            try:
+                from ogamechanic.modules.utils import format_phone_number
+                formatted_phone = format_phone_number(phone_number)
+            except Exception as e:
+                return Response(
+                    api_response(
+                        message="Invalid phone number format",
+                        status=False,
+                        errors={'phone_number': [str(e)]}
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Validate role
+            valid_roles = ['primary_user', 'driver', 'merchant', 'mechanic']
+            if role_name not in valid_roles:
+                return Response(
+                    api_response(
+                        message="Invalid role selected",
+                        status=False,
+                        errors={
+                            'role': [
+                                f'Role must be one of: {", ".join(valid_roles)}'
+                            ]
+                        }
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+
+            try:
+                role = Role.objects.get(name=role_name)
+            except Role.DoesNotExist:
+                return Response(
+                    api_response(
+                        message=f"Role '{role_name}' not found in database",
+                        status=False,
+                        errors={'role': ['Role does not exist']}
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Create user
+            user_data = {
+                'email': email,
+                'first_name': first_name,
+                'last_name': last_name,
+                'phone_number': formatted_phone,
+                'is_active': True,
+                'is_verified': False  # User needs to verify email
+            }
+
+            # Create the user
+            user = User.objects.create_user(
+                password=password,
+                **user_data
+            )
+            
+            # Assign role
+            user.roles.add(role)
+            user.active_role = role
+            user.save()
+            
+            # Generate verification code
+            import random
+            from django.core.cache import cache
+            verification_code = str(random.randint(100000, 999999))
+
+            # Store verification code in cache (expires in 15 minutes)
+            cache_key = f"email_verification_{email}"
+            cache.set(cache_key, verification_code, timeout=900)  # 15 min
+
+            # Log verification code
+            logger.info(
+                f"Verification code for {email}: {verification_code}"
+            )
+            print(f"Verification code for {email}: {verification_code}")
+
+            # Send verification email
+            try:
+                from .tasks import send_step_by_step_verification_email
+                send_step_by_step_verification_email.delay(
+                    email, verification_code
+                )
+            except Exception as e:
+                logger.error(f"Failed to send verification email: {e}")
+            
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+            access_token = str(refresh.access_token)
+            refresh_token = str(refresh)
+            
+            # Prepare response data
+            user_data_response = {
+                'id': str(user.id),
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'phone_number': user.phone_number,
+                'role': role.name,
+                'is_verified': user.is_verified,
+            }
+            
+            # Log user activity
+            try:
+                UserActivityLog.objects.create(
+                    user=user,
+                    action='user_registered',
+                    details=f'User registered with role: {role.name}'
+                )
+            except Exception as e:
+                logger.error(f"Failed to log user activity: {e}")
+            
+            return Response(
+                api_response(
+                    message=(
+                        "Registration successful! "
+                        "A 6-digit verification code has been sent to your email."
+                    ),
+                    status=True,
+                    data={
+                        'access': access_token,
+                        'refresh': refresh_token,
+                        'user': user_data_response,
+                        'verification_required': True,
+                        'verification_info': {
+                            'message': (
+                                'Please verify your email using the code sent. '
+                                'Code expires in 15 minutes.'
+                            ),
+                            'verify_endpoint': '/api/users/verify-email-code/',
+                            'resend_endpoint': '/api/users/resend-verification-code/'
+                        }
+                    }
+                ),
+                status=http_status.HTTP_201_CREATED
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Registration error: {str(e)}\n{traceback.format_exc()}"
+            )
+            return Response(
+                api_response(
+                    message=f"Registration failed: {str(e)}",
+                    status=False
+                ),
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class VerifyEmailCodeView(APIView):
+    """
+    Verify email using 6-digit code sent during registration.
+    
+    This endpoint allows users to verify their email address using the
+    6-digit verification code sent to their email during registration.
+    
+    **Required Fields:**
+    - email: The email address to verify
+    - code: The 6-digit verification code
+    
+    **Response:**
+    - Success message if code is valid
+    - Error message if code is invalid or expired
+    """
+    permission_classes = [AllowAny]
+    throttle_classes = [AuthRateThrottle]
+    
+    @swagger_auto_schema(
+        operation_summary="Verify Email with Code",
+        operation_description="""
+        Verify user email address using the 6-digit code sent during registration.
+        
+        **Process:**
+        1. User receives 6-digit code via email after registration
+        2. User submits email and code to this endpoint
+        3. System validates the code
+        4. If valid, marks user's email as verified
+        
+        **Code Expiration:**
+        - Verification codes expire after 15 minutes
+        - Request a new code if expired
+        
+        **Note:** Users can still use the API with unverified email,
+        but some features may be restricted until verification.
+        """,
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['email', 'code'],
+            properties={
+                'email': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format='email',
+                    description='Email address to verify',
+                    example='user@example.com'
+                ),
+                'code': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='6-digit verification code',
+                    example='123456'
+                ),
+            }
+        ),
+        responses={
+            200: openapi.Response(
+                description='Email verified successfully',
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN,
+                            example=True
+                        ),
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example='Email verified successfully!'
+                        )
+                    }
+                )
+            ),
+            400: openapi.Response(
+                description='Invalid or expired code',
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN,
+                            example=False
+                        ),
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example='Invalid or expired verification code'
+                        )
+                    }
+                )
+            ),
+            404: openapi.Response(
+                description='User not found',
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN,
+                            example=False
+                        ),
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example='User with this email not found'
+                        )
+                    }
+                )
+            )
+        }
+    )
+    def post(self, request):
+        """Verify email with 6-digit code"""
+        try:
+            from django.core.cache import cache
+            
+            # Extract data
+            email = request.data.get('email', '').lower().strip()
+            code = request.data.get('code', '').strip()
+            
+            # Validate required fields
+            if not email or not code:
+                return Response(
+                    api_response(
+                        message="Email and code are required",
+                        status=False,
+                        errors={
+                            'missing_fields': [
+                                f for f in ['email', 'code']
+                                if not request.data.get(f)
+                            ]
+                        }
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check if user exists
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                return Response(
+                    api_response(
+                        message="User with this email not found",
+                        status=False
+                    ),
+                    status=http_status.HTTP_404_NOT_FOUND
+                )
+            
+            # Check if already verified
+            if user.is_verified:
+                return Response(
+                    api_response(
+                        message="Email is already verified",
+                        status=True
+                    ),
+                    status=http_status.HTTP_200_OK
+                )
+            
+            # Get stored verification code from cache
+            cache_key = f"email_verification_{email}"
+            stored_code = cache.get(cache_key)
+            
+            if not stored_code:
+                return Response(
+                    api_response(
+                        message=(
+                            "Verification code expired or not found. "
+                            "Please request a new code."
+                        ),
+                        status=False
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Verify code
+            if code != stored_code:
+                return Response(
+                    api_response(
+                        message="Invalid verification code",
+                        status=False
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Mark user as verified
+            user.is_verified = True
+            user.save()
+            
+            # Delete the verification code from cache
+            cache.delete(cache_key)
+            
+            # Log activity
+            try:
+                UserActivityLog.objects.create(
+                    user=user,
+                    action='email_verified',
+                    details='Email verified successfully'
+                )
+            except Exception as e:
+                logger.error(f"Failed to log verification activity: {e}")
+            
+            return Response(
+                api_response(
+                    message="Email verified successfully!",
+                    status=True
+                ),
+                status=http_status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Email verification error: {str(e)}\n{traceback.format_exc()}"
+            )
+            return Response(
+                api_response(
+                    message=f"Verification failed: {str(e)}",
+                    status=False
+                ),
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class ResendVerificationCodeView(APIView):
+    """
+    Resend verification code to user's email.
+    
+    This endpoint allows users to request a new verification code
+    if their previous code expired or was lost.
+    
+    **Required Fields:**
+    - email: The email address to send code to
+    
+    **Response:**
+    - Success message with new code sent
+    - Error if user not found or already verified
+    """
+    permission_classes = [AllowAny]
+    throttle_classes = [AuthRateThrottle]
+    
+    @swagger_auto_schema(
+        operation_summary="Resend Verification Code",
+        operation_description="""
+        Request a new verification code to be sent to the email address.
+        
+        **Use Cases:**
+        - Previous code expired (15 minutes)
+        - Code was not received
+        - Code was lost
+        
+        **Rate Limiting:**
+        - Subject to rate limiting to prevent abuse
+        - Wait a few minutes between requests
+        """,
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['email'],
+            properties={
+                'email': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format='email',
+                    description='Email address to send code to',
+                    example='user@example.com'
+                ),
+            }
+        ),
+        responses={
+            200: openapi.Response(
+                description='Verification code sent',
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN,
+                            example=True
+                        ),
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example='Verification code sent to your email'
+                        )
+                    }
+                )
+            ),
+            400: openapi.Response(
+                description='Email already verified',
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN,
+                            example=False
+                        ),
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example='Email is already verified'
+                        )
+                    }
+                )
+            ),
+            404: openapi.Response(
+                description='User not found'
+            )
+        }
+    )
+    def post(self, request):
+        """Resend verification code"""
+        try:
+            from django.core.cache import cache
+            import random
+            
+            # Extract email
+            email = request.data.get('email', '').lower().strip()
+            
+            if not email:
+                return Response(
+                    api_response(
+                        message="Email is required",
+                        status=False
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check if user exists
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                return Response(
+                    api_response(
+                        message="User with this email not found",
+                        status=False
+                    ),
+                    status=http_status.HTTP_404_NOT_FOUND
+                )
+            
+            # Check if already verified
+            if user.is_verified:
+                return Response(
+                    api_response(
+                        message="Email is already verified",
+                        status=False
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Generate new verification code
+            verification_code = str(random.randint(100000, 999999))
+            
+            # Store in cache (expires in 15 minutes)
+            cache_key = f"email_verification_{email}"
+            cache.set(cache_key, verification_code, timeout=900)
+            
+            # Log verification code
+            logger.info(
+                f"New verification code for {email}: {verification_code}"
+            )
+            print(f"New verification code for {email}: {verification_code}")
+            
+            # Send verification email
+            try:
+                from .tasks import send_step_by_step_verification_email
+                send_step_by_step_verification_email.delay(
+                    email, verification_code
+                )
+            except Exception as e:
+                logger.error(f"Failed to send verification email: {e}")
+            
+            return Response(
+                api_response(
+                    message="Verification code sent to your email",
+                    status=True
+                ),
+                status=http_status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Resend code error: {str(e)}\n{traceback.format_exc()}"
+            )
+            return Response(
+                api_response(
+                    message=f"Failed to resend code: {str(e)}",
+                    status=False
+                ),
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
 class MerchantProfileManagementView(APIView):
     """
     Comprehensive merchant profile management API.

@@ -10,6 +10,7 @@ from .views import (
     CheckoutView,
     # PaystackPaymentInitView,
     PaystackWebhookView,
+    PaymentVerificationView,
     OrderStatusUpdateView,
     ProductReviewListCreateView,
     MerchantAnalyticsView,
@@ -74,6 +75,11 @@ urlpatterns = [
         'paystack/webhook/',
         PaystackWebhookView.as_view(),
         name='paystack-webhook'
+    ),
+    path(
+        'orders/verify-payment/',
+        PaymentVerificationView.as_view(),
+        name='verify-payment'
     ),
 
     path(

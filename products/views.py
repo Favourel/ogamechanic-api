@@ -2063,6 +2063,248 @@ class PaystackWebhookView(APIView):
         return Response({'status': True})
 
 
+class PaymentVerificationView(APIView):
+    """
+    API endpoint to verify payment status after user completes Paystack
+    transaction. This is called from the mobile app after deep link redirect.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description=(
+            "Verify payment status for an order after Paystack redirect"
+        ),
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['requestType', 'data'],
+            properties={
+                'requestType': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Type of request (inbound/outbound)"
+                ),
+                'data': openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    required=['reference'],
+                    properties={
+                        'reference': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description="Payment reference (order ID)"
+                        ),
+                    }
+                ),
+            },
+        ),
+        responses={200: openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'status': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                'message': openapi.Schema(type=openapi.TYPE_STRING),
+            }
+        )}
+    )
+    def post(self, request):
+        """
+        Verify payment by checking with Paystack API and updating order
+        """
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=400
+            )
+
+        reference = data.get('reference')
+
+        if not reference:
+            return Response(
+                api_response(
+                    message="Payment reference is required.",
+                    status=False
+                ),
+                status=400
+            )
+
+        try:
+            order = Order.objects.get(
+                id=reference,
+                customer=request.user
+            )
+        except Order.DoesNotExist:
+            return Response(
+                api_response(
+                    message=(
+                        "Order not found or you don't have permission "
+                        "to access it."
+                    ),
+                    status=False
+                ),
+                status=404
+            )
+
+        # If already paid, return success immediately
+        if order.payment_status == 'paid':
+            return Response(
+                api_response(
+                    message="Payment already verified and completed.",
+                    status=True,
+                    data={
+                        'order_id': str(order.id),
+                        'payment_status': order.payment_status,
+                        'order_status': order.status,
+                        'total_amount': float(order.total_amount),
+                        'paid_at': (
+                            order.paid_at.isoformat()
+                            if order.paid_at else None
+                        ),
+                    }
+                ),
+                status=200
+            )
+
+        # Verify with Paystack API
+        paystack_secret = settings.PAYSTACK_SECRET_KEY
+        headers = {
+            'Authorization': f'Bearer {paystack_secret}',
+            'Content-Type': 'application/json',
+        }
+
+        try:
+            # Verify transaction with Paystack
+            verify_url = (
+                f'https://api.paystack.co/transaction/verify/'
+                f'{order.payment_reference or reference}'
+            )
+            resp = requests.get(verify_url, headers=headers, timeout=15)
+
+            if resp.status_code != 200:
+                return Response(
+                    api_response(
+                        message="Failed to verify payment with Paystack.",
+                        status=False
+                    ),
+                    status=400
+                )
+
+            paystack_data = resp.json().get('data', {})
+            paystack_status = paystack_data.get('status')
+            amount_paid = int(paystack_data.get('amount', 0)) / 100.0
+
+            # Check if payment was successful
+            if paystack_status == 'success':
+                # Verify amount matches
+                if float(amount_paid) < float(order.total_amount):
+                    order.payment_status = 'failed'
+                    order.status = 'failed'
+                    order.save(update_fields=['payment_status', 'status'])
+
+                    return Response(
+                        api_response(
+                            message=(
+                                "Payment amount does not match order total."
+                            ),
+                            status=False,
+                            data={
+                                'order_id': str(order.id),
+                                'payment_status': order.payment_status,
+                                'order_status': order.status,
+                            }
+                        ),
+                        status=400
+                    )
+
+                # Update order as paid
+                with transaction.atomic():
+                    order.payment_status = 'paid'
+                    order.status = 'paid'
+                    order.paid_at = timezone.now()
+                    order.save()
+
+                    # Decrement stock and clear cart
+                    cart = Cart.objects.filter(user=order.customer).first()
+                    if cart:
+                        product_ids = list(
+                            cart.items.values_list('product_id', flat=True)
+                        )
+                        products = (
+                            Product.objects
+                            .select_for_update()
+                            .filter(id__in=product_ids)
+                        )
+
+                        for item in cart.items.all():
+                            product = products.filter(
+                                id=item.product_id
+                            ).first()
+                            if product:
+                                product.stock -= item.quantity
+                                product.save(update_fields=['stock'])
+
+                        cart.items.all().delete()
+
+                return Response(
+                    api_response(
+                        message=(
+                            "Payment verified successfully. Order confirmed!"
+                        ),
+                        status=True,
+                        data={
+                            'order_id': str(order.id),
+                            'payment_status': order.payment_status,
+                            'order_status': order.status,
+                            'total_amount': float(order.total_amount),
+                            'paid_at': (
+                                order.paid_at.isoformat()
+                                if order.paid_at else None
+                            ),
+                        }
+                    ),
+                    status=200
+                )
+            else:
+                # Payment failed
+                order.payment_status = 'failed'
+                order.status = 'failed'
+                order.save(update_fields=['payment_status', 'status'])
+
+                return Response(
+                    api_response(
+                        message=(
+                            f"Payment verification failed. "
+                            f"Status: {paystack_status}"
+                        ),
+                        status=False,
+                        data={
+                            'order_id': str(order.id),
+                            'payment_status': order.payment_status,
+                            'order_status': order.status,
+                        }
+                    ),
+                    status=400
+                )
+
+        except requests.RequestException as e:
+            return Response(
+                api_response(
+                    message=(
+                        "Network error while verifying payment. "
+                        "Please try again."
+                    ),
+                    status=False,
+                    data=str(e)
+                ),
+                status=502
+            )
+        except Exception as e:
+            logger.error(f"Payment verification error: {str(e)}")
+            return Response(
+                api_response(
+                    message="An error occurred while verifying payment.",
+                    status=False
+                ),
+                status=500
+            )
+
+
 class PaystackPaymentInitView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 

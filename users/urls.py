@@ -5,7 +5,24 @@ app_name = 'users'
 
 urlpatterns = [
     # Authentication endpoints
-    # Note: Legacy /register/ endpoint removed - use step-by-step registration
+    # Unified registration endpoint (simple, single-step)
+    path(
+        'register/',
+        views.UserRegistrationView.as_view(),
+        name='register'
+    ),
+    # Email verification endpoints
+    path(
+        'verify-email-code/',
+        views.VerifyEmailCodeView.as_view(),
+        name='verify_email_code'
+    ),
+    path(
+        'resend-verification-code/',
+        views.ResendVerificationCodeView.as_view(),
+        name='resend_verification_code'
+    ),
+    # Step-by-step registration (advanced, multi-step flow)
     path(
         'register/step/<int:step>/',
         views.StepByStepRegistrationView.as_view(),
