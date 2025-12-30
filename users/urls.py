@@ -22,6 +22,18 @@ urlpatterns = [
         views.ResendVerificationCodeView.as_view(),
         name='resend_verification_code'
     ),
+    # Role management
+    path(
+        'switch-role/',
+        views.SwitchRoleView.as_view(),
+        name='switch_role'
+    ),
+    # Merchant follow endpoints
+    path(
+        'merchants/follow/',
+        views.MerchantFollowView.as_view(),
+        name='merchant_follow'
+    ),
     # Step-by-step registration (advanced, multi-step flow)
     path(
         'register/step/<int:step>/',

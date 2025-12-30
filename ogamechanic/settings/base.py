@@ -317,6 +317,3 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
-ADMINS = [
-    ("Favour", "favourelodimuor16@gmail.com"),
-]

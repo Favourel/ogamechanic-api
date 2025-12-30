@@ -18,6 +18,7 @@ class Role(models.Model):
     MECHANIC = 'mechanic'
     MERCHANT = 'merchant'
     DEVELOPER = 'developer'
+    ADMIN = 'admin'
 
     ROLE_CHOICES = [
         (PRIMARY_USER, _('Primary User')),
@@ -26,6 +27,7 @@ class Role(models.Model):
         (MECHANIC, _('Mechanic')),
         (MERCHANT, _('Merchant')),
         (DEVELOPER, _('Developer')),
+        (ADMIN, _('Admin')),
     ]
 
     name = models.CharField(
@@ -113,6 +115,29 @@ class User(AbstractBaseUser, PermissionsMixin):
     locked_until = models.DateTimeField(null=True, blank=True)
     last_failed_login = models.DateTimeField(null=True, blank=True)
 
+    # Profile fields
+    date_of_birth = models.DateField(
+        _('date of birth'), blank=True, null=True
+    )
+    GENDER_CHOICES = [
+        ('male', 'Male'),
+        ('female', 'Female'),
+        ('other', 'Other'),
+    ]
+    gender = models.CharField(
+        _('gender'),
+        max_length=10,
+        choices=GENDER_CHOICES,
+        blank=True,
+        null=True
+    )
+    profile_picture = models.ImageField(
+        _('profile picture'),
+        upload_to='users/profile_pictures/',
+        blank=True,
+        null=True
+    )
+
     # Car details (for customers)
     car_make = models.CharField(max_length=50, blank=True, null=True)
     car_model = models.CharField(max_length=50, blank=True, null=True)
@@ -165,19 +190,36 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 class UserActivityLog(models.Model):
     """
-    Model to track user activities in the system.
+    Enhanced model to track business-critical user activities.
+    Focuses on strategic events rather than logging everything.
     """
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='activity_logs'
+        related_name='activity_logs',
+        null=True,  # Allow anonymous actions
+        blank=True
     )
-    action = models.CharField(max_length=100)
-    timestamp = models.DateTimeField(auto_now_add=True)
+    action = models.CharField(max_length=100, db_index=True)
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    session_id = models.CharField(max_length=255, blank=True)
+    
+    # Request details
+    request_method = models.CharField(max_length=10, blank=True)  # GET, POST, etc.
+    request_path = models.CharField(max_length=500, blank=True)
+    
+    # Response details
+    response_status = models.IntegerField(null=True, blank=True)
+    response_time_ms = models.IntegerField(null=True, blank=True)
+    
+    # Context
     description = models.TextField(blank=True)
-    object_type = models.CharField(max_length=100, null=True, blank=True)
+    object_type = models.CharField(max_length=100, null=True, blank=True, db_index=True)
     object_id = models.CharField(max_length=100, null=True, blank=True)
+    
+    # Severity and category
     severity = models.CharField(
         max_length=20,
         choices=[
@@ -186,19 +228,46 @@ class UserActivityLog(models.Model):
             ('high', 'High'),
             ('critical', 'Critical')
         ],
-        default='low'
+        default='low',
+        db_index=True
     )
+    category = models.CharField(
+        max_length=50,
+        choices=[
+            ('authentication', 'Authentication'),
+            ('authorization', 'Authorization'),
+            ('transaction', 'Transaction'),
+            ('data_modification', 'Data Modification'),
+            ('security', 'Security'),
+            ('compliance', 'Compliance'),
+            ('business_critical', 'Business Critical'),
+        ],
+        default='business_critical',
+        db_index=True
+    )
+    
+    # Additional metadata
+    metadata = models.JSONField(default=dict, blank=True)
+    
+    # Success/failure tracking
+    success = models.BooleanField(default=True)
+    error_message = models.TextField(blank=True)
 
     class Meta:
         ordering = ['-timestamp']
         indexes = [
             models.Index(fields=['user', 'action', 'timestamp']),
             models.Index(fields=['object_type', 'object_id']),
-            models.Index(fields=['severity'])
+            models.Index(fields=['severity', 'category']),
+            models.Index(fields=['timestamp', 'category']),
+            models.Index(fields=['user', 'category', 'timestamp']),
         ]
+        verbose_name = 'User Activity Log'
+        verbose_name_plural = 'User Activity Logs'
 
     def __str__(self):
-        return f"{self.user.email} - {self.action} - {self.timestamp}"
+        user_email = self.user.email if self.user else 'Anonymous'
+        return f"{user_email} - {self.action} - {self.timestamp}"
 
 
 class Notification(models.Model):

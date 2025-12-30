@@ -46,18 +46,27 @@ class DocsAccessPermission(BasePermission):
 
 if os.getenv('env', 'dev') == 'prod':
     # Determine the URL and schemes based on environment
-    if 'ogamechanic.twopikin.com' in settings.ALLOWED_HOSTS: # noqa
+    if 'untrustingly-vicennial-herlinda.ngrok-free.dev' in settings.ALLOWED_HOSTS: # noqa
         # Production configuration
-        API_URL = 'https://ogamechanic.twopikin.com'
+        API_URL = 'https://untrustingly-vicennial-herlinda.ngrok-free.dev'
         API_SCHEMES = ['https']
     else:
         # Development configuration
-        API_URL = 'http://127.0.0.1:9090'
+        API_URL = 'http://127.0.0.1:2340'
         API_SCHEMES = ['http']
 
 
-API_URL = 'http://127.0.0.1:9090'
-API_SCHEMES = ['http']
+# API_URL = 'http://127.0.0.1:2340'
+# API_SCHEMES = ['http']
+
+if 'untrustingly-vicennial-herlinda.ngrok-free.dev' in settings.ALLOWED_HOSTS: # noqa
+    # Production configuration
+    API_URL = 'https://untrustingly-vicennial-herlinda.ngrok-free.dev'
+    API_SCHEMES = ['https']
+else:
+    # Development configuration
+    API_URL = 'http://127.0.0.1:2340'
+    API_SCHEMES = ['http']
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -79,16 +88,16 @@ urlpatterns = [
     # Health check endpoints
     # path('api/health/', health_check, name='health-check'),
     # path('api/readiness/', readiness_check, name='readiness-check'),
-    
+
     path('admin/management/', admin.site.urls),
     path('api/v1/users/', include('users.urls')),
-    # path('api/v1/admin/', include('adminpanel.urls', namespace='adminpanel')), # noqa
+    path('api/v1/admin/', include('adminpanel.urls', namespace='adminpanel')), # noqa
     path('api/v1/products/', include('products.urls', namespace='products')),
     # path('api/v1/rides/', include('rides.urls', namespace='rides')),
     # path('api/v1/communications/',
     #      include('communications.urls', namespace='communications')),
     # path('api/v1/couriers/',
-    #      include('couriers.urls', namespace='couzriers')),
+    #      include('couriers.urls', namespace='couriers')),
     path('api/v1/mechanics/',
          include('mechanics.urls', namespace='mechanics')),
     path('api/v1/rentals/',

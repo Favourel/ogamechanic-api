@@ -33,8 +33,9 @@ class UserAdmin(BaseUserAdmin):
         "last_name",
         "active_role",
         "is_active",
+        "get_roles_display",
     )  # noqa
-    list_filter = ("is_active", "active_role", "is_staff", "is_superuser")
+    list_filter = ("is_active", "active_role", "is_staff", "is_superuser", "roles")
     search_fields = ("email", "first_name", "last_name")
     ordering = ("email",)
     list_per_page = 25  # Enable pagination, 25 per page by default
@@ -42,6 +43,9 @@ class UserAdmin(BaseUserAdmin):
 
     # Specify that email is the username field
     username_field = "email"
+
+    # Use filter_horizontal for better many-to-many field rendering
+    filter_horizontal = ("roles", "user_permissions")
 
     fieldsets = (
         (None, {"fields": ("email", "password")}),
@@ -88,8 +92,17 @@ class UserAdmin(BaseUserAdmin):
         ),
     )
     readonly_fields = ("created_at", "updated_at")
+    ordering = ("-updated_at", "-created_at",)
 
     actions = ["unlock_accounts"]
+    
+    def get_roles_display(self, obj):
+        """Display all roles assigned to the user"""
+        roles = obj.roles.all()
+        if roles:
+            return ", ".join([role.name for role in roles])
+        return "-"
+    get_roles_display.short_description = "Roles"
 
     def unlock_accounts(self, request, queryset):
         updated = queryset.update(locked_until=None, failed_login_attempts=0)

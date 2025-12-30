@@ -7,7 +7,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY') # noqa
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true' # noqa
 
-ALLOWED_HOSTS = ['ogamechanic.twopikin.com', '127.0.0.1', 'ogamechanic-api-1.onrender.com', 'b001a557daee.ngrok-free.app'] # noqa
+ALLOWED_HOSTS = ['ogamechanic.twopikin.com', '127.0.0.1', 'ogamechanic-api-1.onrender.com', '506b682bc171.ngrok-free.app', 'untrustingly-vicennial-herlinda.ngrok-free.dev'] # noqa
 X_API_KEY = os.environ.get('X_API_KEY') # noqa
 
 # WhiteNoise configuration
@@ -38,7 +38,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://localhost:5173",  # Vite development server
     "http://127.0.0.1:5173",
     "https://*.ngrok-free.dev",  # ngrok tunnel,
-    "https://ogamechanic.twopikin.com"
+    "https://ogamechanic.twopikin.com",
 ]
 
 # Allow localhost with any port for development flexibility

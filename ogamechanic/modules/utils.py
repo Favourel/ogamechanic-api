@@ -172,8 +172,6 @@ def incoming_request_checks(request, require_data_field: bool = True) -> tuple:
         if request_type != "inbound":
             return False, "Invalid 'requestType' value"
 
-        print(request.data)
-        print(data)
         # Support multipart/form-data: 'data' may be a JSON string
         if isinstance(data, str):
             try:

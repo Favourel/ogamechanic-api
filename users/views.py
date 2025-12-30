@@ -902,6 +902,552 @@ class ResendVerificationCodeView(APIView):
             return Response(
                 api_response(
                     message=f"Failed to resend code: {str(e)}",
+                    status=False,
+                    errors={'error': [str(e)]}
+                ),
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class SwitchRoleView(APIView):
+    """
+    Allow authenticated users to add/switch to a new role.
+    
+    After switching to a new role, users must complete the role-specific
+    verification/registration process (e.g., create merchant/mechanic/driver profile).
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [UserRateThrottle]
+    
+    @swagger_auto_schema(
+        operation_summary="Add/Switch User Role",
+        operation_description="""
+        Add a new role to user account or switch active role.
+        
+        **Process:**
+        1. User requests to add/switch to a new role
+        2. System validates the role
+        3. Role is added to user's roles (if not already present)
+        4. Active role is switched to the new role
+        5. User must complete role-specific profile setup
+        
+        **Available Roles:**
+        - primary_user: Regular user
+        - driver: Driver/Rider
+        - merchant: Merchant/Seller
+        - mechanic: Mechanic/Service provider
+        
+        **Next Steps After Role Switch:**
+        - **merchant**: Complete profile at `/api/users/profile/merchant/`
+        - **mechanic**: Complete profile at `/api/users/profile/mechanic/`
+        - **driver**: Complete profile at `/api/users/profile/driver/`
+        - **primary_user**: No additional setup required
+        """,
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['role'],
+            properties={
+                'role': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='Role name to switch to',
+                    example='merchant',
+                    enum=['primary_user', 'driver', 'merchant', 'mechanic']
+                ),
+            }
+        ),
+        responses={
+            200: openapi.Response(
+                description='Role switched successfully',
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN,
+                            example=True
+                        ),
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example='Role switched to merchant successfully'
+                        ),
+                        'data': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'current_role': openapi.Schema(
+                                    type=openapi.TYPE_STRING,
+                                    example='merchant'
+                                ),
+                                'all_roles': openapi.Schema(
+                                    type=openapi.TYPE_ARRAY,
+                                    items=openapi.Schema(type=openapi.TYPE_STRING)
+                                ),
+                                'profile_required': openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN,
+                                    example=True
+                                ),
+                                'profile_endpoint': openapi.Schema(
+                                    type=openapi.TYPE_STRING,
+                                    example='/api/users/profile/merchant/'
+                                )
+                            }
+                        )
+                    }
+                )
+            ),
+            400: openapi.Response(description='Invalid role'),
+            401: openapi.Response(description='Authentication required')
+        }
+    )
+    def post(self, request):
+        """Switch user role"""
+        try:
+            user = request.user
+            role_name = request.data.get('role', '').lower().strip()
+            
+            if not role_name:
+                return Response(
+                    api_response(
+                        message="Role is required",
+                        status=False
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Validate role
+            valid_roles = ['primary_user', 'driver', 'merchant', 'mechanic']
+            if role_name not in valid_roles:
+                return Response(
+                    api_response(
+                        message="Invalid role selected",
+                        status=False,
+                        errors={
+                            'role': [
+                                f'Role must be one of: {", ".join(valid_roles)}'
+                            ]
+                        }
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get role object
+            try:
+                role = Role.objects.get(name=role_name)
+            except Role.DoesNotExist:
+                return Response(
+                    api_response(
+                        message=f"Role '{role_name}' not found in database",
+                        status=False
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check if user already has this role
+            role_added = False
+            if not user.roles.filter(id=role.id).exists():
+                user.roles.add(role)
+                role_added = True
+            
+            # Switch active role
+            user.active_role = role
+            user.save()
+            
+            # Check if profile exists for this role
+            profile_required = False
+            profile_endpoint = None
+            profile_exists = False
+            
+            if role_name == 'merchant':
+                profile_exists = hasattr(user, 'merchant_profile')
+                profile_required = not profile_exists
+                profile_endpoint = '/api/users/profile/merchant/'
+            elif role_name == 'mechanic':
+                profile_exists = hasattr(user, 'mechanic_profile')
+                profile_required = not profile_exists
+                profile_endpoint = '/api/users/profile/mechanic/'
+            elif role_name == 'driver':
+                profile_exists = hasattr(user, 'driver_profile')
+                profile_required = not profile_exists
+                profile_endpoint = '/api/users/profile/driver/'
+            
+            # Log activity
+            try:
+                action = 'role_added' if role_added else 'role_switched'
+                UserActivityLog.objects.create(
+                    user=user,
+                    action=action,
+                    details=f'User switched to role: {role_name}'
+                )
+            except Exception as e:
+                logger.error(f"Failed to log role switch: {e}")
+            
+            # Get all user roles
+            all_roles = [r.name for r in user.roles.all()]
+            
+            message = f"Role switched to {role_name} successfully"
+            if role_added:
+                message = f"Role {role_name} added and activated successfully"
+            
+            if profile_required:
+                message += f". Please complete your {role_name} profile."
+            
+            return Response(
+                api_response(
+                    message=message,
+                    status=True,
+                    data={
+                        'current_role': role_name,
+                        'all_roles': all_roles,
+                        'profile_required': profile_required,
+                        'profile_endpoint': profile_endpoint,
+                        'profile_exists': profile_exists
+                    }
+                ),
+                status=http_status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Role switch error: {str(e)}\n{traceback.format_exc()}"
+            )
+            return Response(
+                api_response(
+                    message=f"Failed to switch role: {str(e)}",
+                    status=False
+                ),
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class MerchantFollowView(APIView):
+    """
+    Follow/Unfollow merchants and check follow status.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_summary="Follow/Unfollow Merchant",
+        operation_description="""
+        Follow or unfollow a merchant.
+        
+        **Actions:**
+        - `follow`: Start following a merchant
+        - `unfollow`: Stop following a merchant
+        
+        **Use Cases:**
+        - Users can follow merchants to get updates
+        - Users can unfollow merchants they no longer want to track
+        - Cannot follow yourself
+        """,
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['merchant_id', 'action'],
+            properties={
+                'merchant_id': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='UUID of the merchant to follow/unfollow',
+                    example='123e4567-e89b-12d3-a456-426614174000'
+                ),
+                'action': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='Action to perform',
+                    example='follow',
+                    enum=['follow', 'unfollow']
+                ),
+            }
+        ),
+        responses={
+            200: openapi.Response(
+                description='Action completed successfully',
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN,
+                            example=True
+                        ),
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example='Successfully followed merchant'
+                        ),
+                        'data': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'is_following': openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN,
+                                    example=True
+                                ),
+                                'followers_count': openapi.Schema(
+                                    type=openapi.TYPE_INTEGER,
+                                    example=150
+                                )
+                            }
+                        )
+                    }
+                )
+            ),
+            400: openapi.Response(description='Invalid request'),
+            404: openapi.Response(description='Merchant not found')
+        }
+    )
+    def post(self, request):
+        """Follow or unfollow a merchant"""
+        try:
+            from products.models import FollowMerchant
+            
+            user = request.user
+            merchant_id = request.data.get('merchant_id')
+            action = request.data.get('action', '').lower()
+            
+            # Validate inputs
+            if not merchant_id or not action:
+                return Response(
+                    api_response(
+                        message="merchant_id and action are required",
+                        status=False
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            if action not in ['follow', 'unfollow']:
+                return Response(
+                    api_response(
+                        message="Action must be 'follow' or 'unfollow'",
+                        status=False
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get merchant user
+            try:
+                merchant = User.objects.get(id=merchant_id)
+            except User.DoesNotExist:
+                return Response(
+                    api_response(
+                        message="Merchant not found",
+                        status=False
+                    ),
+                    status=http_status.HTTP_404_NOT_FOUND
+                )
+            
+            # Check if merchant has merchant role
+            if not merchant.roles.filter(name='merchant').exists():
+                return Response(
+                    api_response(
+                        message="User is not a merchant",
+                        status=False
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Cannot follow yourself
+            if user.id == merchant.id:
+                return Response(
+                    api_response(
+                        message="You cannot follow yourself",
+                        status=False
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Perform action
+            if action == 'follow':
+                follow, created = FollowMerchant.objects.get_or_create(
+                    user=user,
+                    merchant=merchant
+                )
+                if created:
+                    message = "Successfully followed merchant"
+                else:
+                    message = "You are already following this merchant"
+            else:  # unfollow
+                deleted_count = FollowMerchant.objects.filter(
+                    user=user,
+                    merchant=merchant
+                ).delete()[0]
+                
+                if deleted_count > 0:
+                    message = "Successfully unfollowed merchant"
+                else:
+                    message = "You were not following this merchant"
+            
+            # Get updated follow status
+            is_following = FollowMerchant.objects.filter(
+                user=user,
+                merchant=merchant
+            ).exists()
+            
+            # Get followers count
+            followers_count = FollowMerchant.objects.filter(
+                merchant=merchant
+            ).count()
+            
+            return Response(
+                api_response(
+                    message=message,
+                    status=True,
+                    data={
+                        'is_following': is_following,
+                        'followers_count': followers_count
+                    }
+                ),
+                status=http_status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Follow merchant error: {str(e)}\n{traceback.format_exc()}"
+            )
+            return Response(
+                api_response(
+                    message=f"Failed to process request: {str(e)}",
+                    status=False
+                ),
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @swagger_auto_schema(
+        operation_summary="Check if Following Merchant",
+        operation_description="""
+        Check if the authenticated user is following a specific merchant.
+        
+        **Query Parameters:**
+        - `merchant_id`: UUID of the merchant to check
+        
+        **Returns:**
+        - Follow status (true/false)
+        - Merchant's total followers count
+        - Merchant basic info
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                'merchant_id',
+                openapi.IN_QUERY,
+                description="UUID of the merchant",
+                type=openapi.TYPE_STRING,
+                required=True
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description='Follow status retrieved',
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN,
+                            example=True
+                        ),
+                        'data': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'is_following': openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN,
+                                    example=True
+                                ),
+                                'followers_count': openapi.Schema(
+                                    type=openapi.TYPE_INTEGER,
+                                    example=150
+                                ),
+                                'merchant_info': openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        'id': openapi.Schema(
+                                            type=openapi.TYPE_STRING
+                                        ),
+                                        'email': openapi.Schema(
+                                            type=openapi.TYPE_STRING
+                                        ),
+                                        'first_name': openapi.Schema(
+                                            type=openapi.TYPE_STRING
+                                        ),
+                                        'last_name': openapi.Schema(
+                                            type=openapi.TYPE_STRING
+                                        )
+                                    }
+                                )
+                            }
+                        )
+                    }
+                )
+            ),
+            400: openapi.Response(description='Invalid request'),
+            404: openapi.Response(description='Merchant not found')
+        }
+    )
+    def get(self, request):
+        """Check if user is following a merchant"""
+        try:
+            from products.models import FollowMerchant
+            
+            user = request.user
+            merchant_id = request.query_params.get('merchant_id')
+            
+            if not merchant_id:
+                return Response(
+                    api_response(
+                        message="merchant_id is required",
+                        status=False
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get merchant user
+            try:
+                merchant = User.objects.get(id=merchant_id)
+            except User.DoesNotExist:
+                return Response(
+                    api_response(
+                        message="Merchant not found",
+                        status=False
+                    ),
+                    status=http_status.HTTP_404_NOT_FOUND
+                )
+            
+            # Check if merchant has merchant role
+            if not merchant.roles.filter(name='merchant').exists():
+                return Response(
+                    api_response(
+                        message="User is not a merchant",
+                        status=False
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check follow status
+            is_following = FollowMerchant.objects.filter(
+                user=user,
+                merchant=merchant
+            ).exists()
+            
+            # Get followers count
+            followers_count = FollowMerchant.objects.filter(
+                merchant=merchant
+            ).count()
+            
+            return Response(
+                api_response(
+                    message="Follow status retrieved successfully",
+                    status=True,
+                    data={
+                        'is_following': is_following,
+                        'followers_count': followers_count,
+                        'merchant_info': {
+                            'id': str(merchant.id),
+                            'email': merchant.email,
+                            'first_name': merchant.first_name,
+                            'last_name': merchant.last_name
+                        }
+                    }
+                ),
+                status=http_status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Check follow status error: {str(e)}\n{traceback.format_exc()}"
+            )
+            return Response(
+                api_response(
+                    message=f"Failed to check follow status: {str(e)}",
                     status=False
                 ),
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -916,11 +1462,15 @@ class MerchantProfileManagementView(APIView):
     Requires user to have merchant role before creating/updating profile.
     
     Use Cases:
-    - Complete profile for users who registered via step-by-step flow
+    - Complete profile after simplified registration (/api/users/register/)
+    - Complete profile after switching to merchant role (/api/users/switch-role/)
     - Update existing merchant profiles
     - Create profiles for users who added merchant role later
     
-    Note: For new user registration, use step-by-step registration flow.
+    **Workflow:**
+    1. Register with merchant role OR switch to merchant role
+    2. Complete merchant profile using this endpoint (POST)
+    3. Update profile as needed (PUT)
     """
     permission_classes = [IsAuthenticated]
     parser_classes = [
@@ -1129,7 +1679,7 @@ class MerchantProfileManagementView(APIView):
         - Location and LGA must be valid Nigerian locations
         
         **Process Flow:**
-        1. User completes step-by-step registration with merchant role
+        1. User registers with merchant role OR switches to merchant role
         2. User calls this endpoint to complete merchant profile
         3. Profile created and awaits admin approval
         4. User can start using merchant features once approved
@@ -1211,7 +1761,7 @@ class MerchantProfileManagementView(APIView):
                             properties={
                                 'suggestion': openapi.Schema(
                                     type=openapi.TYPE_STRING,
-                                    example="Use step-by-step registration to add merchant role"  # noqa
+                                    example="Use /api/users/switch-role/ to add merchant role"  # noqa
                                 )
                             }
                         )
@@ -1242,7 +1792,7 @@ class MerchantProfileManagementView(APIView):
             return Response(api_response(
                 message="User must have merchant role to create merchant profile.",  # noqa
                 status=False,
-                data={"suggestion": "Use step-by-step registration to add merchant role"}  # noqa
+                data={"suggestion": "Use /api/users/switch-role/ to add merchant role"}  # noqa
             ), status=400)
         
         if hasattr(user, 'merchant_profile'):
@@ -2049,6 +2599,7 @@ class LoginView(TokenObtainPairView):
             ),
             400: "Bad Request",
             401: "Invalid credentials",
+            403: "Admin users cannot login via this endpoint",
             423: "Account locked",
             # 429: "Too Many Requests"
         }
@@ -2076,6 +2627,16 @@ class LoginView(TokenObtainPairView):
             )
             
             if user:
+                # Check if user is admin/staff/superuser
+                if user.is_staff or user.is_superuser:
+                    return Response(
+                        api_response(
+                            message="Admin users cannot login via this endpoint",
+                            status=False
+                        ),
+                        status=http_status.HTTP_403_FORBIDDEN
+                    )
+
                 # Reset failed attempts if any
                 if (hasattr(user, 'failed_login_attempts') and
                         user.failed_login_attempts > 0):
@@ -2109,7 +2670,7 @@ class LoginView(TokenObtainPairView):
                     data=response_data
                 )
             )
-        
+
         return response
 
 
@@ -5827,19 +6388,29 @@ class StepByStepRegistrationView(APIView):
 
 class PrimaryUserProfileView(APIView):
     """
-    API view for managing primary user profile details.
+    API view for managing user profile details.
     
     This view handles:
-    - GET: Retrieve primary user profile details
-    - PUT: Update primary user profile details
-    - PATCH: Partial update of primary user profile details
+    - GET: Retrieve user profile details
+    - PUT: Update user profile details
+    - PATCH: Partial update of user profile details
+    
+    Updatable fields:
+    - first_name, last_name
+    - phone_number
+    - date_of_birth (YYYY-MM-DD)
+    - gender (male, female, other)
+    - profile_picture (image file)
     """
     permission_classes = [IsAuthenticated]
     throttle_classes = [UserRateThrottle]
+    parser_classes = [
+        parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser
+    ]
 
     @swagger_auto_schema(
-        operation_summary="Get Primary User Profile",
-        operation_description="Retrieve the current user's primary user profile details",  # noqa
+        operation_summary="Get User Profile",
+        operation_description="Retrieve the current user's profile details",
         responses={
             200: openapi.Response(
                 description="Profile details retrieved successfully",
@@ -5851,46 +6422,36 @@ class PrimaryUserProfileView(APIView):
                         'data': openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'user_id': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'first_name': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'last_name': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'email': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'phone_number': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'car_make': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'car_model': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'car_year': openapi.Schema(type=openapi.TYPE_INTEGER),  # noqa
-                                'license_plate': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'date_joined': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'is_verified': openapi.Schema(type=openapi.TYPE_BOOLEAN),  # noqa
+                                'user_id': openapi.Schema(type=openapi.TYPE_STRING),
+                                'first_name': openapi.Schema(type=openapi.TYPE_STRING),
+                                'last_name': openapi.Schema(type=openapi.TYPE_STRING),
+                                'email': openapi.Schema(type=openapi.TYPE_STRING),
+                                'phone_number': openapi.Schema(type=openapi.TYPE_STRING),
+                                'date_of_birth': openapi.Schema(type=openapi.TYPE_STRING, format='date'),
+                                'gender': openapi.Schema(type=openapi.TYPE_STRING),
+                                'profile_picture': openapi.Schema(type=openapi.TYPE_STRING),
+                                'date_joined': openapi.Schema(type=openapi.TYPE_STRING),
+                                'is_verified': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                'current_role': openapi.Schema(type=openapi.TYPE_STRING),
+                                'all_roles': openapi.Schema(
+                                    type=openapi.TYPE_ARRAY,
+                                    items=openapi.Schema(type=openapi.TYPE_STRING)
+                                )
                             }
                         )
                     }
                 )
             ),
-            401: 'Unauthorized',
-            404: 'Profile not found'
+            401: 'Unauthorized'
         }
     )
     def get(self, request):
-        """Get primary user profile details"""
-        status_, data = get_incoming_request_checks(request)
-        if not status_:
-            return Response(
-                api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
+        """Get user profile details"""
         try:
             user = request.user
             
-            # Check if user has primary_user role
-            if not user.roles.filter(name='primary_user').exists():
-                return Response(
-                    api_response(
-                        message="User does not have primary user role",
-                        status=False
-                    ),
-                    status=http_status.HTTP_403_FORBIDDEN
-                )
+            # Get all user roles
+            all_roles = [r.name for r in user.roles.all()]
             
             # Prepare profile data
             profile_data = {
@@ -5899,13 +6460,13 @@ class PrimaryUserProfileView(APIView):
                 'last_name': user.last_name or '',
                 'email': user.email,
                 'phone_number': user.phone_number or '',
-                'car_make': user.car_make or '',
-                'car_model': user.car_model or '',
-                'car_year': user.car_year,
-                'license_plate': user.license_plate or '',
-                'date_joined': user.date_joined.isoformat() if user.date_joined else None,  # noqa
+                'date_of_birth': user.date_of_birth.isoformat() if user.date_of_birth else None,
+                'gender': user.gender or '',
+                'profile_picture': request.build_absolute_uri(user.profile_picture.url) if user.profile_picture else None,
+                'date_joined': user.date_joined.isoformat() if user.date_joined else None,
                 'is_verified': user.is_verified,
-                'active_role': user.active_role.name if user.active_role else None  # noqa
+                'current_role': user.active_role.name if user.active_role else None,
+                'all_roles': all_roles
             }
             
             return Response(
@@ -5918,6 +6479,9 @@ class PrimaryUserProfileView(APIView):
             )
             
         except Exception as e:
+            logger.error(
+                f"Get profile error: {str(e)}\n{traceback.format_exc()}"
+            )
             return Response(
                 api_response(
                     message=f"Error retrieving profile: {str(e)}",
@@ -5927,18 +6491,49 @@ class PrimaryUserProfileView(APIView):
             )
 
     @swagger_auto_schema(
-        operation_summary="Update Primary User Profile",
-        operation_description="Update the current user's primary user profile details",  # noqa
+        operation_summary="Update User Profile",
+        operation_description="""Update the current user's profile details.
+        
+        All fields are optional - only send fields you want to update.
+        
+        **Fields:**
+        - first_name, last_name
+        - phone_number (Nigerian format)
+        - date_of_birth (YYYY-MM-DD)
+        - gender (male, female, other)
+        - profile_picture (image file)
+        """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                'first_name': openapi.Schema(type=openapi.TYPE_STRING),
-                'last_name': openapi.Schema(type=openapi.TYPE_STRING),
-                'phone_number': openapi.Schema(type=openapi.TYPE_STRING),
-                'car_make': openapi.Schema(type=openapi.TYPE_STRING),
-                'car_model': openapi.Schema(type=openapi.TYPE_STRING),
-                'car_year': openapi.Schema(type=openapi.TYPE_INTEGER),
-                'license_plate': openapi.Schema(type=openapi.TYPE_STRING),
+                'first_name': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='First name'
+                ),
+                'last_name': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='Last name'
+                ),
+                'phone_number': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='Phone number (Nigerian format)',
+                    example='08012345678'
+                ),
+                'date_of_birth': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format='date',
+                    description='Date of birth (YYYY-MM-DD)',
+                    example='1990-01-15'
+                ),
+                'gender': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='Gender',
+                    enum=['male', 'female', 'other']
+                ),
+                'profile_picture': openapi.Schema(
+                    type=openapi.TYPE_FILE,
+                    description='Profile picture (image file)'
+                ),
             }
         ),
         responses={
@@ -5952,67 +6547,147 @@ class PrimaryUserProfileView(APIView):
                         'data': openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'user_id': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'first_name': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'last_name': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'phone_number': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'car_make': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'car_model': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'car_year': openapi.Schema(type=openapi.TYPE_INTEGER),  # noqa
-                                'license_plate': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
+                                'user_id': openapi.Schema(type=openapi.TYPE_STRING),
+                                'first_name': openapi.Schema(type=openapi.TYPE_STRING),
+                                'last_name': openapi.Schema(type=openapi.TYPE_STRING),
+                                'phone_number': openapi.Schema(type=openapi.TYPE_STRING),
+                                'date_of_birth': openapi.Schema(type=openapi.TYPE_STRING),
+                                'gender': openapi.Schema(type=openapi.TYPE_STRING),
                             }
                         )
                     }
                 )
             ),
             400: 'Bad Request - Validation Error',
-            401: 'Unauthorized',
-            403: 'Forbidden - User does not have primary user role'
+            401: 'Unauthorized'
         }
     )
     def put(self, request):
-        """Update primary user profile details"""
-        status_, data = incoming_request_checks(request)
-        if not status_:
-            return Response(
-                api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
+        """Update user profile details"""
         try:
             user = request.user
-            
-            # Check if user has primary_user role
-            if not user.roles.filter(name='primary_user').exists():
-                return Response(
-                    api_response(
-                        message="User does not have primary user role",
-                        status=False
-                    ),
-                    status=http_status.HTTP_403_FORBIDDEN
-                )
-            
-            # Validate and update profile data
             data = request.data
             
-            # Update user fields
+            # Track what was updated
+            updated_fields = []
+            
+            # Update first_name
             if 'first_name' in data:
-                user.first_name = data['first_name']
+                first_name = data.get('first_name', '').strip()
+                if first_name:
+                    user.first_name = first_name
+                    updated_fields.append('first_name')
+            
+            # Update last_name
             if 'last_name' in data:
-                user.last_name = data['last_name']
+                last_name = data.get('last_name', '').strip()
+                if last_name:
+                    user.last_name = last_name
+                    updated_fields.append('last_name')
+            
+            # Update phone_number with validation
             if 'phone_number' in data:
-                user.phone_number = data['phone_number']
+                phone_number = data.get('phone_number', '').strip()
+                if phone_number:
+                    try:
+                        from ogamechanic.modules.utils import format_phone_number
+                        formatted_phone = format_phone_number(phone_number)
+                        user.phone_number = formatted_phone
+                        updated_fields.append('phone_number')
+                    except Exception as e:
+                        return Response(
+                            api_response(
+                                message="Invalid phone number format",
+                                status=False,
+                                errors={'phone_number': [str(e)]}
+                            ),
+                            status=http_status.HTTP_400_BAD_REQUEST
+                        )
             
-            # Update car details
-            if 'car_make' in data:
-                user.car_make = data['car_make']
-            if 'car_model' in data:
-                user.car_model = data['car_model']
-            if 'car_year' in data:
-                user.car_year = data['car_year']
-            if 'license_plate' in data:
-                user.license_plate = data['license_plate']
+            # Update date_of_birth
+            if 'date_of_birth' in data:
+                dob = data.get('date_of_birth')
+                if dob:
+                    try:
+                        from datetime import datetime
+                        if isinstance(dob, str):
+                            parsed_date = datetime.strptime(dob, '%Y-%m-%d').date()
+                            user.date_of_birth = parsed_date
+                            updated_fields.append('date_of_birth')
+                    except ValueError:
+                        return Response(
+                            api_response(
+                                message="Invalid date format. Use YYYY-MM-DD",
+                                status=False,
+                                errors={'date_of_birth': ['Format must be YYYY-MM-DD']}
+                            ),
+                            status=http_status.HTTP_400_BAD_REQUEST
+                        )
             
+            # Update gender
+            if 'gender' in data:
+                gender = data.get('gender', '').lower().strip()
+                if gender:
+                    valid_genders = ['male', 'female', 'other']
+                    if gender not in valid_genders:
+                        return Response(
+                            api_response(
+                                message="Invalid gender value",
+                                status=False,
+                                errors={
+                                    'gender': [
+                                        f"Must be one of: {', '.join(valid_genders)}"
+                                    ]
+                                }
+                            ),
+                            status=http_status.HTTP_400_BAD_REQUEST
+                        )
+                    user.gender = gender
+                    updated_fields.append('gender')
+            
+            # Update profile_picture
+            if 'profile_picture' in request.FILES:
+                profile_picture = request.FILES['profile_picture']
+                allowed_extensions = ['jpg', 'jpeg', 'png']
+                file_ext = profile_picture.name.split('.')[-1].lower()
+                if file_ext not in allowed_extensions:
+                    return Response(
+                        api_response(
+                            message="Invalid file type",
+                            status=False,
+                            errors={
+                                'profile_picture': [
+                                    f"Only {', '.join(allowed_extensions)} files allowed"
+                                ]
+                            }
+                        ),
+                        status=http_status.HTTP_400_BAD_REQUEST
+                    )
+                user.profile_picture = profile_picture
+                updated_fields.append('profile_picture')
+            
+            # Check if any fields were updated
+            if not updated_fields:
+                return Response(
+                    api_response(
+                        message="No valid fields provided for update",
+                        status=False
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Save user
             user.save()
+            
+            # Log activity
+            try:
+                UserActivityLog.objects.create(
+                    user=user,
+                    action='profile_updated',
+                    details=f"Updated fields: {', '.join(updated_fields)}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to log profile update: {e}")
             
             # Prepare updated profile data
             profile_data = {
@@ -6020,15 +6695,13 @@ class PrimaryUserProfileView(APIView):
                 'first_name': user.first_name or '',
                 'last_name': user.last_name or '',
                 'phone_number': user.phone_number or '',
-                'car_make': user.car_make or '',
-                'car_model': user.car_model or '',
-                'car_year': user.car_year,
-                'license_plate': user.license_plate or '',
+                'date_of_birth': user.date_of_birth.isoformat() if user.date_of_birth else None,
+                'gender': user.gender or '',
             }
             
             return Response(
                 api_response(
-                    message="Profile updated successfully",
+                    message=f"Profile updated successfully. Updated: {', '.join(updated_fields)}",
                     status=True,
                     data=profile_data
                 ),
@@ -6036,6 +6709,9 @@ class PrimaryUserProfileView(APIView):
             )
             
         except Exception as e:
+            logger.error(
+                f"Profile update error: {str(e)}\n{traceback.format_exc()}"
+            )
             return Response(
                 api_response(
                     message=f"Error updating profile: {str(e)}",
@@ -6045,27 +6721,31 @@ class PrimaryUserProfileView(APIView):
             )
 
     @swagger_auto_schema(
-        operation_summary="Partial Update Primary User Profile",
-        operation_description="Partially update the current user's primary user profile details",  # noqa
+        operation_summary="Partial Update User Profile",
+        operation_description="Partially update the current user's profile details (same as PUT)",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
                 'first_name': openapi.Schema(type=openapi.TYPE_STRING),
                 'last_name': openapi.Schema(type=openapi.TYPE_STRING),
                 'phone_number': openapi.Schema(type=openapi.TYPE_STRING),
-                'car_make': openapi.Schema(type=openapi.TYPE_STRING),
-                'car_model': openapi.Schema(type=openapi.TYPE_STRING),
-                'car_year': openapi.Schema(type=openapi.TYPE_INTEGER),
-                'license_plate': openapi.Schema(type=openapi.TYPE_STRING),
+                'date_of_birth': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format='date'
+                ),
+                'gender': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    enum=['male', 'female', 'other']
+                ),
+                'profile_picture': openapi.Schema(type=openapi.TYPE_FILE),
             }
         ),
         responses={
-            200: 'Profile partially updated successfully',
+            200: 'Profile updated successfully',
             400: 'Bad Request - Validation Error',
-            401: 'Unauthorized',
-            403: 'Forbidden - User does not have primary user role'
+            401: 'Unauthorized'
         }
     )
     def patch(self, request):
-        """Partial update of primary user profile details"""
+        """Partial update of user profile details"""
         return self.put(request)
