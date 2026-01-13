@@ -25,18 +25,19 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'drf_yasg',
     'corsheaders',
+    'channels',
     'django_filters',
     "django_celery_beat",
 
     # Local apps
     'users.apps.UsersConfig',
-    'adminpanel',
-    'products',
-    'rides',
-    'communications',
-    'couriers',
-    'mechanics',
-    'rentals',
+    'adminpanel.apps.AdminpanelConfig',
+    'products.apps.ProductsConfig',
+    'rides.apps.RidesConfig',
+    'communications.apps.CommunicationsConfig',
+    'couriers.apps.CouriersConfig',
+    'mechanics.apps.MechanicsConfig',
+    'rentals.apps.RentalsConfig',
 ]
 
 MIDDLEWARE = [
@@ -233,7 +234,7 @@ SITE_ID = 1
 AUTH_USER_MODEL = 'users.User'
 
 # Django Channels Configuration
-# ASGI_APPLICATION = 'ogamechanic.asgi.application'
+ASGI_APPLICATION = 'ogamechanic.asgi.application'
 
 # Channel Layers for WebSocket support
 # CHANNEL_LAYERS = {

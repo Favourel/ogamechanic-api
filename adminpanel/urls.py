@@ -8,11 +8,8 @@ from .views import (
     EcommerceManagementView,
     AccountManagementView,
     MechanicManagementView,
-    ApproveMechanicProfileView,
-    ApproveDriverProfileView,
-    SalesAnalyticsView,
     PendingVerificationsView,
-    ApproveRejectVerificationView,
+    UserActivationView,
     # AdminAnalyticsView,
     AdminCategoryCreateView,
     AdminNotificationView,
@@ -20,12 +17,19 @@ from .views import (
     # Analytics endpoints
     DashboardOverviewView,
     UserGrowthAnalyticsView,
-    MerchantAnalyticsView,
+    UserActivityAnalyticsView,
+    ConsolidatedAnalyticsView,
     ServiceAnalyticsView,
     RevenueAnalyticsView,
     TopPerformersView,
     GeographicHeatMapView,
     OngoingActivitiesFeedView,
+    # Feedback Management endpoints
+    ProductReviewManagementView,
+    MerchantReviewManagementView,
+    MechanicReviewManagementView,
+    DriverReviewManagementView,
+    AdminChatMessageView,
 )
 
 app_name = 'adminpanel'
@@ -66,21 +70,11 @@ urlpatterns = [
     ),
 
     # Specific management actions
-    path(
-        'approve/mechanic/<uuid:user_id>/',
-        ApproveMechanicProfileView.as_view(),
-        name='approve-mechanic-profile',
-    ),
-    path(
-        'approve/driver/<uuid:user_id>/',
-        ApproveDriverProfileView.as_view(),
-        name='approve-driver-profile',
-    ),
 
     path(
-        'analytics/sales/',
-        SalesAnalyticsView.as_view(),
-        name='sales-analytics',
+        'analytics/consolidated/',
+        ConsolidatedAnalyticsView.as_view(),
+        name='consolidated-analytics',
     ),
     # path('analytics/', AdminAnalyticsView.as_view(), name='admin-analytics'),
 
@@ -89,10 +83,11 @@ urlpatterns = [
         PendingVerificationsView.as_view(),
         name='pending-verifications',
     ),
+
     path(
-        'verifications/action/',
-        ApproveRejectVerificationView.as_view(),
-        name='approve-reject-verification',
+        'users/activation/',
+        UserActivationView.as_view(),
+        name='user-activation',
     ),
     path(
         'categories/create/',
@@ -123,9 +118,9 @@ urlpatterns = [
         name='user-growth-analytics'
     ),
     path(
-        'analytics/merchants/',
-        MerchantAnalyticsView.as_view(),
-        name='merchant-analytics'
+        'analytics/users/activities/',
+        UserActivityAnalyticsView.as_view(),
+        name='user-activity-analytics'
     ),
     path(
         'analytics/services/',
@@ -151,5 +146,32 @@ urlpatterns = [
         'analytics/ongoing-activities/',
         OngoingActivitiesFeedView.as_view(),
         name='ongoing-activities'
+    ),
+
+    # Feedback Management endpoints
+    path(
+        'feedback/reviews/products/',
+        ProductReviewManagementView.as_view(),
+        name='product-review-management'
+    ),
+    path(
+        'feedback/reviews/merchants/',
+        MerchantReviewManagementView.as_view(),
+        name='merchant-review-management'
+    ),
+    path(
+        'feedback/reviews/mechanics/',
+        MechanicReviewManagementView.as_view(),
+        name='mechanic-review-management'
+    ),
+    path(
+        'feedback/reviews/drivers/',
+        DriverReviewManagementView.as_view(),
+        name='driver-review-management'
+    ),
+    path(
+        'feedback/chat/messages/',
+        AdminChatMessageView.as_view(),
+        name='admin-chat-messages'
     ),
 ]

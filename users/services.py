@@ -7,6 +7,43 @@ from celery import shared_task
 from .models import Notification, User, Device
 
 
+@shared_task
+def send_account_status_email(user_id, action, reason=None):
+    """Send email notification about account status change."""
+    try:
+        user = User.objects.get(id=user_id)
+        if action == 'deactivated':
+            subject = "Your OGAMECHANIC Account Has Been Deactivated"
+            template = 'emails/account_deactivated.html'
+        elif action == 'activated':
+            subject = "Your OGAMECHANIC Account Has Been Activated"
+            template = 'emails/account_activated.html'
+        else:
+            return
+
+        context = {
+            'user': user,
+            'reason': reason,
+            'timestamp': timezone.now()
+        }
+
+        html_content = render_to_string(template, context)
+        text_content = strip_tags(html_content)
+
+        send_mail(
+            subject=subject,
+            message=text_content,
+            html_message=html_content,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+    except User.DoesNotExist:
+        print(f"User with id {user_id} not found.")
+    except Exception as e:
+        print(f"Failed to send account status email: {e}")
+
+
 class NotificationService:
     """
     Service class for handling all types of notifications
@@ -102,12 +139,14 @@ class NotificationService:
             notifications.append(notification)
         
         # Send bulk email notifications
-        NotificationService.send_bulk_email_notifications.delay(
+        from users.services import send_bulk_email_notifications
+        send_bulk_email_notifications.delay(
             [user.id for user in users], title, message, notification_type
         )
         
         # Send bulk push notifications
-        NotificationService.send_bulk_push_notifications.delay(
+        from users.services import send_bulk_push_notifications
+        send_bulk_push_notifications.delay(
             [user.id for user in users], title, message, notification_type
         )
         

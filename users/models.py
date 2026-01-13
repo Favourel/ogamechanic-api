@@ -280,7 +280,7 @@ class Notification(models.Model):
         ('error', _('Error')),
         ('success', _('Success')),
     ]
-    
+
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,

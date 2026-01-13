@@ -27,6 +27,9 @@ DATABASES = {
 
 # CORS settings for development
 # Allow specific origins for better security even in development
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = True
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # React development server
     "http://127.0.0.1:3000",
@@ -39,6 +42,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "https://*.ngrok-free.dev",  # ngrok tunnel,
     "https://ogamechanic.twopikin.com",
+    "https://oga-mechanic-admin.vercel.app"
 ]
 
 # Allow localhost with any port for development flexibility
@@ -50,8 +54,6 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 
 # For development, you can temporarily enable this if needed
 # CORS_ALLOW_ALL_ORIGINS = True  # Only use this if absolutely necessary
-
-CORS_ALLOW_CREDENTIALS = True
 
 # CSRF trusted origins for development (to allow ngrok and local testing)
 CSRF_TRUSTED_ORIGINS = [
