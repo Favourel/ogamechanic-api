@@ -9,20 +9,19 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView
-)
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi 
+from drf_yasg import openapi
 from .serializers import (
     UserSerializer,
     ChangePasswordSerializer,
     PasswordResetSerializer,
     NotificationSerializer,
     EmailVerificationSerializer,
-    MerchantProfileSerializer, MechanicProfileSerializer, 
-    DriverProfileSerializer, DriverLocationUpdateSerializer,
+    MerchantProfileSerializer,
+    MechanicProfileSerializer,
+    DriverProfileSerializer,
+    DriverLocationUpdateSerializer,
     StepOneRoleSelectionSerializer,
     StepTwoPrimaryUserInfoSerializer,
     StepTwoDriverSubRoleSerializer,
@@ -35,19 +34,23 @@ from .serializers import (
     StepFourMerchantDetailsSerializer,
     StepFourMechanicDetailsSerializer,
     StepFivePasswordSerializer,
-    CustomTokenObtainPairSerializer
+    CustomTokenObtainPairSerializer,
 )
 from django.core.files.storage import default_storage
 from ogamechanic.modules.utils import (
-    api_response, incoming_request_checks, get_incoming_request_checks,
+    api_response,
+    incoming_request_checks,
+    get_incoming_request_checks,
 )
 from ogamechanic.modules.paginations import CustomLimitOffsetPagination
 from .throttling import UserRateThrottle, AuthRateThrottle
 import jwt
 from django.conf import settings
 from ogamechanic.modules.exceptions import raise_serializer_error_msg
+
 # from ogamechanic.modules.email_validation import DisposableEmailValidator
 from users.models import UserActivityLog
+
 # from .services import NotificationService
 from django.utils import timezone
 from rest_framework import parsers
@@ -59,18 +62,33 @@ from .models import DriverReview
 from .models import Device
 from .models import (
     Notification,
-    Wallet, Transaction, BankAccount, SecureDocument,
-    DocumentVerificationLog, FileSecurityAudit, Role,
-    DriverProfile, MerchantProfile, MechanicProfile
+    Wallet,
+    Transaction,
+    BankAccount,
+    SecureDocument,
+    DocumentVerificationLog,
+    FileSecurityAudit,
+    Role,
+    DriverProfile,
+    MerchantProfile,
+    MechanicProfile,
 )
 from .serializers import (
-    WalletSerializer, TransactionSerializer, TransactionListSerializer,
-    BankAccountSerializer, BankAccountCreateSerializer,
-    WalletTopUpSerializer, WalletWithdrawalSerializer,
-    PaystackWebhookSerializer, SecureDocumentSerializer,
-    SecureDocumentCreateSerializer, DocumentVerificationLogSerializer,
-    FileSecurityAuditSerializer, DocumentVerificationSerializer,
-    FileUploadSerializer, RoleSerializer
+    WalletSerializer,
+    TransactionSerializer,
+    TransactionListSerializer,
+    BankAccountSerializer,
+    BankAccountCreateSerializer,
+    WalletTopUpSerializer,
+    WalletWithdrawalSerializer,
+    PaystackWebhookSerializer,
+    SecureDocumentSerializer,
+    SecureDocumentCreateSerializer,
+    DocumentVerificationLogSerializer,
+    FileSecurityAuditSerializer,
+    DocumentVerificationSerializer,
+    FileUploadSerializer,
+    RoleSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,10 +103,10 @@ User = get_user_model()
 class UserRegistrationView(APIView):
     """
     Unified user registration endpoint.
-    
+
     This endpoint provides a simple, single-step registration flow for users.
     It creates a user account with basic information and assigns a role.
-    
+
     **Features:**
     - Single API call registration
     - Email validation and verification
@@ -96,7 +114,7 @@ class UserRegistrationView(APIView):
     - Role assignment
     - Automatic JWT token generation
     - Email verification code sent automatically
-    
+
     **Required Fields:**
     - email: Valid email address
     - password: Strong password (min 8 chars, uppercase, lowercase, number)
@@ -105,15 +123,16 @@ class UserRegistrationView(APIView):
     - last_name: User's last name
     - phone_number: Valid phone number
     - role: Role name (primary_user, driver, merchant, mechanic)
-    
+
     **Response:**
     - Returns JWT access and refresh tokens
     - Returns user information
     - Sends verification email with code
     """
+
     permission_classes = [AllowAny]
     throttle_classes = [AuthRateThrottle]
-    
+
     @swagger_auto_schema(
         operation_summary="Register New User",
         operation_description="""
@@ -148,160 +167,178 @@ class UserRegistrationView(APIView):
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             required=[
-                'email', 'password', 'confirm_password',
-                'first_name', 'last_name', 'phone_number', 'role'
+                "email",
+                "password",
+                "confirm_password",
+                "first_name",
+                "last_name",
+                "phone_number",
+                "role",
             ],
             properties={
-                'email': openapi.Schema(
+                "email": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    format='email',
-                    description='Valid email address',
-                    example='user@example.com'
+                    format="email",
+                    description="Valid email address",
+                    example="user@example.com",
                 ),
-                'password': openapi.Schema(
+                "password": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    format='password',
-                    description='Strong password (min 8 chars)',
-                    example='SecurePass123!'
+                    format="password",
+                    description="Strong password (min 8 chars)",
+                    example="SecurePass123!",
                 ),
-                'confirm_password': openapi.Schema(
+                "confirm_password": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    format='password',
-                    description='Must match password',
-                    example='SecurePass123!'
+                    format="password",
+                    description="Must match password",
+                    example="SecurePass123!",
                 ),
-                'first_name': openapi.Schema(
+                "first_name": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description='User first name',
-                    example='John'
+                    description="User first name",
+                    example="John",
                 ),
-                'last_name': openapi.Schema(
+                "last_name": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description='User last name',
-                    example='Doe'
+                    description="User last name",
+                    example="Doe",
                 ),
-                'phone_number': openapi.Schema(
+                "phone_number": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description='Valid Nigerian phone number',
-                    example='08012345678'
+                    description="Valid Nigerian phone number",
+                    example="08012345678",
                 ),
-                'role': openapi.Schema(
+                "role": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description='Role name (primary_user, driver, merchant, mechanic)',
-                    example='primary_user'
+                    description="Role name (primary_user, driver, merchant, mechanic)",
+                    example="primary_user",
                 ),
-            }
+            },
         ),
         responses={
             201: openapi.Response(
-                description='User registered successfully',
+                description="User registered successfully",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN,
-                            example=True
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=True
                         ),
-                        'message': openapi.Schema(
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example='Registration successful! Verification email sent.'
+                            example="Registration successful! Verification email sent.",
                         ),
-                        'data': openapi.Schema(
+                        "data": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'access': openapi.Schema(
+                                "access": openapi.Schema(
                                     type=openapi.TYPE_STRING,
-                                    description='JWT access token'
+                                    description="JWT access token",
                                 ),
-                                'refresh': openapi.Schema(
+                                "refresh": openapi.Schema(
                                     type=openapi.TYPE_STRING,
-                                    description='JWT refresh token'
+                                    description="JWT refresh token",
                                 ),
-                                'user': openapi.Schema(
+                                "user": openapi.Schema(
                                     type=openapi.TYPE_OBJECT,
                                     properties={
-                                        'id': openapi.Schema(type=openapi.TYPE_STRING),
-                                        'email': openapi.Schema(type=openapi.TYPE_STRING),
-                                        'first_name': openapi.Schema(type=openapi.TYPE_STRING),
-                                        'last_name': openapi.Schema(type=openapi.TYPE_STRING),
-                                        'phone_number': openapi.Schema(type=openapi.TYPE_STRING),
-                                        'role': openapi.Schema(type=openapi.TYPE_STRING),
-                                        'is_verified': openapi.Schema(type=openapi.TYPE_BOOLEAN),
-                                    }
-                                )
-                            }
-                        )
-                    }
-                )
+                                        "id": openapi.Schema(type=openapi.TYPE_STRING),
+                                        "email": openapi.Schema(
+                                            type=openapi.TYPE_STRING
+                                        ),
+                                        "first_name": openapi.Schema(
+                                            type=openapi.TYPE_STRING
+                                        ),
+                                        "last_name": openapi.Schema(
+                                            type=openapi.TYPE_STRING
+                                        ),
+                                        "phone_number": openapi.Schema(
+                                            type=openapi.TYPE_STRING
+                                        ),
+                                        "role": openapi.Schema(
+                                            type=openapi.TYPE_STRING
+                                        ),
+                                        "is_verified": openapi.Schema(
+                                            type=openapi.TYPE_BOOLEAN
+                                        ),
+                                    },
+                                ),
+                            },
+                        ),
+                    },
+                ),
             ),
             400: openapi.Response(
-                description='Invalid input data',
+                description="Invalid input data",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN,
-                            example=False
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
                         ),
-                        'message': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            example='Validation error'
+                        "message": openapi.Schema(
+                            type=openapi.TYPE_STRING, example="Validation error"
                         ),
-                        'errors': openapi.Schema(
+                        "errors": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
-                            description='Field-specific validation errors'
-                        )
-                    }
-                )
+                            description="Field-specific validation errors",
+                        ),
+                    },
+                ),
             ),
             409: openapi.Response(
-                description='User already exists',
+                description="User already exists",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN,
-                            example=False
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
                         ),
-                        'message': openapi.Schema(
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example='User with this email already exists'
-                        )
-                    }
-                )
+                            example="User with this email already exists",
+                        ),
+                    },
+                ),
             ),
             429: openapi.Response(
-                description='Too many requests',
+                description="Too many requests",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN,
-                            example=False
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
                         ),
-                        'message': openapi.Schema(
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example='Rate limit exceeded. Please try again later.'
-                        )
-                    }
-                )
-            )
-        }
+                            example="Rate limit exceeded. Please try again later.",
+                        ),
+                    },
+                ),
+            ),
+        },
     )
     def post(self, request):
         """Handle user registration"""
         try:
             # Extract data from request
             data = request.data
-            
+
             # Validate required fields
             required_fields = [
-                'email', 'password', 'confirm_password',
-                'first_name', 'last_name', 'phone_number', 'role'
+                "email",
+                "password",
+                "confirm_password",
+                "first_name",
+                "last_name",
+                "phone_number",
+                "role",
             ]
-            
+
             missing_fields = [
-                field for field in required_fields
+                field
+                for field in required_fields
                 if field not in data or not data.get(field)
             ]
 
@@ -309,62 +346,62 @@ class UserRegistrationView(APIView):
                 return Response(
                     api_response(
                         message=(
-                            f"Missing required fields: "
-                            f"{', '.join(missing_fields)}"
+                            f"Missing required fields: " f"{', '.join(missing_fields)}"
                         ),
                         status=False,
-                        errors={'missing_fields': missing_fields}
+                        errors={"missing_fields": missing_fields},
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Extract and validate data
-            email = data.get('email', '').lower().strip()
-            password = data.get('password')
-            confirm_password = data.get('confirm_password')
-            first_name = data.get('first_name', '').strip()
-            last_name = data.get('last_name', '').strip()
-            phone_number = data.get('phone_number', '').strip()
-            role_name = data.get('role', '').lower().strip()
-            
+            email = data.get("email", "").lower().strip()
+            password = data.get("password")
+            confirm_password = data.get("confirm_password")
+            first_name = data.get("first_name", "").strip()
+            last_name = data.get("last_name", "").strip()
+            phone_number = data.get("phone_number", "").strip()
+            role_name = data.get("role", "").lower().strip()
+
             # Validate email format
             try:
                 from django.core.validators import (
-                    validate_email as django_validate_email
+                    validate_email as django_validate_email,
                 )
+
                 django_validate_email(email)
             except ValidationError:
                 return Response(
                     api_response(
                         message="Invalid email format",
                         status=False,
-                        errors={'email': ['Enter a valid email address']}
+                        errors={"email": ["Enter a valid email address"]},
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Check if user already exists
             if User.objects.filter(email=email).exists():
                 return Response(
                     api_response(
                         message="User with this email already exists",
                         status=False,
-                        errors={'email': ['This email is already registered']}
+                        errors={"email": ["This email is already registered"]},
                     ),
-                    status=http_status.HTTP_409_CONFLICT
+                    status=http_status.HTTP_409_CONFLICT,
                 )
-            
+
             # Validate password match
             if password != confirm_password:
                 return Response(
                     api_response(
                         message="Passwords do not match",
                         status=False,
-                        errors={'confirm_password': ['Passwords must match']}
+                        errors={"confirm_password": ["Passwords must match"]},
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Validate password strength
             try:
                 validate_password(password)
@@ -373,39 +410,38 @@ class UserRegistrationView(APIView):
                     api_response(
                         message="Password does not meet requirements",
                         status=False,
-                        errors={'password': list(e.messages)}
+                        errors={"password": list(e.messages)},
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Validate and format phone number
             try:
                 from ogamechanic.modules.utils import format_phone_number
+
                 formatted_phone = format_phone_number(phone_number)
             except Exception as e:
                 return Response(
                     api_response(
                         message="Invalid phone number format",
                         status=False,
-                        errors={'phone_number': [str(e)]}
+                        errors={"phone_number": [str(e)]},
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Validate role
-            valid_roles = ['primary_user', 'driver', 'merchant', 'mechanic']
+            valid_roles = ["primary_user", "driver", "merchant", "mechanic"]
             if role_name not in valid_roles:
                 return Response(
                     api_response(
                         message="Invalid role selected",
                         status=False,
                         errors={
-                            'role': [
-                                f'Role must be one of: {", ".join(valid_roles)}'
-                            ]
-                        }
+                            "role": [f'Role must be one of: {", ".join(valid_roles)}']
+                        },
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
 
             try:
@@ -415,35 +451,33 @@ class UserRegistrationView(APIView):
                     api_response(
                         message=f"Role '{role_name}' not found in database",
                         status=False,
-                        errors={'role': ['Role does not exist']}
+                        errors={"role": ["Role does not exist"]},
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Create user
             user_data = {
-                'email': email,
-                'first_name': first_name,
-                'last_name': last_name,
-                'phone_number': formatted_phone,
-                'is_active': True,
-                'is_verified': False  # User needs to verify email
+                "email": email,
+                "first_name": first_name,
+                "last_name": last_name,
+                "phone_number": formatted_phone,
+                "is_active": True,
+                "is_verified": False,  # User needs to verify email
             }
 
             # Create the user
-            user = User.objects.create_user(
-                password=password,
-                **user_data
-            )
-            
+            user = User.objects.create_user(password=password, **user_data)
+
             # Assign role
             user.roles.add(role)
             user.active_role = role
             user.save()
-            
+
             # Generate verification code
             import random
             from django.core.cache import cache
+
             verification_code = str(random.randint(100000, 999999))
 
             # Store verification code in cache (expires in 15 minutes)
@@ -451,46 +485,43 @@ class UserRegistrationView(APIView):
             cache.set(cache_key, verification_code, timeout=900)  # 15 min
 
             # Log verification code
-            logger.info(
-                f"Verification code for {email}: {verification_code}"
-            )
+            logger.info(f"Verification code for {email}: {verification_code}")
             print(f"Verification code for {email}: {verification_code}")
 
             # Send verification email
             try:
                 from .tasks import send_step_by_step_verification_email
-                send_step_by_step_verification_email.delay(
-                    email, verification_code
-                )
+
+                send_step_by_step_verification_email.delay(email, verification_code)
             except Exception as e:
                 logger.error(f"Failed to send verification email: {e}")
-            
+
             # Generate JWT tokens
             refresh = RefreshToken.for_user(user)
             access_token = str(refresh.access_token)
             refresh_token = str(refresh)
-            
+
             # Prepare response data
             user_data_response = {
-                'id': str(user.id),
-                'email': user.email,
-                'first_name': user.first_name,
-                'last_name': user.last_name,
-                'phone_number': user.phone_number,
-                'role': role.name,
-                'is_verified': user.is_verified,
+                "id": str(user.id),
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "phone_number": user.phone_number,
+                "role": role.name,
+                "is_verified": user.is_verified,
             }
-            
+
             # Log user activity
             try:
                 UserActivityLog.objects.create(
                     user=user,
-                    action='user_registered',
-                    details=f'User registered with role: {role.name}'
+                    action="user_registered",
+                    details=f"User registered with role: {role.name}",
                 )
             except Exception as e:
                 logger.error(f"Failed to log user activity: {e}")
-            
+
             return Response(
                 api_response(
                     message=(
@@ -499,54 +530,50 @@ class UserRegistrationView(APIView):
                     ),
                     status=True,
                     data={
-                        'access': access_token,
-                        'refresh': refresh_token,
-                        'user': user_data_response,
-                        'verification_required': True,
-                        'verification_info': {
-                            'message': (
-                                'Please verify your email using the code sent. '
-                                'Code expires in 15 minutes.'
+                        "access": access_token,
+                        "refresh": refresh_token,
+                        "user": user_data_response,
+                        "verification_required": True,
+                        "verification_info": {
+                            "message": (
+                                "Please verify your email using the code sent. "
+                                "Code expires in 15 minutes."
                             ),
-                            'verify_endpoint': '/api/users/verify-email-code/',
-                            'resend_endpoint': '/api/users/resend-verification-code/'
-                        }
-                    }
+                            "verify_endpoint": "/api/users/verify-email-code/",
+                            "resend_endpoint": "/api/users/resend-verification-code/",
+                        },
+                    },
                 ),
-                status=http_status.HTTP_201_CREATED
+                status=http_status.HTTP_201_CREATED,
             )
 
         except Exception as e:
-            logger.error(
-                f"Registration error: {str(e)}\n{traceback.format_exc()}"
-            )
+            logger.error(f"Registration error: {str(e)}\n{traceback.format_exc()}")
             return Response(
-                api_response(
-                    message=f"Registration failed: {str(e)}",
-                    status=False
-                ),
-                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+                api_response(message=f"Registration failed: {str(e)}", status=False),
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
 class VerifyEmailCodeView(APIView):
     """
     Verify email using 6-digit code sent during registration.
-    
+
     This endpoint allows users to verify their email address using the
     6-digit verification code sent to their email during registration.
-    
+
     **Required Fields:**
     - email: The email address to verify
     - code: The 6-digit verification code
-    
+
     **Response:**
     - Success message if code is valid
     - Error message if code is invalid or expired
     """
+
     permission_classes = [AllowAny]
     throttle_classes = [AuthRateThrottle]
-    
+
     @swagger_auto_schema(
         operation_summary="Verify Email with Code",
         operation_description="""
@@ -567,81 +594,78 @@ class VerifyEmailCodeView(APIView):
         """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['email', 'code'],
+            required=["email", "code"],
             properties={
-                'email': openapi.Schema(
+                "email": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    format='email',
-                    description='Email address to verify',
-                    example='user@example.com'
+                    format="email",
+                    description="Email address to verify",
+                    example="user@example.com",
                 ),
-                'code': openapi.Schema(
+                "code": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description='6-digit verification code',
-                    example='123456'
+                    description="6-digit verification code",
+                    example="123456",
                 ),
-            }
+            },
         ),
         responses={
             200: openapi.Response(
-                description='Email verified successfully',
+                description="Email verified successfully",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN,
-                            example=True
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=True
                         ),
-                        'message': openapi.Schema(
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example='Email verified successfully!'
-                        )
-                    }
-                )
+                            example="Email verified successfully!",
+                        ),
+                    },
+                ),
             ),
             400: openapi.Response(
-                description='Invalid or expired code',
+                description="Invalid or expired code",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN,
-                            example=False
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
                         ),
-                        'message': openapi.Schema(
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example='Invalid or expired verification code'
-                        )
-                    }
-                )
+                            example="Invalid or expired verification code",
+                        ),
+                    },
+                ),
             ),
             404: openapi.Response(
-                description='User not found',
+                description="User not found",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN,
-                            example=False
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
                         ),
-                        'message': openapi.Schema(
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example='User with this email not found'
-                        )
-                    }
-                )
-            )
-        }
+                            example="User with this email not found",
+                        ),
+                    },
+                ),
+            ),
+        },
     )
     def post(self, request):
         """Verify email with 6-digit code"""
         try:
             from django.core.cache import cache
-            
+
             # Extract data
-            email = request.data.get('email', '').lower().strip()
-            code = request.data.get('code', '').strip()
-            
+            email = request.data.get("email", "").lower().strip()
+            code = request.data.get("code", "").strip()
+
             # Validate required fields
             if not email or not code:
                 return Response(
@@ -649,41 +673,36 @@ class VerifyEmailCodeView(APIView):
                         message="Email and code are required",
                         status=False,
                         errors={
-                            'missing_fields': [
-                                f for f in ['email', 'code']
-                                if not request.data.get(f)
+                            "missing_fields": [
+                                f for f in ["email", "code"] if not request.data.get(f)
                             ]
-                        }
+                        },
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Check if user exists
             try:
                 user = User.objects.get(email=email)
             except User.DoesNotExist:
                 return Response(
                     api_response(
-                        message="User with this email not found",
-                        status=False
+                        message="User with this email not found", status=False
                     ),
-                    status=http_status.HTTP_404_NOT_FOUND
+                    status=http_status.HTTP_404_NOT_FOUND,
                 )
-            
+
             # Check if already verified
             if user.is_verified:
                 return Response(
-                    api_response(
-                        message="Email is already verified",
-                        status=True
-                    ),
-                    status=http_status.HTTP_200_OK
+                    api_response(message="Email is already verified", status=True),
+                    status=http_status.HTTP_200_OK,
                 )
-            
+
             # Get stored verification code from cache
             cache_key = f"email_verification_{email}"
             stored_code = cache.get(cache_key)
-            
+
             if not stored_code:
                 return Response(
                     api_response(
@@ -691,76 +710,68 @@ class VerifyEmailCodeView(APIView):
                             "Verification code expired or not found. "
                             "Please request a new code."
                         ),
-                        status=False
+                        status=False,
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Verify code
             if code != stored_code:
                 return Response(
-                    api_response(
-                        message="Invalid verification code",
-                        status=False
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    api_response(message="Invalid verification code", status=False),
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Mark user as verified
             user.is_verified = True
             user.save()
-            
+
             # Delete the verification code from cache
             cache.delete(cache_key)
-            
+
             # Log activity
             try:
                 UserActivityLog.objects.create(
                     user=user,
-                    action='email_verified',
-                    details='Email verified successfully'
+                    action="email_verified",
+                    details="Email verified successfully",
                 )
             except Exception as e:
                 logger.error(f"Failed to log verification activity: {e}")
-            
+
             return Response(
-                api_response(
-                    message="Email verified successfully!",
-                    status=True
-                ),
-                status=http_status.HTTP_200_OK
+                api_response(message="Email verified successfully!", status=True),
+                status=http_status.HTTP_200_OK,
             )
-            
+
         except Exception as e:
             logger.error(
                 f"Email verification error: {str(e)}\n{traceback.format_exc()}"
             )
             return Response(
-                api_response(
-                    message=f"Verification failed: {str(e)}",
-                    status=False
-                ),
-                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+                api_response(message=f"Verification failed: {str(e)}", status=False),
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
 class ResendVerificationCodeView(APIView):
     """
     Resend verification code to user's email.
-    
+
     This endpoint allows users to request a new verification code
     if their previous code expired or was lost.
-    
+
     **Required Fields:**
     - email: The email address to send code to
-    
+
     **Response:**
     - Success message with new code sent
     - Error if user not found or already verified
     """
+
     permission_classes = [AllowAny]
     throttle_classes = [AuthRateThrottle]
-    
+
     @swagger_auto_schema(
         operation_summary="Resend Verification Code",
         operation_description="""
@@ -777,148 +788,132 @@ class ResendVerificationCodeView(APIView):
         """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['email'],
+            required=["email"],
             properties={
-                'email': openapi.Schema(
+                "email": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    format='email',
-                    description='Email address to send code to',
-                    example='user@example.com'
+                    format="email",
+                    description="Email address to send code to",
+                    example="user@example.com",
                 ),
-            }
+            },
         ),
         responses={
             200: openapi.Response(
-                description='Verification code sent',
+                description="Verification code sent",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN,
-                            example=True
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=True
                         ),
-                        'message': openapi.Schema(
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example='Verification code sent to your email'
-                        )
-                    }
-                )
+                            example="Verification code sent to your email",
+                        ),
+                    },
+                ),
             ),
             400: openapi.Response(
-                description='Email already verified',
+                description="Email already verified",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN,
-                            example=False
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
                         ),
-                        'message': openapi.Schema(
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example='Email is already verified'
-                        )
-                    }
-                )
+                            example="Email is already verified",
+                        ),
+                    },
+                ),
             ),
-            404: openapi.Response(
-                description='User not found'
-            )
-        }
+            404: openapi.Response(description="User not found"),
+        },
     )
     def post(self, request):
         """Resend verification code"""
         try:
             from django.core.cache import cache
             import random
-            
+
             # Extract email
-            email = request.data.get('email', '').lower().strip()
-            
+            email = request.data.get("email", "").lower().strip()
+
             if not email:
                 return Response(
-                    api_response(
-                        message="Email is required",
-                        status=False
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    api_response(message="Email is required", status=False),
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Check if user exists
             try:
                 user = User.objects.get(email=email)
             except User.DoesNotExist:
                 return Response(
                     api_response(
-                        message="User with this email not found",
-                        status=False
+                        message="User with this email not found", status=False
                     ),
-                    status=http_status.HTTP_404_NOT_FOUND
+                    status=http_status.HTTP_404_NOT_FOUND,
                 )
-            
+
             # Check if already verified
             if user.is_verified:
                 return Response(
-                    api_response(
-                        message="Email is already verified",
-                        status=False
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    api_response(message="Email is already verified", status=False),
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Generate new verification code
             verification_code = str(random.randint(100000, 999999))
-            
+
             # Store in cache (expires in 15 minutes)
             cache_key = f"email_verification_{email}"
             cache.set(cache_key, verification_code, timeout=900)
-            
+
             # Log verification code
-            logger.info(
-                f"New verification code for {email}: {verification_code}"
-            )
+            logger.info(f"New verification code for {email}: {verification_code}")
             print(f"New verification code for {email}: {verification_code}")
-            
+
             # Send verification email
             try:
                 from .tasks import send_step_by_step_verification_email
-                send_step_by_step_verification_email.delay(
-                    email, verification_code
-                )
+
+                send_step_by_step_verification_email.delay(email, verification_code)
             except Exception as e:
                 logger.error(f"Failed to send verification email: {e}")
-            
+
             return Response(
                 api_response(
-                    message="Verification code sent to your email",
-                    status=True
+                    message="Verification code sent to your email", status=True
                 ),
-                status=http_status.HTTP_200_OK
+                status=http_status.HTTP_200_OK,
             )
-            
+
         except Exception as e:
-            logger.error(
-                f"Resend code error: {str(e)}\n{traceback.format_exc()}"
-            )
+            logger.error(f"Resend code error: {str(e)}\n{traceback.format_exc()}")
             return Response(
                 api_response(
                     message=f"Failed to resend code: {str(e)}",
                     status=False,
-                    errors={'error': [str(e)]}
+                    errors={"error": [str(e)]},
                 ),
-                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
 class SwitchRoleView(APIView):
     """
     Allow authenticated users to add/switch to a new role.
-    
+
     After switching to a new role, users must complete the role-specific
     verification/registration process (e.g., create merchant/mechanic/driver profile).
     """
+
     permission_classes = [IsAuthenticated]
     throttle_classes = [UserRateThrottle]
-    
+
     @swagger_auto_schema(
         operation_summary="Add/Switch User Role",
         operation_description="""
@@ -945,175 +940,213 @@ class SwitchRoleView(APIView):
         """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['role'],
+            required=["role"],
             properties={
-                'role': openapi.Schema(
+                "role": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description='Role name to switch to',
-                    example='merchant',
-                    enum=['primary_user', 'driver', 'merchant', 'mechanic']
+                    description="Role name to switch to",
+                    example="merchant",
+                    enum=["primary_user", "driver", "merchant", "mechanic"],
                 ),
-            }
+            },
         ),
         responses={
             200: openapi.Response(
-                description='Role switched successfully',
+                description="Role switched successfully",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN,
-                            example=True
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=True
                         ),
-                        'message': openapi.Schema(
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example='Role switched to merchant successfully'
+                            example="Role switched to merchant successfully",
                         ),
-                        'data': openapi.Schema(
+                        "data": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'current_role': openapi.Schema(
-                                    type=openapi.TYPE_STRING,
-                                    example='merchant'
+                                "current_role": openapi.Schema(
+                                    type=openapi.TYPE_STRING, example="merchant"
                                 ),
-                                'all_roles': openapi.Schema(
+                                "all_roles": openapi.Schema(
                                     type=openapi.TYPE_ARRAY,
-                                    items=openapi.Schema(type=openapi.TYPE_STRING)
+                                    items=openapi.Schema(type=openapi.TYPE_STRING),
                                 ),
-                                'profile_required': openapi.Schema(
-                                    type=openapi.TYPE_BOOLEAN,
-                                    example=True
+                                "profile_required": openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN, example=True
                                 ),
-                                'profile_endpoint': openapi.Schema(
+                                "profile_endpoint": openapi.Schema(
                                     type=openapi.TYPE_STRING,
-                                    example='/api/users/profile/merchant/'
-                                )
-                            }
-                        )
-                    }
-                )
+                                    example="/api/users/profile/merchant/",
+                                ),
+                            },
+                        ),
+                    },
+                ),
             ),
-            400: openapi.Response(description='Invalid role'),
-            401: openapi.Response(description='Authentication required')
-        }
+            400: openapi.Response(description="Invalid role"),
+            401: openapi.Response(description="Authentication required"),
+        },
     )
     def post(self, request):
         """Switch user role"""
         try:
             user = request.user
-            role_name = request.data.get('role', '').lower().strip()
-            
+            role_name = request.data.get("role", "").lower().strip()
+
             if not role_name:
                 return Response(
-                    api_response(
-                        message="Role is required",
-                        status=False
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    api_response(message="Role is required", status=False),
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Validate role
-            valid_roles = ['primary_user', 'driver', 'merchant', 'mechanic']
+            valid_roles = ["primary_user", "driver", "merchant", "mechanic"]
             if role_name not in valid_roles:
                 return Response(
                     api_response(
                         message="Invalid role selected",
                         status=False,
                         errors={
-                            'role': [
-                                f'Role must be one of: {", ".join(valid_roles)}'
-                            ]
-                        }
+                            "role": [f'Role must be one of: {", ".join(valid_roles)}']
+                        },
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
-            # Get role object
+
+            # Get role object J
             try:
                 role = Role.objects.get(name=role_name)
             except Role.DoesNotExist:
                 return Response(
                     api_response(
                         message=f"Role '{role_name}' not found in database",
-                        status=False
+                        status=False,
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Check if user already has this role
             role_added = False
+            print(f"User {user.email} switching to role {role_name}")
+            print(f"User current roles: {[r.name for r in user.roles.all()]}")
+            
             if not user.roles.filter(id=role.id).exists():
                 user.roles.add(role)
                 role_added = True
-            
+                print(f"Role {role_name} added to user {user.email}")
+                
+                # Create basic profile for newly added role
+                if role_name == "merchant":
+                    from users.models import MerchantProfile
+                    profile, created = MerchantProfile.objects.get_or_create(user=user)
+                    print(f"Merchant profile for user {user.email}: created={created}")
+                elif role_name == "mechanic":
+                    from users.models import MechanicProfile
+                    profile, created = MechanicProfile.objects.get_or_create(user=user)
+                    print(f"Mechanic profile for user {user.email}: created={created}")
+                elif role_name == "driver":
+                    from users.models import DriverProfile
+                    profile, created = DriverProfile.objects.get_or_create(user=user)
+                    print(f"Driver profile for user {user.email}: created={created}")
+            else:
+                print(f"User {user.email} already has role {role_name}")
+
             # Switch active role
             user.active_role = role
             user.save()
-            
+
             # Check if profile exists for this role
             profile_required = False
             profile_endpoint = None
             profile_exists = False
-            
-            if role_name == 'merchant':
-                profile_exists = hasattr(user, 'merchant_profile')
+
+            if role_name == "merchant":
+                profile_exists = hasattr(user, "merchant_profile")
                 profile_required = not profile_exists
-                profile_endpoint = '/api/users/profile/merchant/'
-            elif role_name == 'mechanic':
-                profile_exists = hasattr(user, 'mechanic_profile')
+                profile_endpoint = "/api/users/profile/merchant/"
+                print(f"Merchant profile exists for {user.email}: {profile_exists}")
+                
+                # Create basic merchant profile if it doesn't exist (fallback)
+                if not profile_exists:
+                    from users.models import MerchantProfile
+                    MerchantProfile.objects.create(user=user)
+                    profile_exists = True
+                    print(f"Fallback: Created merchant profile for user {user.email}")
+                    
+            elif role_name == "mechanic":
+                profile_exists = hasattr(user, "mechanic_profile")
                 profile_required = not profile_exists
-                profile_endpoint = '/api/users/profile/mechanic/'
-            elif role_name == 'driver':
-                profile_exists = hasattr(user, 'driver_profile')
+                profile_endpoint = "/api/users/profile/mechanic/"
+                print(f"Mechanic profile exists for {user.email}: {profile_exists}")
+                
+                # Create basic mechanic profile if it doesn't exist (fallback)
+                if not profile_exists:
+                    from users.models import MechanicProfile
+                    MechanicProfile.objects.create(user=user)
+                    profile_exists = True
+                    print(f"Fallback: Created mechanic profile for user {user.email}")
+                    
+            elif role_name == "driver":
+                profile_exists = hasattr(user, "driver_profile")
                 profile_required = not profile_exists
-                profile_endpoint = '/api/users/profile/driver/'
-            
+                profile_endpoint = "/api/users/profile/driver/"
+                logger.info(f"Driver profile exists for {user.email}: {profile_exists}")
+                
+                # Create basic driver profile if it doesn't exist (fallback)
+                if not profile_exists:
+                    from users.models import DriverProfile
+                    DriverProfile.objects.create(user=user)
+                    profile_exists = True
+                    logger.info(f"Fallback: Created driver profile for user {user.email}")
+
             # Log activity
             try:
-                action = 'role_added' if role_added else 'role_switched'
+                action = "role_added" if role_added else "role_switched"
                 UserActivityLog.objects.create(
                     user=user,
                     action=action,
-                    details=f'User switched to role: {role_name}'
+                    details=f"User switched to role: {role_name}",
                 )
             except Exception as e:
                 logger.error(f"Failed to log role switch: {e}")
-            
+
             # Get all user roles
             all_roles = [r.name for r in user.roles.all()]
-            
+
             message = f"Role switched to {role_name} successfully"
             if role_added:
                 message = f"Role {role_name} added and activated successfully"
-            
-            if profile_required:
+
+            # Update message based on profile status
+            if role_added and profile_exists:
+                message += f". {role_name.capitalize()} profile created. Please complete your profile details."
+            elif profile_required and profile_exists:
+                message += f". {role_name.capitalize()} profile created. Please complete your profile details."
+            elif profile_required:
                 message += f". Please complete your {role_name} profile."
-            
+
             return Response(
                 api_response(
                     message=message,
                     status=True,
                     data={
-                        'current_role': role_name,
-                        'all_roles': all_roles,
-                        'profile_required': profile_required,
-                        'profile_endpoint': profile_endpoint,
-                        'profile_exists': profile_exists
-                    }
+                        "current_role": role_name,
+                        "all_roles": all_roles,
+                        "profile_required": profile_required,
+                        "profile_endpoint": profile_endpoint,
+                        "profile_exists": profile_exists,
+                    },
                 ),
-                status=http_status.HTTP_200_OK
+                status=http_status.HTTP_200_OK,
             )
-            
+
         except Exception as e:
-            logger.error(
-                f"Role switch error: {str(e)}\n{traceback.format_exc()}"
-            )
+            logger.error(f"Role switch error: {str(e)}\n{traceback.format_exc()}")
             return Response(
-                api_response(
-                    message=f"Failed to switch role: {str(e)}",
-                    status=False
-                ),
-                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+                api_response(message=f"Failed to switch role: {str(e)}", status=False),
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
@@ -1121,8 +1154,9 @@ class MerchantFollowView(APIView):
     """
     Follow/Unfollow merchants and check follow status.
     """
+
     permission_classes = [IsAuthenticated]
-    
+
     @swagger_auto_schema(
         operation_summary="Follow/Unfollow Merchant",
         operation_description="""
@@ -1139,120 +1173,105 @@ class MerchantFollowView(APIView):
         """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['merchant_id', 'action'],
+            required=["merchant_id", "action"],
             properties={
-                'merchant_id': openapi.Schema(
+                "merchant_id": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description='UUID of the merchant to follow/unfollow',
-                    example='123e4567-e89b-12d3-a456-426614174000'
+                    description="UUID of the merchant to follow/unfollow",
+                    example="123e4567-e89b-12d3-a456-426614174000",
                 ),
-                'action': openapi.Schema(
+                "action": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description='Action to perform',
-                    example='follow',
-                    enum=['follow', 'unfollow']
+                    description="Action to perform",
+                    example="follow",
+                    enum=["follow", "unfollow"],
                 ),
-            }
+            },
         ),
         responses={
             200: openapi.Response(
-                description='Action completed successfully',
+                description="Action completed successfully",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN,
-                            example=True
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=True
                         ),
-                        'message': openapi.Schema(
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example='Successfully followed merchant'
+                            example="Successfully followed merchant",
                         ),
-                        'data': openapi.Schema(
+                        "data": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'is_following': openapi.Schema(
-                                    type=openapi.TYPE_BOOLEAN,
-                                    example=True
+                                "is_following": openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN, example=True
                                 ),
-                                'followers_count': openapi.Schema(
-                                    type=openapi.TYPE_INTEGER,
-                                    example=150
-                                )
-                            }
-                        )
-                    }
-                )
+                                "followers_count": openapi.Schema(
+                                    type=openapi.TYPE_INTEGER, example=150
+                                ),
+                            },
+                        ),
+                    },
+                ),
             ),
-            400: openapi.Response(description='Invalid request'),
-            404: openapi.Response(description='Merchant not found')
-        }
+            400: openapi.Response(description="Invalid request"),
+            404: openapi.Response(description="Merchant not found"),
+        },
     )
     def post(self, request):
         """Follow or unfollow a merchant"""
         try:
             from products.models import FollowMerchant
-            
+
             user = request.user
-            merchant_id = request.data.get('merchant_id')
-            action = request.data.get('action', '').lower()
-            
+            merchant_id = request.data.get("merchant_id")
+            action = request.data.get("action", "").lower()
+
             # Validate inputs
             if not merchant_id or not action:
                 return Response(
                     api_response(
-                        message="merchant_id and action are required",
-                        status=False
+                        message="merchant_id and action are required", status=False
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
-            if action not in ['follow', 'unfollow']:
+
+            if action not in ["follow", "unfollow"]:
                 return Response(
                     api_response(
-                        message="Action must be 'follow' or 'unfollow'",
-                        status=False
+                        message="Action must be 'follow' or 'unfollow'", status=False
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Get merchant user
             try:
                 merchant = User.objects.get(id=merchant_id)
             except User.DoesNotExist:
                 return Response(
-                    api_response(
-                        message="Merchant not found",
-                        status=False
-                    ),
-                    status=http_status.HTTP_404_NOT_FOUND
+                    api_response(message="Merchant not found", status=False),
+                    status=http_status.HTTP_404_NOT_FOUND,
                 )
-            
+
             # Check if merchant has merchant role
-            if not merchant.roles.filter(name='merchant').exists():
+            if not merchant.roles.filter(name="merchant").exists():
                 return Response(
-                    api_response(
-                        message="User is not a merchant",
-                        status=False
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    api_response(message="User is not a merchant", status=False),
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Cannot follow yourself
             if user.id == merchant.id:
                 return Response(
-                    api_response(
-                        message="You cannot follow yourself",
-                        status=False
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    api_response(message="You cannot follow yourself", status=False),
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Perform action
-            if action == 'follow':
+            if action == "follow":
                 follow, created = FollowMerchant.objects.get_or_create(
-                    user=user,
-                    merchant=merchant
+                    user=user, merchant=merchant
                 )
                 if created:
                     message = "Successfully followed merchant"
@@ -1260,50 +1279,43 @@ class MerchantFollowView(APIView):
                     message = "You are already following this merchant"
             else:  # unfollow
                 deleted_count = FollowMerchant.objects.filter(
-                    user=user,
-                    merchant=merchant
+                    user=user, merchant=merchant
                 ).delete()[0]
-                
+
                 if deleted_count > 0:
                     message = "Successfully unfollowed merchant"
                 else:
                     message = "You were not following this merchant"
-            
+
             # Get updated follow status
             is_following = FollowMerchant.objects.filter(
-                user=user,
-                merchant=merchant
+                user=user, merchant=merchant
             ).exists()
-            
+
             # Get followers count
-            followers_count = FollowMerchant.objects.filter(
-                merchant=merchant
-            ).count()
-            
+            followers_count = FollowMerchant.objects.filter(merchant=merchant).count()
+
             return Response(
                 api_response(
                     message=message,
                     status=True,
                     data={
-                        'is_following': is_following,
-                        'followers_count': followers_count
-                    }
+                        "is_following": is_following,
+                        "followers_count": followers_count,
+                    },
                 ),
-                status=http_status.HTTP_200_OK
+                status=http_status.HTTP_200_OK,
             )
-            
+
         except Exception as e:
-            logger.error(
-                f"Follow merchant error: {str(e)}\n{traceback.format_exc()}"
-            )
+            logger.error(f"Follow merchant error: {str(e)}\n{traceback.format_exc()}")
             return Response(
                 api_response(
-                    message=f"Failed to process request: {str(e)}",
-                    status=False
+                    message=f"Failed to process request: {str(e)}", status=False
                 ),
-                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-    
+
     @swagger_auto_schema(
         operation_summary="Check if Following Merchant",
         operation_description="""
@@ -1319,162 +1331,144 @@ class MerchantFollowView(APIView):
         """,
         manual_parameters=[
             openapi.Parameter(
-                'merchant_id',
+                "merchant_id",
                 openapi.IN_QUERY,
                 description="UUID of the merchant",
                 type=openapi.TYPE_STRING,
-                required=True
+                required=True,
             )
         ],
         responses={
             200: openapi.Response(
-                description='Follow status retrieved',
+                description="Follow status retrieved",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN,
-                            example=True
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=True
                         ),
-                        'data': openapi.Schema(
+                        "data": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'is_following': openapi.Schema(
-                                    type=openapi.TYPE_BOOLEAN,
-                                    example=True
+                                "is_following": openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN, example=True
                                 ),
-                                'followers_count': openapi.Schema(
-                                    type=openapi.TYPE_INTEGER,
-                                    example=150
+                                "followers_count": openapi.Schema(
+                                    type=openapi.TYPE_INTEGER, example=150
                                 ),
-                                'merchant_info': openapi.Schema(
+                                "merchant_info": openapi.Schema(
                                     type=openapi.TYPE_OBJECT,
                                     properties={
-                                        'id': openapi.Schema(
+                                        "id": openapi.Schema(type=openapi.TYPE_STRING),
+                                        "email": openapi.Schema(
                                             type=openapi.TYPE_STRING
                                         ),
-                                        'email': openapi.Schema(
+                                        "first_name": openapi.Schema(
                                             type=openapi.TYPE_STRING
                                         ),
-                                        'first_name': openapi.Schema(
+                                        "last_name": openapi.Schema(
                                             type=openapi.TYPE_STRING
                                         ),
-                                        'last_name': openapi.Schema(
-                                            type=openapi.TYPE_STRING
-                                        )
-                                    }
-                                )
-                            }
-                        )
-                    }
-                )
+                                    },
+                                ),
+                            },
+                        ),
+                    },
+                ),
             ),
-            400: openapi.Response(description='Invalid request'),
-            404: openapi.Response(description='Merchant not found')
-        }
+            400: openapi.Response(description="Invalid request"),
+            404: openapi.Response(description="Merchant not found"),
+        },
     )
     def get(self, request):
         """Check if user is following a merchant"""
         try:
             from products.models import FollowMerchant
-            
+
             user = request.user
-            merchant_id = request.query_params.get('merchant_id')
-            
+            merchant_id = request.query_params.get("merchant_id")
+
             if not merchant_id:
                 return Response(
-                    api_response(
-                        message="merchant_id is required",
-                        status=False
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    api_response(message="merchant_id is required", status=False),
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Get merchant user
             try:
                 merchant = User.objects.get(id=merchant_id)
             except User.DoesNotExist:
                 return Response(
-                    api_response(
-                        message="Merchant not found",
-                        status=False
-                    ),
-                    status=http_status.HTTP_404_NOT_FOUND
+                    api_response(message="Merchant not found", status=False),
+                    status=http_status.HTTP_404_NOT_FOUND,
                 )
-            
+
             # Check if merchant has merchant role
-            if not merchant.roles.filter(name='merchant').exists():
+            if not merchant.roles.filter(name="merchant").exists():
                 return Response(
-                    api_response(
-                        message="User is not a merchant",
-                        status=False
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    api_response(message="User is not a merchant", status=False),
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Check follow status
             is_following = FollowMerchant.objects.filter(
-                user=user,
-                merchant=merchant
+                user=user, merchant=merchant
             ).exists()
-            
+
             # Get followers count
-            followers_count = FollowMerchant.objects.filter(
-                merchant=merchant
-            ).count()
-            
+            followers_count = FollowMerchant.objects.filter(merchant=merchant).count()
+
             return Response(
                 api_response(
                     message="Follow status retrieved successfully",
                     status=True,
                     data={
-                        'is_following': is_following,
-                        'followers_count': followers_count,
-                        'merchant_info': {
-                            'id': str(merchant.id),
-                            'email': merchant.email,
-                            'first_name': merchant.first_name,
-                            'last_name': merchant.last_name
-                        }
-                    }
+                        "is_following": is_following,
+                        "followers_count": followers_count,
+                        "merchant_info": {
+                            "id": str(merchant.id),
+                            "email": merchant.email,
+                            "first_name": merchant.first_name,
+                            "last_name": merchant.last_name,
+                        },
+                    },
                 ),
-                status=http_status.HTTP_200_OK
+                status=http_status.HTTP_200_OK,
             )
-            
+
         except Exception as e:
             logger.error(
                 f"Check follow status error: {str(e)}\n{traceback.format_exc()}"
             )
             return Response(
                 api_response(
-                    message=f"Failed to check follow status: {str(e)}",
-                    status=False
+                    message=f"Failed to check follow status: {str(e)}", status=False
                 ),
-                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
 class MerchantProfileManagementView(APIView):
     """
     Comprehensive merchant profile management API.
-    
+
     Provides POST and PUT endpoints for creating and updating merchant profiles.  # noqa
     Requires user to have merchant role before creating/updating profile.
-    
+
     Use Cases:
     - Complete profile after simplified registration (/api/users/register/)
     - Complete profile after switching to merchant role (/api/users/switch-role/)
     - Update existing merchant profiles
     - Create profiles for users who added merchant role later
-    
+
     **Workflow:**
     1. Register with merchant role OR switch to merchant role
     2. Complete merchant profile using this endpoint (POST)
     3. Update profile as needed (PUT)
     """
+
     permission_classes = [IsAuthenticated]
-    parser_classes = [
-        parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
 
     @swagger_auto_schema(
         operation_summary="View Merchant Profile",
@@ -1501,154 +1495,156 @@ class MerchantProfileManagementView(APIView):
         **Returns:**
         - Merchant profile data, or appropriate error if profile/user not found.
         """,
-        manual_parameters=[
-            openapi.Parameter(
-                'merchant_user_uuid',
-                openapi.IN_QUERY,
-                description="User UUID of the merchant whose profile to view (optional, defaults to current user).",  # noqa
-                type=openapi.TYPE_STRING,
-                required=False,
-            ),
-        ],
+        manual_parameters=[],
         responses={
             200: openapi.Response(
                 description="Merchant profile retrieved successfully",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN, example=True),
-                        'message': openapi.Schema(
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=True
+                        ),
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example="Merchant profile retrieved successfully."),
-                        'data': openapi.Schema(
+                            example="Merchant profile retrieved successfully.",
+                        ),
+                        "data": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'id': openapi.Schema(
-                                    type=openapi.TYPE_INTEGER,
-                                    description="Profile ID"),
-                                'user': openapi.Schema(
+                                "id": openapi.Schema(
+                                    type=openapi.TYPE_INTEGER, description="Profile ID"
+                                ),
+                                "user": openapi.Schema(
+                                    type=openapi.TYPE_STRING, description="User UUID"
+                                ),
+                                "location": openapi.Schema(type=openapi.TYPE_STRING),
+                                "lga": openapi.Schema(type=openapi.TYPE_STRING),
+                                "cac_number": openapi.Schema(type=openapi.TYPE_STRING),
+                                "cac_document": openapi.Schema(
                                     type=openapi.TYPE_STRING,
-                                    description="User UUID"),
-                                'location': openapi.Schema(
-                                    type=openapi.TYPE_STRING),
-                                'lga': openapi.Schema(
-                                    type=openapi.TYPE_STRING),
-                                'cac_number': openapi.Schema(
-                                    type=openapi.TYPE_STRING),
-                                'cac_document': openapi.Schema(
+                                    description="URL to CAC document",
+                                ),
+                                "selfie": openapi.Schema(
                                     type=openapi.TYPE_STRING,
-                                    description="URL to CAC document"),
-                                'selfie': openapi.Schema(
+                                    description="URL to selfie",
+                                ),
+                                "business_address": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),
+                                "profile_picture": openapi.Schema(
                                     type=openapi.TYPE_STRING,
-                                    description="URL to selfie"),
-                                'business_address': openapi.Schema(
-                                    type=openapi.TYPE_STRING),
-                                'profile_picture': openapi.Schema(
-                                    type=openapi.TYPE_STRING,
-                                    description="URL to profile picture"),
-                                'is_approved': openapi.Schema(
-                                    type=openapi.TYPE_BOOLEAN, example=False),
-                                'created_at': openapi.Schema(
-                                    type=openapi.TYPE_STRING,
-                                    format='date-time'),
-                                'updated_at': openapi.Schema(
-                                    type=openapi.TYPE_STRING, format='date-time')
-                            }
-                        )
-                    }
-                )
+                                    description="URL to profile picture",
+                                ),
+                                "is_approved": openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN, example=False
+                                ),
+                                "created_at": openapi.Schema(
+                                    type=openapi.TYPE_STRING, format="date-time"
+                                ),
+                                "updated_at": openapi.Schema(
+                                    type=openapi.TYPE_STRING, format="date-time"
+                                ),
+                            },
+                        ),
+                    },
+                ),
             ),
             404: openapi.Response(
                 description="Merchant profile or user not found",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),  # noqa
-                        'message': openapi.Schema(
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
+                        ),  # noqa
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example="Merchant profile not found."
+                            example="Merchant profile not found.",
                         ),
-                    }
-                )
+                    },
+                ),
             ),
             400: openapi.Response(
                 description="Invalid request or user does not have a merchant profile",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),  # noqa
-                        'message': openapi.Schema(
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
+                        ),  # noqa
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example="User does not have a merchant profile."),
-                    }
-                )
+                            example="User does not have a merchant profile.",
+                        ),
+                    },
+                ),
             ),
             401: openapi.Response(description="Authentication required"),
-        }
+        },
     )
     def get(self, request):
         from uuid import UUID
 
-        merchant_user_uuid = request.query_params.get('merchant_user_uuid')
+        target_user = request.user
 
-        # By default, use current authenticated user
-        if not merchant_user_uuid:
-            target_user = request.user
-        else:
-            try:
-                # Validate UUID format strictly
-                uuid_obj = UUID(str(merchant_user_uuid))
-            except Exception:
-                return Response(
-                    api_response(
-                        message="Invalid merchant_user_uuid format.",
-                        status=False
-                    ),
-                    status=400
-                )
-            try:
-                target_user = User.objects.get(id=uuid_obj)
-            except User.DoesNotExist:
-                return Response(
-                    api_response(
-                        message="The specified user does not exist.",
-                        status=False
-                    ),
-                    status=404
-                )
-        # Only users with a merchant_profile are valid
-        merchant_profile = getattr(target_user, 'merchant_profile', None)
+        # Ensure the user is in the merchant role to view their own profile
+        if not (target_user.active_role and target_user.active_role.name == "merchant"):
+            return Response(
+                api_response(
+                    message="Your active role must be 'merchant' to view your merchant profile.",  # noqa
+                    status=False,
+                    data={
+                        "suggestion": "Use /api/users/switch-role/ to switch to the merchant role"
+                    },  # noqa
+                ),
+                status=403,
+            )
+        # Check if the target user has the 'merchant' role and an associated profile
+        if not target_user.roles.filter(name="merchant").exists():
+            return Response(
+                api_response(
+                    message="The specified user does not have a merchant role.",
+                    status=False,
+                ),
+                status=400,
+            )
+
+        merchant_profile = getattr(target_user, "merchant_profile", None)
         if not merchant_profile:
             return Response(
                 api_response(
-                    message="Merchant profile not found for user.",
-                    status=False
+                    message="Merchant profile not found for user.", status=False
                 ),
-                status=404
+                status=400,
             )
 
         # For staff, profile owner, or authenticated, return full info.
-        is_requester_owner = (request.user.id == target_user.id)
+        is_requester_owner = request.user.id == target_user.id
         is_staff = getattr(request.user, "is_staff", False)
 
         # Security: Optionally restrict access to profiles not yet approved for non-owners/non-admins # noqa
-        if not merchant_profile.is_approved and not (is_staff or is_requester_owner): # noqa
+        if not merchant_profile.is_approved and not (
+            is_staff or is_requester_owner
+        ):  # noqa
             return Response(
                 api_response(
-                    message="Merchant profile is not yet approved.",
-                    status=False
+                    message="Merchant profile is not yet approved.", status=False
                 ),
-                status=403
+                status=403,
             )
 
         serializer = MerchantProfileSerializer(
-            merchant_profile, context={'request': request})
-        return Response(api_response(
-            message="Merchant profile retrieved successfully.",
-            status=True,
-            data=serializer.data
-        ), status=200)
+            merchant_profile, context={"request": request}
+        )
+        return Response(
+            api_response(
+                message="Merchant profile retrieved successfully.",
+                status=True,
+                data=serializer.data,
+            ),
+            status=200,
+        )
 
     @swagger_auto_schema(
         operation_summary="Create Merchant Profile",
@@ -1686,37 +1682,43 @@ class MerchantProfileManagementView(APIView):
         """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=["location", "lga", "cac_number", "cac_document", "selfie"], # noqa
+            required=[
+                "location",
+                "lga",
+                "cac_number",
+                "cac_document",
+                "selfie",
+            ],  # noqa
             properties={
                 "location": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Business location/address in Nigeria",
-                    example="Victoria Island, Lagos"
+                    example="Victoria Island, Lagos",
                 ),
                 "lga": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Local Government Area",
-                    example="Eti-Osa"
+                    example="Eti-Osa",
                 ),
                 "cac_number": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Corporate Affairs Commission registration number",  # noqa
-                    example="RC123456"
+                    example="RC123456",
                 ),
                 "cac_document": openapi.Schema(
                     type=openapi.TYPE_FILE,
-                    description="CAC registration certificate (PDF/Image)"
+                    description="CAC registration certificate (PDF/Image)",
                 ),
                 "selfie": openapi.Schema(
                     type=openapi.TYPE_FILE,
-                    description="Live photo of merchant for verification (Image only)"  # noqa
+                    description="Live photo of merchant for verification (Image only)",  # noqa
                 ),
                 "business_address": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Physical business address (optional)",
-                    example="123 Business Street, Victoria Island"
+                    example="123 Business Street, Victoria Island",
                 ),
-            }
+            },
         ),
         responses={
             201: openapi.Response(
@@ -1724,49 +1726,70 @@ class MerchantProfileManagementView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=True),  # noqa
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, example="Merchant profile created successfully."),  # noqa
-                        'data': openapi.Schema(
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=True
+                        ),  # noqa
+                        "message": openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example="Merchant profile created successfully.",
+                        ),  # noqa
+                        "data": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'id': openapi.Schema(type=openapi.TYPE_INTEGER, description="Profile ID"),  # noqa
-                                'user': openapi.Schema(type=openapi.TYPE_STRING, description="User UUID"),  # noqa
-                                'location': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'lga': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'cac_number': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'is_approved': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),  # noqa
-                                'created_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),  # noqa
-                                'updated_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time')  # noqa
-                            }
-                        )
-                    }
-                )
+                                "id": openapi.Schema(
+                                    type=openapi.TYPE_INTEGER, description="Profile ID"
+                                ),  # noqa
+                                "user": openapi.Schema(
+                                    type=openapi.TYPE_STRING, description="User UUID"
+                                ),  # noqa
+                                "location": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),  # noqa
+                                "lga": openapi.Schema(type=openapi.TYPE_STRING),  # noqa
+                                "cac_number": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),  # noqa
+                                "is_approved": openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN, example=False
+                                ),  # noqa
+                                "created_at": openapi.Schema(
+                                    type=openapi.TYPE_STRING, format="date-time"
+                                ),  # noqa
+                                "updated_at": openapi.Schema(
+                                    type=openapi.TYPE_STRING, format="date-time"
+                                ),  # noqa
+                            },
+                        ),
+                    },
+                ),
             ),
             400: openapi.Response(
                 description="Invalid request data or user doesn't have merchant role",  # noqa
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),  # noqa
-                        'message': openapi.Schema(
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
+                        ),  # noqa
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example="User must have merchant role to create merchant profile."  # noqa
+                            example="User must have merchant role to create merchant profile.",  # noqa
                         ),
-                        'errors': openapi.Schema(
+                        "errors": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
-                            description="Field-specific validation errors"
+                            description="Field-specific validation errors",
                         ),
-                        'data': openapi.Schema(
+                        "data": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'suggestion': openapi.Schema(
+                                "suggestion": openapi.Schema(
                                     type=openapi.TYPE_STRING,
-                                    example="Use /api/users/switch-role/ to add merchant role"  # noqa
+                                    example="Use /api/users/switch-role/ to add merchant role",  # noqa
                                 )
-                            }
-                        )
-                    }
-                )
+                            },
+                        ),
+                    },
+                ),
             ),
             401: openapi.Response(description="Authentication required"),
             409: openapi.Response(
@@ -1774,42 +1797,56 @@ class MerchantProfileManagementView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),  # noqa
-                        'message': openapi.Schema(
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
+                        ),  # noqa
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example="Merchant profile already exists. Use PUT to update or delete this profile first."  # noqa
-                        )
-                    }
-                )
-            )
-        }
+                            example="Merchant profile already exists. Use PUT to update or delete this profile first.",  # noqa
+                        ),
+                    },
+                ),
+            ),
+        },
     )
     def post(self, request):
         user = request.user
-        
-        # Check if user has merchant role
-        if not user.roles.filter(name='merchant').exists():
-            return Response(api_response(
-                message="User must have merchant role to create merchant profile.",  # noqa
-                status=False,
-                data={"suggestion": "Use /api/users/switch-role/ to add merchant role"}  # noqa
-            ), status=400)
-        
-        if hasattr(user, 'merchant_profile'):
-            return Response(api_response(
-                message="Merchant profile already exists. Use PUT to update or delete this profile first.",  # noqa
-                status=False
-            ), status=400)
-            
+
+        # Check if user's active role is merchant
+        if not (user.active_role and user.active_role.name == "merchant"):
+            return Response(
+                api_response(
+                    message="User's active role must be 'merchant' to create a merchant profile.",  # noqa
+                    status=False,
+                    data={
+                        "suggestion": "Use /api/users/switch-role/ to switch to the merchant role"
+                    },  # noqa
+                ),
+                status=400,
+            )
+
+        if hasattr(user, "merchant_profile"):
+            return Response(
+                api_response(
+                    message="Merchant profile already exists. Use PUT to update or delete this profile first.",  # noqa
+                    status=False,
+                ),
+                status=400,
+            )
+
         serializer = MerchantProfileSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(user=user)
-            return Response(api_response(
-                message="Merchant profile created successfully.",
-                status=True,
-                data=serializer.data
-            ), status=201)
-        return Response(api_response(
+            return Response(
+                api_response(
+                    message="Merchant profile created successfully.",
+                    status=True,
+                    data=serializer.data,
+                ),
+                status=201,
+            )
+        return Response(
+            api_response(
                 message=(
                     ", ".join(
                         [
@@ -1822,7 +1859,9 @@ class MerchantProfileManagementView(APIView):
                 ),
                 status=False,
                 errors=serializer.errors,
-        ), status=400)
+            ),
+            status=400,
+        )
 
     @swagger_auto_schema(
         operation_summary="Update Merchant Profile",
@@ -1862,35 +1901,35 @@ class MerchantProfileManagementView(APIView):
             type=openapi.TYPE_OBJECT,
             required=[],
             properties={
-                'location': openapi.Schema(
+                "location": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Business location/address in Nigeria",
-                    example="Lekki Phase 1, Lagos"
+                    example="Lekki Phase 1, Lagos",
                 ),
-                'lga': openapi.Schema(
+                "lga": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Local Government Area",
-                    example="Eti-Osa"
+                    example="Eti-Osa",
                 ),
-                'cac_number': openapi.Schema(
+                "cac_number": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Corporate Affairs Commission registration number",  # noqa
-                    example="RC654321"
+                    example="RC654321",
                 ),
-                'cac_document': openapi.Schema(
+                "cac_document": openapi.Schema(
                     type=openapi.TYPE_FILE,
-                    description="Updated CAC registration certificate (PDF/Image)"  # noqa
+                    description="Updated CAC registration certificate (PDF/Image)",  # noqa
                 ),
-                'selfie': openapi.Schema(
+                "selfie": openapi.Schema(
                     type=openapi.TYPE_FILE,
-                    description="Updated live photo of merchant for verification"  # noqa
+                    description="Updated live photo of merchant for verification",  # noqa
                 ),
-                'business_address': openapi.Schema(
+                "business_address": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Updated physical business address",
-                    example="456 New Business Avenue, Lekki"
+                    example="456 New Business Avenue, Lekki",
                 ),
-            }
+            },
         ),
         responses={
             200: openapi.Response(
@@ -1898,40 +1937,61 @@ class MerchantProfileManagementView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=True),  # noqa
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, example="Merchant profile updated successfully."),  # noqa
-                        'data': openapi.Schema(
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=True
+                        ),  # noqa
+                        "message": openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            example="Merchant profile updated successfully.",
+                        ),  # noqa
+                        "data": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'id': openapi.Schema(type=openapi.TYPE_INTEGER, description="Profile ID"),  # noqa
-                                'user': openapi.Schema(type=openapi.TYPE_STRING, description="User UUID"),  # noqa
-                                'location': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'lga': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'cac_number': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'is_approved': openapi.Schema(type=openapi.TYPE_BOOLEAN),  # noqa
-                                'created_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),  # noqa
-                                'updated_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time')  # noqa
-                            }
-                        )
-                    }
-                )
+                                "id": openapi.Schema(
+                                    type=openapi.TYPE_INTEGER, description="Profile ID"
+                                ),  # noqa
+                                "user": openapi.Schema(
+                                    type=openapi.TYPE_STRING, description="User UUID"
+                                ),  # noqa
+                                "location": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),  # noqa
+                                "lga": openapi.Schema(type=openapi.TYPE_STRING),  # noqa
+                                "cac_number": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),  # noqa
+                                "is_approved": openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN
+                                ),  # noqa
+                                "created_at": openapi.Schema(
+                                    type=openapi.TYPE_STRING, format="date-time"
+                                ),  # noqa
+                                "updated_at": openapi.Schema(
+                                    type=openapi.TYPE_STRING, format="date-time"
+                                ),  # noqa
+                            },
+                        ),
+                    },
+                ),
             ),
             400: openapi.Response(
                 description="Invalid request data or user doesn't have merchant role",  # noqa
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),  # noqa
-                        'message': openapi.Schema(
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
+                        ),  # noqa
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example="User must have merchant role to update merchant profile."  # noqa
+                            example="User must have merchant role to update merchant profile.",  # noqa
                         ),
-                        'errors': openapi.Schema(
+                        "errors": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
-                            description="Field-specific validation errors"  # noqa
-                        )
-                    }
-                )
+                            description="Field-specific validation errors",  # noqa
+                        ),
+                    },
+                ),
             ),
             401: openapi.Response(description="Authentication required"),
             404: openapi.Response(
@@ -1939,76 +1999,87 @@ class MerchantProfileManagementView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),  # noqa
-                        'message': openapi.Schema(
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
+                        ),  # noqa
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example="Merchant profile does not exist. Create one first."  # noqa
-                        )
-                    }
-                )
-            )
-        }
+                            example="Merchant profile does not exist. Create one first.",  # noqa
+                        ),
+                    },
+                ),
+            ),
+        },
     )
     def put(self, request):
         user = request.user
-        
-        # Check if user has merchant role
-        if not user.roles.filter(name='merchant').exists():
-            return Response(api_response(
-                message="User must have merchant role to update merchant profile.",  # noqa
-                status=False
-            ), status=400)
-        
-        if not hasattr(user, 'merchant_profile'):
-            return Response(api_response(
-                message="Merchant profile does not exist. Create one first.",  # noqa
-                status=False
-            ), status=404)
-            
+
+        # Check if user's active role is merchant
+        if not (user.active_role and user.active_role.name == "merchant"):
+            return Response(
+                api_response(
+                    message="User's active role must be 'merchant' to update a merchant profile.",  # noqa
+                    status=False,
+                ),
+                status=400,
+            )
+
+        if not hasattr(user, "merchant_profile"):
+            return Response(
+                api_response(
+                    message="Merchant profile does not exist. Create one first.",  # noqa
+                    status=False,
+                ),
+                status=404,
+            )
+
         serializer = MerchantProfileSerializer(
-            user.merchant_profile, 
-            data=request.data, 
-            partial=True
+            user.merchant_profile, data=request.data, partial=True
         )
         if serializer.is_valid():
             serializer.save()
-            return Response(api_response(
-                message="Merchant profile updated successfully.",
-                status=True,
-                data=serializer.data
-            ))
-        return Response(api_response(
-            message=(
-                ", ".join(
-                    [
-                        f"{field}: {', '.join(errors)}"
-                        for field, errors in serializer.errors.items()
-                    ]
+            return Response(
+                api_response(
+                    message="Merchant profile updated successfully.",
+                    status=True,
+                    data=serializer.data,
                 )
-                if serializer.errors
-                else "Invalid data"
+            )
+        return Response(
+            api_response(
+                message=(
+                    ", ".join(
+                        [
+                            f"{field}: {', '.join(errors)}"
+                            for field, errors in serializer.errors.items()
+                        ]
+                    )
+                    if serializer.errors
+                    else "Invalid data"
+                ),
+                status=False,
+                errors=serializer.errors,
             ),
-            status=False,
-            errors=serializer.errors,
-        ), status=400)
+            status=400,
+        )
 
 
 class MechanicProfileManagementView(APIView):
     """
     Manage mechanic profiles - create, update, or complete mechanic profile.
     Added: Support to view mechanic profile by user ID (public/production-ready).
-    
+
     Use Cases:
     - Complete profile for users who registered via step-by-step flow
     - Update existing mechanic profiles
     - Create profiles for users who added mechanic role later
     - Retrieve mechanic profile by user id
-    
+
     Note: For new user registration, use step-by-step registration flow.
     """
+
     permission_classes = [IsAuthenticated]
-    parser_classes = [
-        parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
 
     @swagger_auto_schema(
         operation_summary="View Mechanic Profile",
@@ -2026,169 +2097,163 @@ class MechanicProfileManagementView(APIView):
         **Returns:**
         - All mechanic profile fields for the selected user
         """,
-        manual_parameters=[
-            openapi.Parameter(
-                name='id',
-                in_=openapi.IN_QUERY,
-                required=False,
-                type=openapi.TYPE_INTEGER,
-                description='User ID whose mechanic profile is to be viewed. If omitted, shows authenticated user profile.'
-            )
-        ],
-        responses={200: MechanicProfileSerializer()}
+        manual_parameters=[],
+        responses={200: MechanicProfileSerializer()},
     )
     def get(self, request):
         from django.contrib.auth import get_user_model
 
-        user_id = request.query_params.get('id', None)
+        user = request.user
 
-        User = get_user_model()
-        mechanic_user = None
-        mechanic_profile = None
+        if not (user.active_role and user.active_role.name == "mechanic"):
+            return Response(
+                api_response(
+                    message="Your active role must be 'mechanic' to view your mechanic profile.",
+                    status=False,
+                    data={
+                        "suggestion": "Use /api/users/switch-role/ to switch to the mechanic role"
+                    },
+                ),
+                status=403,
+            )
 
-        if user_id:
-            # Validate that the user exists and has a mechanic profile
-            try:
-                mechanic_user = User.objects.get(id=user_id)
-            except User.DoesNotExist:
-                return Response(api_response(
-                    message="User not found.",
-                    status=False
-                ), status=404)
-
-            if not mechanic_user.roles.filter(name="mechanic").exists():
-                return Response(api_response(
-                    message="Specified user does not have mechanic role.",
-                    status=False
-                ), status=400)
-
-            mechanic_profile = getattr(mechanic_user, "mechanic_profile", None)
-            if not mechanic_profile:
-                return Response(api_response(
-                    message="Mechanic profile does not exist for this user.",
-                    status=False
-                ), status=404)
-
-        else:
-            # Default to authenticated user
-            user = request.user
-
-            if not user.roles.filter(name="mechanic").exists():
-                return Response(api_response(
-                    message="User must have mechanic role to view mechanic profile.",
-                    status=False
-                ), status=400)
-
-            mechanic_profile = getattr(user, "mechanic_profile", None)
-            if not mechanic_profile:
-                return Response(api_response(
+        mechanic_profile = getattr(user, "mechanic_profile", None)
+        if not mechanic_profile:
+            return Response(
+                api_response(
                     message="User does not have a mechanic profile.",
-                    status=False
-                ), status=404)
+                    status=False,
+                ),
+                status=400,
+            )
 
         serializer = MechanicProfileSerializer(
             mechanic_profile, context={"request": request}
         )
 
-        return Response(api_response(
-            message="Mechanic profile retrieved successfully.",
-            status=True,
-            data=serializer.data
-        ), status=200)
+        return Response(
+            api_response(
+                message="Mechanic profile retrieved successfully.",
+                status=True,
+                data=serializer.data,
+            ),
+            status=200,
+        )
 
     @swagger_auto_schema(
         operation_summary="Create Mechanic Profile",
         operation_description="Complete mechanic profile with documents and details. Use step-by-step registration for new mechanic accounts.",  # noqa
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=["location", "lga", "cac_number", "cac_document", "selfie"],  # noqa
+            required=[
+                "location",
+                "lga",
+                "cac_number",
+                "cac_document",
+                "selfie",
+            ],  # noqa
             properties={
                 "location": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Business location/address in Nigeria",
-                    example="Ikeja, Lagos"
+                    example="Ikeja, Lagos",
                 ),
                 "lga": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Local Government Area",
-                    example="Ikeja"
+                    example="Ikeja",
                 ),
                 "cac_number": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Corporate Affairs Commission registration number",  # noqa
-                    example="RC789012"
+                    example="RC789012",
                 ),
                 "cac_document": openapi.Schema(
                     type=openapi.TYPE_FILE,
-                    description="CAC registration certificate (PDF/Image)"
+                    description="CAC registration certificate (PDF/Image)",
                 ),
                 "selfie": openapi.Schema(
                     type=openapi.TYPE_FILE,
-                    description="Live photo of mechanic for verification (Image only)"  # noqa
+                    description="Live photo of mechanic for verification (Image only)",  # noqa
                 ),
-            }
+            },
         ),
         responses={
             201: openapi.Response("Mechanic profile created successfully"),
-            400: openapi.Response("Bad Request - Invalid data or user doesn't have mechanic role"),  # noqa
-            409: openapi.Response("Conflict - Mechanic profile already exists")
-        }
+            400: openapi.Response(
+                "Bad Request - Invalid data or user doesn't have mechanic role"
+            ),  # noqa
+            409: openapi.Response("Conflict - Mechanic profile already exists"),
+        },
     )
     def post(self, request):
         user = request.user
-        
-        # Check if user has mechanic role
-        if not user.roles.filter(name='mechanic').exists():
-            return Response(api_response(
-                message="User must have mechanic role to create mechanic profile.",  # noqa
-                status=False,
-                data={"suggestion": "Use step-by-step registration to add mechanic role"}  # noqa
-            ), status=400)
-        
-        if hasattr(user, 'mechanic_profile'):
-            return Response(api_response(
-                message="Mechanic profile already exists. Use PUT to update.",
-                status=False
-            ), status=400)
-            
+
+        # Check if user's active role is mechanic
+        if not (user.active_role and user.active_role.name == "mechanic"):
+            return Response(
+                api_response(
+                    message="User's active role must be 'mechanic' to create a mechanic profile.",  # noqa
+                    status=False,
+                    data={
+                        "suggestion": "Use /api/users/switch-role/ to switch to the mechanic role"
+                    },  # noqa
+                ),
+                status=400,
+            )
+
+        if hasattr(user, "mechanic_profile"):
+            return Response(
+                api_response(
+                    message="Mechanic profile already exists. Use PUT to update.",
+                    status=False,
+                ),
+                status=400,
+            )
+
         serializer = MechanicProfileSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(user=user)
-            return Response(api_response(
-                message="Mechanic profile completed. Awaiting admin approval.", # noqa
-                status=True,
-                data=serializer.data
-            ))
-        return Response(api_response(
-            message=(
-                ", ".join(
-                    [
-                        f"{field}: {', '.join(errors)}"
-                        for field, errors in serializer.errors.items()
-                    ]  # noqa
+            return Response(
+                api_response(
+                    message="Mechanic profile completed. Awaiting admin approval.",  # noqa
+                    status=True,
+                    data=serializer.data,
                 )
-                if serializer.errors
-                else "Invalid data"
+            )
+        return Response(
+            api_response(
+                message=(
+                    ", ".join(
+                        [
+                            f"{field}: {', '.join(errors)}"
+                            for field, errors in serializer.errors.items()
+                        ]  # noqa
+                    )
+                    if serializer.errors
+                    else "Invalid data"
+                ),
+                status=False,
+                errors=serializer.errors,
             ),
-            status=False,
-            errors=serializer.errors,
-        ), status=400)
+            status=400,
+        )
 
 
 class DriverProfileManagementView(APIView):
     """
     Manage driver profiles - create, update, or complete driver profile.
-    
+
     Use Cases:
     - Complete profile for users who registered via step-by-step flow
     - Update existing driver profiles
     - Create profiles for users who added driver/rider role later
-    
+
     Note: For new user registration, use step-by-step registration flow.
     """
+
     permission_classes = [IsAuthenticated]
-    parser_classes = [
-        parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
 
     @swagger_auto_schema(
         operation_summary="View Driver Profile",
@@ -2203,33 +2268,44 @@ class DriverProfileManagementView(APIView):
         **Returns:**
         - All driver profile fields for the authenticated user
         """,
-        responses={200: DriverProfileSerializer(many=True)}
+        responses={200: DriverProfileSerializer(many=True)},
     )
     def get(self, request):
         user = request.user
 
-        if not (user.roles.filter(name='driver').exists() or 
-                user.roles.filter(name='rider').exists()):
-            return Response(api_response(
-                message="User must have driver or rider role to view driver profile.",  # noqa
-                status=False,
-            ), status=400)
+        if not (user.active_role and user.active_role.name in ["driver", "rider"]):
+            return Response(
+                api_response(
+                    message="Your active role must be 'driver' or 'rider' to view your driver profile.",  # noqa
+                    status=False,
+                    data={
+                        "suggestion": "Use /api/users/switch-role/ to switch to the driver or rider role"
+                    },  # noqa
+                ),
+                status=403,
+            )
 
         # Check if user has a driver profile
-        driver_profile = getattr(user, 'driver_profile', None)
+        driver_profile = getattr(user, "driver_profile", None)
         if not driver_profile:
-            return Response(api_response(
-                message="User does not have a driver profile.",
-                status=False
-            ), status=400)
+            return Response(
+                api_response(
+                    message="User does not have a driver profile.", status=False
+                ),
+                status=400,
+            )
 
         serializer = DriverProfileSerializer(
-            driver_profile, context={'request': request})
-        return Response(api_response(
-            message="Driver profile retrieved successfully.",
-            status=True,
-            data=serializer.data
-        ), status=200)
+            driver_profile, context={"request": request}
+        )
+        return Response(
+            api_response(
+                message="Driver profile retrieved successfully.",
+                status=True,
+                data=serializer.data,
+            ),
+            status=200,
+        )
 
     @swagger_auto_schema(
         operation_summary="Create Driver Profile",
@@ -2297,122 +2373,140 @@ class DriverProfileManagementView(APIView):
         """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=["full_name", "phone_number", "city", "date_of_birth", "gender", "address", "location", "license_number", "license_issue_date", "license_expiry_date", "license_front_image", "license_back_image", "vin", "vehicle_name", "plate_number", "vehicle_model", "vehicle_color", "vehicle_photo_front", "vehicle_photo_back", "vehicle_photo_right", "vehicle_photo_left", "bank_name", "account_number"],  # noqa
+            required=[
+                "full_name",
+                "phone_number",
+                "city",
+                "date_of_birth",
+                "gender",
+                "address",
+                "location",
+                "license_number",
+                "license_issue_date",
+                "license_expiry_date",
+                "license_front_image",
+                "license_back_image",
+                "vin",
+                "vehicle_name",
+                "plate_number",
+                "vehicle_model",
+                "vehicle_color",
+                "vehicle_photo_front",
+                "vehicle_photo_back",
+                "vehicle_photo_right",
+                "vehicle_photo_left",
+                "bank_name",
+                "account_number",
+            ],  # noqa
             properties={
                 "full_name": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Complete legal name as on license",
-                    example="John Doe Adebayo"
+                    example="John Doe Adebayo",
                 ),
                 "phone_number": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Contact phone number",
-                    example="+2348012345678"
+                    example="+2348012345678",
                 ),
                 "city": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Primary city of operation",
-                    example="Lagos"
+                    example="Lagos",
                 ),
                 "date_of_birth": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Date of birth (YYYY-MM-DD)",
-                    format='date',
-                    example="1990-05-15"
+                    format="date",
+                    example="1990-05-15",
                 ),
                 "gender": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Gender identification",
-                    enum=['male', 'female', 'other', 'prefer_not_to_say'],
-                    example="male"
+                    enum=["male", "female", "other", "prefer_not_to_say"],
+                    example="male",
                 ),
                 "address": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Complete home address",
-                    example="123 Main Street, Ikeja, Lagos"
+                    example="123 Main Street, Ikeja, Lagos",
                 ),
                 "location": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Primary operating location",
-                    example="Victoria Island, Lagos"
+                    example="Victoria Island, Lagos",
                 ),
                 "license_number": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Driver's license number",
-                    example="LAG123456789"
+                    example="LAG123456789",
                 ),
                 "license_issue_date": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="License issue date (YYYY-MM-DD)",
-                    format='date',
-                    example="2020-01-15"
+                    format="date",
+                    example="2020-01-15",
                 ),
                 "license_expiry_date": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="License expiry date (YYYY-MM-DD)",
-                    format='date',
-                    example="2025-01-15"
+                    format="date",
+                    example="2025-01-15",
                 ),
                 "license_front_image": openapi.Schema(
-                    type=openapi.TYPE_FILE,
-                    description="Front side of driver's license"
+                    type=openapi.TYPE_FILE, description="Front side of driver's license"
                 ),
                 "license_back_image": openapi.Schema(
-                    type=openapi.TYPE_FILE,
-                    description="Back side of driver's license"
+                    type=openapi.TYPE_FILE, description="Back side of driver's license"
                 ),
                 "vin": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Vehicle Identification Number",
-                    example="1HGBH41JXMN109186"
+                    example="1HGBH41JXMN109186",
                 ),
                 "vehicle_name": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Vehicle brand/name",
-                    example="Toyota Camry"
+                    example="Toyota Camry",
                 ),
                 "plate_number": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="License plate number",
-                    example="LAG-123-AB"
+                    example="LAG-123-AB",
                 ),
                 "vehicle_model": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Complete vehicle model information",
-                    example="2018 Toyota Camry LE"
+                    example="2018 Toyota Camry LE",
                 ),
                 "vehicle_color": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Vehicle color",
-                    example="Silver"
+                    example="Silver",
                 ),
                 "vehicle_photo_front": openapi.Schema(
-                    type=openapi.TYPE_FILE,
-                    description="Front view of vehicle"
+                    type=openapi.TYPE_FILE, description="Front view of vehicle"
                 ),
                 "vehicle_photo_back": openapi.Schema(
-                    type=openapi.TYPE_FILE,
-                    description="Rear view of vehicle"
+                    type=openapi.TYPE_FILE, description="Rear view of vehicle"
                 ),
                 "vehicle_photo_right": openapi.Schema(
-                    type=openapi.TYPE_FILE,
-                    description="Right side view of vehicle"
+                    type=openapi.TYPE_FILE, description="Right side view of vehicle"
                 ),
                 "vehicle_photo_left": openapi.Schema(
-                    type=openapi.TYPE_FILE,
-                    description="Left side view of vehicle"
+                    type=openapi.TYPE_FILE, description="Left side view of vehicle"
                 ),
                 "bank_name": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Bank name for payment processing",
-                    example="First Bank of Nigeria"
+                    example="First Bank of Nigeria",
                 ),
                 "account_number": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Bank account number",
-                    example="1234567890"
+                    example="1234567890",
                 ),
-            }
+            },
         ),
         responses={
             201: openapi.Response(
@@ -2420,53 +2514,75 @@ class DriverProfileManagementView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=True),  # noqa
-                        'message': openapi.Schema(
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=True
+                        ),  # noqa
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example="Driver profile completed successfully. Awaiting admin approval."  # noqa
+                            example="Driver profile completed successfully. Awaiting admin approval.",  # noqa
                         ),
-                        'data': openapi.Schema(
+                        "data": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'id': openapi.Schema(type=openapi.TYPE_INTEGER, description="Profile ID"),  # noqa
-                                'user': openapi.Schema(type=openapi.TYPE_STRING, description="User UUID"),  # noqa
-                                'full_name': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'license_number': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'vehicle_model': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'plate_number': openapi.Schema(type=openapi.TYPE_STRING),  # noqa
-                                'is_approved': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),  # noqa
-                                'created_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),  # noqa
-                                'updated_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time')  # noqa
-                            }
-                        )
-                    }
-                )
+                                "id": openapi.Schema(
+                                    type=openapi.TYPE_INTEGER, description="Profile ID"
+                                ),  # noqa
+                                "user": openapi.Schema(
+                                    type=openapi.TYPE_STRING, description="User UUID"
+                                ),  # noqa
+                                "full_name": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),  # noqa
+                                "license_number": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),  # noqa
+                                "vehicle_model": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),  # noqa
+                                "plate_number": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),  # noqa
+                                "is_approved": openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN, example=False
+                                ),  # noqa
+                                "created_at": openapi.Schema(
+                                    type=openapi.TYPE_STRING, format="date-time"
+                                ),  # noqa
+                                "updated_at": openapi.Schema(
+                                    type=openapi.TYPE_STRING, format="date-time"
+                                ),  # noqa
+                            },
+                        ),
+                    },
+                ),
             ),
             400: openapi.Response(
                 description="Invalid request data or user doesn't have driver/rider role",  # noqa
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),  # noqa
-                        'message': openapi.Schema(
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
+                        ),  # noqa
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example="User must have driver or rider role to create driver profile."  # noqa
+                            example="User must have driver or rider role to create driver profile.",  # noqa
                         ),
-                        'errors': openapi.Schema(
+                        "errors": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
-                            description="Field-specific validation errors"
+                            description="Field-specific validation errors",
                         ),
-                        'data': openapi.Schema(
+                        "data": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'suggestion': openapi.Schema(
+                                "suggestion": openapi.Schema(
                                     type=openapi.TYPE_STRING,
-                                    example="Use step-by-step registration to add driver role"  # noqa
+                                    example="Use step-by-step registration to add driver role",  # noqa
                                 )
-                            }
-                        )
-                    }
-                )
+                            },
+                        ),
+                    },
+                ),
             ),
             401: openapi.Response(description="Authentication required"),
             409: openapi.Response(
@@ -2474,103 +2590,193 @@ class DriverProfileManagementView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),  # noqa
-                        'message': openapi.Schema(
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
+                        ),  # noqa
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example="Driver profile already exists. Use PUT to update."  # noqa
-                        )
-                    }
-                )
-            )
-        }
+                            example="Driver profile already exists. Use PUT to update.",  # noqa
+                        ),
+                    },
+                ),
+            ),
+        },
     )
     def post(self, request):
         user = request.user
-        
-        # Check if user has driver or rider role
-        if not (user.roles.filter(name='driver').exists() or 
-                user.roles.filter(name='rider').exists()):
-            return Response(api_response(
-                message="User must have driver or rider role to create driver profile.",  # noqa
-                status=False,
-                data={"suggestion": "Use step-by-step registration to add driver role"}  # noqa
-            ), status=400)
-        
-        if hasattr(user, 'driver_profile'):
-            return Response(api_response(
-                message="Driver profile already exists. Use PUT to update.",  # noqa
-                status=False
-            ), status=400)
-            
+
+        # Check if user's active role is driver or rider
+        if not (user.active_role and user.active_role.name in ["driver", "rider"]):
+            return Response(
+                api_response(
+                    message="Your active role must be 'driver' or 'rider' to create a driver profile.",  # noqa
+                    status=False,
+                    data={
+                        "suggestion": "Use /api/users/switch-role/ to switch to the driver or rider role"
+                    },  # noqa
+                ),
+                status=403,
+            )
+
+        if hasattr(user, "driver_profile"):
+            return Response(
+                api_response(
+                    message="Driver profile already exists. Use PUT to update.",  # noqa
+                    status=False,
+                ),
+                status=400,
+            )
+
         serializer = DriverProfileSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(user=user)
-            return Response(api_response(
-                message=(
-                    "Driver profile completed successfully. "
-                    "Awaiting admin approval."
-                ),
-                status=True,
-                data=serializer.data
-            ))
-        return Response(api_response(
-            message=(
-                ", ".join(
-                    [
-                        f"{field}: {', '.join(errors)}"
-                        for field, errors in serializer.errors.items()
-                    ]  # noqa
+            return Response(
+                api_response(
+                    message=(
+                        "Driver profile completed successfully. "
+                        "Awaiting admin approval."
+                    ),
+                    status=True,
+                    data=serializer.data,
                 )
-                if serializer.errors
-                else "Invalid data"
+            )
+        return Response(
+            api_response(
+                message=(
+                    ", ".join(
+                        [
+                            f"{field}: {', '.join(errors)}"
+                            for field, errors in serializer.errors.items()
+                        ]  # noqa
+                    )
+                    if serializer.errors
+                    else "Invalid data"
+                ),
+                status=False,
+                errors=serializer.errors,
             ),
-            status=False,
-            errors=serializer.errors,
-        ), status=400)
+            status=400,
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Update Driver Profile",
+        operation_description="""
+        **Update an existing driver profile for the authenticated user**
+        
+        **Requirements:**
+        - User must be authenticated
+        - User's active role must be 'driver' or 'rider'
+        - User must already have a driver profile
+        
+        **Update Features:**
+        - Partial updates supported (only send fields to update)
+        - File uploads supported for document/photo updates
+        """,
+        request_body=DriverProfileSerializer,
+        responses={
+            200: openapi.Response(
+                "Driver profile updated successfully", DriverProfileSerializer
+            ),
+            400: "Bad Request - Invalid data",
+            403: "Forbidden - Active role is not driver or rider",
+            404: "Not Found - Driver profile does not exist",
+        },
+    )
+    def put(self, request):
+        user = request.user
+
+        if not (user.active_role and user.active_role.name in ["driver", "rider"]):
+            return Response(
+                api_response(
+                    message="Your active role must be 'driver' or 'rider' to update your driver profile.",
+                    status=False,
+                    data={
+                        "suggestion": "Use /api/users/switch-role/ to switch to the driver or rider role"
+                    },
+                ),
+                status=403,
+            )
+
+        if not hasattr(user, "driver_profile"):
+            return Response(
+                api_response(
+                    message="Driver profile does not exist. Create one first.",
+                    status=False,
+                ),
+                status=404,
+            )
+
+        serializer = DriverProfileSerializer(
+            user.driver_profile, data=request.data, partial=True
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                api_response(
+                    message="Driver profile updated successfully.",
+                    status=True,
+                    data=serializer.data,
+                )
+            )
+        return Response(
+            api_response(
+                message=(
+                    ", ".join(
+                        [
+                            f"{field}: {', '.join(errors)}"
+                            for field, errors in serializer.errors.items()
+                        ]
+                    )
+                    if serializer.errors
+                    else "Invalid data"
+                ),
+                status=False,
+                errors=serializer.errors,
+            ),
+            status=400,
+        )
 
 
 class LoginView(TokenObtainPairView):
     """
     View for user login using JWT authentication with email or phone number.
     """
+
     permission_classes = [AllowAny]
     serializer_class = CustomTokenObtainPairSerializer
     # throttle_classes = [AuthRateThrottle]
 
     @swagger_auto_schema(
         operation_description=(
-            "Login to get JWT tokens and user details "
-            "using email or phone number"
+            "Login to get JWT tokens and user details " "using email or phone number"
         ),
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['requestType', 'data'],
+            required=["requestType", "data"],
             properties={
-                'requestType': openapi.Schema(
+                "requestType": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description="Type of request (inbound/outbound)"
+                    description="Type of request (inbound/outbound)",
                 ),
-                'data': openapi.Schema(
+                "data": openapi.Schema(
                     type=openapi.TYPE_OBJECT,
-                    required=['password'],
+                    required=["password"],
                     properties={
-                        'email': openapi.Schema(
+                        "email": openapi.Schema(
                             type=openapi.TYPE_STRING,
                             description=(
                                 "User's email address "
                                 "(optional if phone_number provided)"
-                            )
+                            ),
                         ),
-                        'phone_number': openapi.Schema(
+                        "phone_number": openapi.Schema(
                             type=openapi.TYPE_STRING,
                             description=(
-                                "User's phone number "
-                                "(optional if email provided)"
-                            )
+                                "User's phone number " "(optional if email provided)"
+                            ),
                         ),
-                        'password': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="User's password"
+                        "password": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="User's password"
                         ),
                     },
                 ),
@@ -2582,64 +2788,64 @@ class LoginView(TokenObtainPairView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'access': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="JWT access token"
+                        "access": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="JWT access token"
                         ),
-                        'refresh': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="JWT refresh token"
+                        "refresh": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="JWT refresh token"
                         ),
-                        'user': openapi.Schema(
-                            type=openapi.TYPE_OBJECT,
-                            description="User details"
+                        "user": openapi.Schema(
+                            type=openapi.TYPE_OBJECT, description="User details"
                         ),
                     },
-                )
+                ),
             ),
             400: "Bad Request",
             401: "Invalid credentials",
             403: "Admin users cannot login via this endpoint",
             423: "Account locked",
             # 429: "Too Many Requests"
-        }
+        },
     )
     def post(self, request, *args, **kwargs):
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         # Create a new request with the credentials
         request.data.update(data)
         response = super().post(request, *args, **kwargs)
-        
+
         if response.status_code == 200:
             # Get the user from the authentication
             from django.contrib.auth import authenticate
+
             user = authenticate(
                 request=request,
-                email=data.get('email'),
-                phone_number=data.get('phone_number'),
-                password=data.get('password')
+                email=data.get("email"),
+                phone_number=data.get("phone_number"),
+                password=data.get("password"),
             )
-            
+
             if user:
                 # Check if user is admin/staff/superuser
                 if user.is_staff or user.is_superuser:
                     return Response(
                         api_response(
                             message="Admin users cannot login via this endpoint",
-                            status=False
+                            status=False,
                         ),
-                        status=http_status.HTTP_403_FORBIDDEN
+                        status=http_status.HTTP_403_FORBIDDEN,
                     )
 
                 # Reset failed attempts if any
-                if (hasattr(user, 'failed_login_attempts') and
-                        user.failed_login_attempts > 0):
+                if (
+                    hasattr(user, "failed_login_attempts")
+                    and user.failed_login_attempts > 0
+                ):
                     user.failed_login_attempts = 0
                     user.locked_until = None
                     user.save()
@@ -2648,26 +2854,24 @@ class LoginView(TokenObtainPairView):
 
                 # Add user details to response
                 response_data = response.data
-                response_data['user'] = user_data
+                response_data["user"] = user_data
 
             # Log successful login
             if user:
-                identifier = data.get('email') or data.get('phone_number')
+                identifier = data.get("email") or data.get("phone_number")
                 UserActivityLog.objects.create(
                     user=user,
-                    action='login',
+                    action="login",
                     description=f"Login attempt (identifier: {identifier})",
-                    ip_address=request.META.get('REMOTE_ADDR'),
-                    object_type='User',
+                    ip_address=request.META.get("REMOTE_ADDR"),
+                    object_type="User",
                     object_id=user.id,
-                    severity='low'
+                    severity="low",
                 )
 
             return Response(
                 api_response(
-                    message="Login successful",
-                    status=True,
-                    data=response_data
+                    message="Login successful", status=True, data=response_data
                 )
             )
 
@@ -2678,6 +2882,7 @@ class TokenRefreshView(TokenRefreshView):
     """
     View for refreshing JWT tokens.
     """
+
     permission_classes = [AllowAny]
     throttle_classes = [AuthRateThrottle]
 
@@ -2685,11 +2890,10 @@ class TokenRefreshView(TokenRefreshView):
         operation_description="Refresh JWT token",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['refresh'],
+            required=["refresh"],
             properties={
-                'refresh': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description="JWT refresh token"
+                "refresh": openapi.Schema(
+                    type=openapi.TYPE_STRING, description="JWT refresh token"
                 ),
             },
         ),
@@ -2699,41 +2903,35 @@ class TokenRefreshView(TokenRefreshView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'access': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="New JWT access token"
+                        "access": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="New JWT access token"
                         ),
                     },
-                )
+                ),
             ),
             400: "Bad Request",
             401: "Invalid token",
-            429: "Too Many Requests"
-        }
+            429: "Too Many Requests",
+        },
     )
     def post(self, request, *args, **kwargs):
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         response = super().post(request, *args, **kwargs)
         if response.status_code == 200:
             return Response(
                 api_response(
-                    message="Token refresh successful",
-                    status=True,
-                    data=response.data
+                    message="Token refresh successful", status=True, data=response.data
                 )
             )
         return Response(
-            api_response(
-                message="Invalid token",
-                status=False
-            ),
-            status=http_status.HTTP_401_UNAUTHORIZED
+            api_response(message="Invalid token", status=False),
+            status=http_status.HTTP_401_UNAUTHORIZED,
         )
 
 
@@ -2741,6 +2939,7 @@ class PasswordResetRequestView(APIView):
     """
     View for requesting password reset.
     """
+
     permission_classes = [AllowAny]
     throttle_classes = [AuthRateThrottle]
 
@@ -2748,19 +2947,18 @@ class PasswordResetRequestView(APIView):
         operation_description="Request password reset",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['requestType', 'data'],
+            required=["requestType", "data"],
             properties={
-                'requestType': openapi.Schema(
+                "requestType": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description="Type of request (inbound/outbound)"
+                    description="Type of request (inbound/outbound)",
                 ),
-                'data': openapi.Schema(
+                "data": openapi.Schema(
                     type=openapi.TYPE_OBJECT,
-                    required=['email'],
+                    required=["email"],
                     properties={
-                        'email': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="User's email address"
+                        "email": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="User's email address"
                         ),
                     },
                 ),
@@ -2769,15 +2967,15 @@ class PasswordResetRequestView(APIView):
         responses={
             200: "Password reset email sent",
             400: "Bad Request",
-            429: "Too Many Requests"
-        }
+            429: "Too Many Requests",
+        },
     )
     def post(self, request):
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
         serializer = PasswordResetSerializer(data=data)
         serializer.is_valid(raise_exception=True) or (
@@ -2787,10 +2985,7 @@ class PasswordResetRequestView(APIView):
         serializer.save()
 
         return Response(
-            api_response(
-                message="Password reset email sent successfully",
-                status=True
-            )
+            api_response(message="Password reset email sent successfully", status=True)
         )
         # serializer = PasswordResetSerializer(data=data)
 
@@ -2818,6 +3013,7 @@ class PasswordResetConfirmView(APIView):
     """
     View for confirming password reset.
     """
+
     permission_classes = [AllowAny]
     throttle_classes = [AuthRateThrottle]
 
@@ -2825,98 +3021,81 @@ class PasswordResetConfirmView(APIView):
         operation_description="Confirm password reset",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['requestType', 'data'],
+            required=["requestType", "data"],
             properties={
-                'requestType': openapi.Schema(
+                "requestType": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description="Type of request (inbound/outbound)"
+                    description="Type of request (inbound/outbound)",
                 ),
-                'data': openapi.Schema(
+                "data": openapi.Schema(
                     type=openapi.TYPE_OBJECT,
-                    required=['email'],
+                    required=["email"],
                     properties={
-                        'token': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="Password reset token"
+                        "token": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="Password reset token"
                         ),
-                        'password': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="New password"
+                        "password": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="New password"
                         ),
-                        'password_confirm': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="Confirm new password"
+                        "password_confirm": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="Confirm new password"
                         ),
                     },
                 ),
             },
         ),
-
         responses={
             200: "Password reset successful",
             400: "Bad Request",
-            429: "Too Many Requests"
-        }
+            429: "Too Many Requests",
+        },
     )
     def post(self, request):
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
-        token = data.get('token')
-        password = data.get('password')
-        password_confirm = data.get('password_confirm')
+        token = data.get("token")
+        password = data.get("password")
+        password_confirm = data.get("password_confirm")
 
         if password != password_confirm:
             return Response(
-                api_response(
-                    message="Passwords do not match",
-                    status=False
-                ),
-                status=http_status.HTTP_400_BAD_REQUEST
+                api_response(message="Passwords do not match", status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         try:
             # Validate password
             validate_password(password)
-            
+
             # Verify token and get user
-            payload = jwt.decode(
-                token,
-                settings.SECRET_KEY,
-                algorithms=['HS256']
-            )
-            user = User.objects.get(id=payload['user_id'])
-            
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            user = User.objects.get(id=payload["user_id"])
+
             # Update password
             user.set_password(password)
             user.save()
-            
+
             return Response(
-                api_response(
-                    message="Password reset successful",
-                    status=True
-                )
+                api_response(message="Password reset successful", status=True)
             )
         except ValidationError as e:
             return Response(
                 api_response(
                     message="Invalid password",
                     status=False,
-                    data={'errors': list(e.messages)}
+                    data={"errors": list(e.messages)},
                 ),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
         except (jwt.InvalidTokenError, User.DoesNotExist):
             return Response(
-                api_response(
-                    message="Invalid or expired token",
-                    status=False
-                ),
-                status=http_status.HTTP_400_BAD_REQUEST
+                api_response(message="Invalid or expired token", status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
 
@@ -2924,6 +3103,7 @@ class ChangePasswordView(APIView):
     """
     View for changing user password.
     """
+
     permission_classes = [IsAuthenticated]
     throttle_classes = [UserRateThrottle]
 
@@ -2931,29 +3111,30 @@ class ChangePasswordView(APIView):
         operation_description="Change user password",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['requestType', 'data'],
+            required=["requestType", "data"],
             properties={
-                'requestType': openapi.Schema(
+                "requestType": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description="Type of request (inbound/outbound)"
+                    description="Type of request (inbound/outbound)",
                 ),
-                'data': openapi.Schema(
+                "data": openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'old_password': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="Current password"
+                        "old_password": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="Current password"
                         ),
-                        'new_password': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="New password"
+                        "new_password": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="New password"
                         ),
-                        'new_password_confirm': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="Confirm new password"
+                        "new_password_confirm": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="Confirm new password"
                         ),
                     },
-                    required=['old_password', 'new_password', 'new_password_confirm'], # noqa
+                    required=[
+                        "old_password",
+                        "new_password",
+                        "new_password_confirm",
+                    ],  # noqa
                 ),
             },
         ),
@@ -2961,53 +3142,42 @@ class ChangePasswordView(APIView):
             200: "Password changed successfully",
             400: "Bad Request",
             401: "Unauthorized",
-            429: "Too Many Requests"
-        }
+            429: "Too Many Requests",
+        },
     )
     def post(self, request):
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         serializer = ChangePasswordSerializer(data=data)
         if serializer.is_valid():
             user = request.user
-            if not user.check_password(
-                serializer.validated_data['old_password']
-            ):
+            if not user.check_password(serializer.validated_data["old_password"]):
                 return Response(
-                    api_response(
-                        message="Invalid old password",
-                        status=False
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    api_response(message="Invalid old password", status=False),
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
 
             try:
-                validate_password(
-                    serializer.validated_data['new_password'],
-                    user
-                )
+                validate_password(serializer.validated_data["new_password"], user)
             except ValidationError as e:
                 return Response(
                     api_response(
                         message="Invalid password",
                         status=False,
-                        data={'errors': list(e.messages)}
+                        data={"errors": list(e.messages)},
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
 
-            user.set_password(serializer.validated_data['new_password'])
+            user.set_password(serializer.validated_data["new_password"])
             user.save()
             return Response(
-                api_response(
-                    message="Password changed successfully",
-                    status=True
-                )
+                api_response(message="Password changed successfully", status=True)
             )
         return Response(
             api_response(
@@ -3024,7 +3194,7 @@ class ChangePasswordView(APIView):
                 status=False,
                 errors=serializer.errors,
             ),
-            status=http_status.HTTP_400_BAD_REQUEST
+            status=http_status.HTTP_400_BAD_REQUEST,
         )
 
 
@@ -3032,6 +3202,7 @@ class LogoutView(APIView):
     """
     View for user logout.
     """
+
     permission_classes = [IsAuthenticated]
     throttle_classes = [UserRateThrottle]
 
@@ -3039,11 +3210,11 @@ class LogoutView(APIView):
         operation_description="Logout and blacklist the refresh token",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['refresh'],
+            required=["refresh"],
             properties={
-                'refresh': openapi.Schema(
+                "refresh": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description="JWT refresh token to blacklist"
+                    description="JWT refresh token to blacklist",
                 ),
             },
         ),
@@ -3051,34 +3222,26 @@ class LogoutView(APIView):
             200: "Logout successful",
             400: "Bad Request",
             401: "Unauthorized",
-            429: "Too Many Requests"
-        }
+            429: "Too Many Requests",
+        },
     )
     def post(self, request):
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         try:
-            refresh_token = data.get('refresh')
+            refresh_token = data.get("refresh")
             token = RefreshToken(refresh_token)
             token.blacklist()
-            return Response(
-                api_response(
-                    message="Logout successful",
-                    status=True
-                )
-            )
+            return Response(api_response(message="Logout successful", status=True))
         except Exception:
             return Response(
-                api_response(
-                    message="Invalid token",
-                    status=False
-                ),
-                status=http_status.HTTP_400_BAD_REQUEST
+                api_response(message="Invalid token", status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
 
@@ -3091,42 +3254,46 @@ class NotificationListView(APIView):
         "for the authenticated user.",
         manual_parameters=[
             openapi.Parameter(
-                'is_read', openapi.IN_QUERY, description="Filter by read status",  # noqa
-                type=openapi.TYPE_BOOLEAN, required=False
+                "is_read",
+                openapi.IN_QUERY,
+                description="Filter by read status",  # noqa
+                type=openapi.TYPE_BOOLEAN,
+                required=False,
             ),
             openapi.Parameter(
-                'type', openapi.IN_QUERY, description="Filter by notification type",  # noqa
-                type=openapi.TYPE_STRING, required=False
+                "type",
+                openapi.IN_QUERY,
+                description="Filter by notification type",  # noqa
+                type=openapi.TYPE_STRING,
+                required=False,
             ),
         ],
-        responses={200: NotificationSerializer(many=True)}
+        responses={200: NotificationSerializer(many=True)},
     )
     def get(self, request):
         status_, data = get_incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         # Filter notifications by authenticated user and their active role
-        active_role = getattr(request.user, 'active_role', None)
+        active_role = getattr(request.user, "active_role", None)
         active_role_name = active_role.name if active_role else None
-        
+
         logger.info(
             f"Fetching notifications for user {request.user.id} "
             f"with active_role: {active_role_name}"
         )
-        
-        notifications = Notification.objects.filter(
-            user=request.user
-        )
+
+        notifications = Notification.objects.filter(user=request.user)
 
         # Filter by active role if user has one
         if active_role:
             notifications = notifications.filter(
-                models.Q(role=active_role) |
-                models.Q(role__isnull=True)  # Include role-agnostic notifs
+                models.Q(role=active_role)
+                | models.Q(role__isnull=True)  # Include role-agnostic notifs
             )
             logger.info(
                 f"Filtered notifications by role: {active_role_name}. "
@@ -3138,28 +3305,28 @@ class NotificationListView(APIView):
                 f"Showing all notifications."
             )
 
-        notifications = notifications.order_by('-created_at')
+        notifications = notifications.order_by("-created_at")
 
-        is_read = request.query_params.get('is_read')
+        is_read = request.query_params.get("is_read")
         if is_read is not None:
-            is_read = is_read.lower() == 'true'
+            is_read = is_read.lower() == "true"
             notifications = notifications.filter(is_read=is_read)
-        notification_type = request.query_params.get('type')
+        notification_type = request.query_params.get("type")
 
         if notification_type:
-            notifications = notifications.filter(
-                notification_type=notification_type)
+            notifications = notifications.filter(notification_type=notification_type)
         paginator = self.pagination_class()
-        paginated_notifications = paginator.paginate_queryset(
-            notifications, request)
+        paginated_notifications = paginator.paginate_queryset(notifications, request)
         serializer = NotificationSerializer(paginated_notifications, many=True)
         response = paginator.get_paginated_response(serializer.data)
 
-        return Response(api_response(
-            message="Notifications retrieved successfully",
-            status=True,
-            data=response.data
-        ))
+        return Response(
+            api_response(
+                message="Notifications retrieved successfully",
+                status=True,
+                data=response.data,
+            )
+        )
 
 
 class NotificationDetailView(APIView):
@@ -3167,53 +3334,62 @@ class NotificationDetailView(APIView):
 
     @swagger_auto_schema(
         operation_description="Get a specific notification.",
-        responses={200: NotificationSerializer()}
+        responses={200: NotificationSerializer()},
     )
     def get(self, request, notification_id):
         status_, data = get_incoming_request_checks(request)
         if not status_:
-            return Response(api_response(message=data, status=False), 
-                            status=http_status.HTTP_400_BAD_REQUEST)
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
         try:
             notification = Notification.objects.get(
-                id=notification_id, user=request.user)
+                id=notification_id, user=request.user
+            )
             serializer = NotificationSerializer(notification)
-            return Response(api_response(
-                message="Notification retrieved successfully",
-                status=True,
-                data=serializer.data
-            ))
+            return Response(
+                api_response(
+                    message="Notification retrieved successfully",
+                    status=True,
+                    data=serializer.data,
+                )
+            )
         except Notification.DoesNotExist:
             return Response(
-                api_response(message="Notification not found", status=False), 
-                status=http_status.HTTP_404_NOT_FOUND
+                api_response(message="Notification not found", status=False),
+                status=http_status.HTTP_404_NOT_FOUND,
             )
 
     @swagger_auto_schema(
         operation_description="Mark notification as read.",
-        responses={200: NotificationSerializer()}
+        responses={200: NotificationSerializer()},
     )
     def patch(self, request, notification_id):
         status_, data = incoming_request_checks(request)
         if not status_:
-            return Response(api_response(message=data, status=False), 
-                            status=http_status.HTTP_400_BAD_REQUEST)
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
         try:
             notification = Notification.objects.get(
-                id=notification_id, user=request.user)
+                id=notification_id, user=request.user
+            )
             notification.mark_as_read()
             serializer = NotificationSerializer(notification)
-            return Response(api_response(
-                message="Notification marked as read",
-                status=True,
-                data=serializer.data
-            ))
+            return Response(
+                api_response(
+                    message="Notification marked as read",
+                    status=True,
+                    data=serializer.data,
+                )
+            )
         except Notification.DoesNotExist:
             return Response(
-                api_response(message="Notification not found", 
-                             status=False), 
-                status=http_status.HTTP_404_NOT_FOUND
-                )
+                api_response(message="Notification not found", status=False),
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
 
 
 class NotificationMarkAllReadView(APIView):
@@ -3249,98 +3425,87 @@ class DeviceRegistrationView(APIView):
         operation_description="Register a device for push notifications",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['fcm_token'],
+            required=["fcm_token"],
             properties={
-                'fcm_token': openapi.Schema(
+                "fcm_token": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description="Firebase Cloud Messaging token"
+                    description="Firebase Cloud Messaging token",
                 ),
-            }
+            },
         ),
-        responses={201: openapi.Response("Device registered successfully")}
+        responses={201: openapi.Response("Device registered successfully")},
     )
     def post(self, request):
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
-        
-        fcm_token = request.data.get('fcm_token')
+
+        fcm_token = request.data.get("fcm_token")
         if not fcm_token:
             return Response(
-                api_response(
-                    message="FCM token is required",
-                    status=False
-                ),
-                status=http_status.HTTP_400_BAD_REQUEST
+                api_response(message="FCM token is required", status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Create or update device
         device, created = Device.objects.get_or_create(
-            fcm_token=fcm_token,
-            defaults={'user': request.user, 'is_active': True}
+            fcm_token=fcm_token, defaults={"user": request.user, "is_active": True}
         )
-        
+
         if not created:
             # Update existing device
             device.user = request.user
             device.is_active = True
             device.save()
-        
+
         return Response(
             api_response(
                 message="Device registered successfully",
                 status=True,
-                data={'device_id': str(device.id)}
+                data={"device_id": str(device.id)},
             ),
-            status=http_status.HTTP_201_CREATED
+            status=http_status.HTTP_201_CREATED,
         )
 
     @swagger_auto_schema(
         operation_description="Unregister a device for push notifications",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['fcm_token'],
+            required=["fcm_token"],
             properties={
-                'fcm_token': openapi.Schema(
+                "fcm_token": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description="Firebase Cloud Messaging token"
+                    description="Firebase Cloud Messaging token",
                 ),
-            }
+            },
         ),
-        responses={200: openapi.Response("Device unregistered successfully")}
+        responses={200: openapi.Response("Device unregistered successfully")},
     )
     def delete(self, request):
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
-        
-        fcm_token = request.data.get('fcm_token')
+
+        fcm_token = request.data.get("fcm_token")
         if not fcm_token:
             return Response(
-                api_response(
-                    message="FCM token is required",
-                    status=False
-                ),
-                status=http_status.HTTP_400_BAD_REQUEST
+                api_response(message="FCM token is required", status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Deactivate device
-        Device.objects.filter(
-            fcm_token=fcm_token,
-            user=request.user
-        ).update(is_active=False)
-        
+        Device.objects.filter(fcm_token=fcm_token, user=request.user).update(
+            is_active=False
+        )
+
         return Response(
-            api_response(
-                message="Device unregistered successfully",
-                status=True
-            )
+            api_response(message="Device unregistered successfully", status=True)
         )
 
 
@@ -3349,26 +3514,24 @@ class EmailVerificationAPIView(APIView):
     throttle_classes = [AuthRateThrottle]
 
     @swagger_auto_schema(
-        operation_description="Verify a user's email address using a verification token.", # noqa
+        operation_description="Verify a user's email address using a verification token.",  # noqa
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['requestType', 'data'],
+            required=["requestType", "data"],
             properties={
-                'requestType': openapi.Schema(
+                "requestType": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description="Type of request (inbound/outbound)"
+                    description="Type of request (inbound/outbound)",
                 ),
-                'data': openapi.Schema(
+                "data": openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
                         "token": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            description="The email verification token sent to the user's email." # noqa
+                            description="The email verification token sent to the user's email.",  # noqa
                         ),
                     },
-                    example={
-                        "token": "your-verification-token"
-                    } 
+                    example={"token": "your-verification-token"},
                 ),
             },
         ),
@@ -3378,20 +3541,20 @@ class EmailVerificationAPIView(APIView):
                 examples={
                     "application/json": {
                         "message": "Email verified successfully.",
-                        "status": True
+                        "status": True,
                     }
-                }
+                },
             ),
             400: openapi.Response(
                 description="Invalid token or bad request.",
                 examples={
                     "application/json": {
                         "message": "Invalid or expired token.",
-                        "status": False
+                        "status": False,
                     }
-                }
+                },
             ),
-        }
+        },
     )
     def post(self, request):
         """
@@ -3403,17 +3566,14 @@ class EmailVerificationAPIView(APIView):
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
         serializer = EmailVerificationSerializer(data=data)
         if serializer.is_valid():
             serializer.save()
             return Response(
-                api_response(
-                    message="Email verified successfully.",
-                    status=True
-                ),
-                status=http_status.HTTP_200_OK
+                api_response(message="Email verified successfully.", status=True),
+                status=http_status.HTTP_200_OK,
             )
         return Response(
             api_response(
@@ -3430,7 +3590,7 @@ class EmailVerificationAPIView(APIView):
                 status=False,
                 errors=serializer.errors,
             ),
-            status=http_status.HTTP_400_BAD_REQUEST
+            status=http_status.HTTP_400_BAD_REQUEST,
         )
 
 
@@ -3446,8 +3606,9 @@ class MechanicReviewListCreateView(APIView):
         # Get the MechanicProfile from the User UUID
         try:
             from users.models import User
+
             mechanic_user = User.objects.get(id=user_id)
-            mechanic_profile = getattr(mechanic_user, 'mechanic_profile', None)
+            mechanic_profile = getattr(mechanic_user, "mechanic_profile", None)
             if not mechanic_profile:
                 return Response(
                     api_response(
@@ -3464,11 +3625,9 @@ class MechanicReviewListCreateView(APIView):
                 ),
                 status=404,
             )
-        
-        reviews = (
-            MechanicReview.objects
-            .filter(mechanic=mechanic_profile)
-            .order_by('-created_at')
+
+        reviews = MechanicReview.objects.filter(mechanic=mechanic_profile).order_by(
+            "-created_at"
         )
         paginator = self.pagination_class()
         paginated_reviews = paginator.paginate_queryset(reviews, request)
@@ -3498,8 +3657,9 @@ class MechanicReviewListCreateView(APIView):
         # Get the MechanicProfile from the User UUID
         try:
             from users.models import User, MechanicReview
+
             mechanic_user = User.objects.get(id=user_id)
-            mechanic_profile = getattr(mechanic_user, 'mechanic_profile', None)
+            mechanic_profile = getattr(mechanic_user, "mechanic_profile", None)
             if not mechanic_profile:
                 return Response(
                     api_response(
@@ -3528,8 +3688,7 @@ class MechanicReviewListCreateView(APIView):
 
         # Check if user has already reviewed this mechanic
         if MechanicReview.objects.filter(
-            user=request.user, 
-            mechanic=mechanic_profile
+            user=request.user, mechanic=mechanic_profile
         ).exists():
             return Response(
                 api_response(
@@ -3540,7 +3699,7 @@ class MechanicReviewListCreateView(APIView):
             )
 
         # Remove user_id from data if present (it's in the URL)
-        data.pop('user_id', None)
+        data.pop("user_id", None)
 
         serializer = MechanicReviewSerializer(
             data=data,
@@ -3582,7 +3741,7 @@ class MechanicReviewDetailView(APIView):
     @swagger_auto_schema(
         operation_description="Update or delete a mechanic review",
         request_body=MechanicReviewSerializer,
-        responses={200: MechanicReviewSerializer()}
+        responses={200: MechanicReviewSerializer()},
     )
     def put(self, request, user_id, pk):
         # Use the same incoming_request_checks as in the POST logic
@@ -3595,24 +3754,20 @@ class MechanicReviewDetailView(APIView):
 
         # Get the MechanicProfile from the User UUID
         from users.models import MechanicReview, User
+
         try:
             mechanic_user = User.objects.get(id=user_id)
-            mechanic_profile = getattr(mechanic_user, 'mechanic_profile', None)
+            mechanic_profile = getattr(mechanic_user, "mechanic_profile", None)
             if not mechanic_profile:
                 return Response(
                     api_response(
-                        message="User does not have a mechanic profile.",
-                        status=False
+                        message="User does not have a mechanic profile.", status=False
                     ),
-                    status=404
+                    status=404,
                 )
         except User.DoesNotExist:
             return Response(
-                api_response(
-                    message="Mechanic not found.",
-                    status=False
-                ),
-                status=404
+                api_response(message="Mechanic not found.", status=False), status=404
             )
 
         # Get the MechanicReview, ensure ownership
@@ -3620,23 +3775,19 @@ class MechanicReviewDetailView(APIView):
             review = MechanicReview.objects.get(
                 pk=pk,
                 mechanic=mechanic_profile,  # Use mechanic object, not mechanic_id with UUID
-                user=request.user
+                user=request.user,
             )
         except MechanicReview.DoesNotExist:
             return Response(
-                api_response(
-                    message="Review not found.",
-                    status=False
-                ),
-                status=404
+                api_response(message="Review not found.", status=False), status=404
             )
 
         # Remove mechanic_id and user from data if present (since those can't be updated)
-        data.pop('mechanic', None)
-        data.pop('mechanic_id', None)
-        data.pop('user', None)
-        data.pop('user_id', None)
-        
+        data.pop("mechanic", None)
+        data.pop("mechanic_id", None)
+        data.pop("user", None)
+        data.pop("user_id", None)
+
         # Validate mechanic profile is still reviewable/approved (like in the POST)
         if not getattr(mechanic_profile, "is_approved", False):
             return Response(
@@ -3659,7 +3810,7 @@ class MechanicReviewDetailView(APIView):
                 api_response(
                     message="Review updated successfully.",
                     status=True,
-                    data=serializer.data
+                    data=serializer.data,
                 ),
                 status=200,
             )
@@ -3671,7 +3822,9 @@ class MechanicReviewDetailView(APIView):
                             f"{field}: {', '.join(errors)}"
                             for field, errors in serializer.errors.items()
                         ]
-                    ) if serializer.errors else "Invalid data"
+                    )
+                    if serializer.errors
+                    else "Invalid data"
                 ),
                 status=False,
                 errors=serializer.errors,
@@ -3682,47 +3835,36 @@ class MechanicReviewDetailView(APIView):
     def delete(self, request, user_id, pk):
         # Get the MechanicProfile from the User UUID
         from users.models import MechanicReview, User
+
         try:
             mechanic_user = User.objects.get(id=user_id)
-            mechanic_profile = getattr(mechanic_user, 'mechanic_profile', None)
+            mechanic_profile = getattr(mechanic_user, "mechanic_profile", None)
             if not mechanic_profile:
                 return Response(
                     api_response(
-                        message="User does not have a mechanic profile.",
-                        status=False
+                        message="User does not have a mechanic profile.", status=False
                     ),
-                    status=404
+                    status=404,
                 )
         except User.DoesNotExist:
             return Response(
-                api_response(
-                    message="Mechanic not found.",
-                    status=False
-                ),
-                status=404
+                api_response(message="Mechanic not found.", status=False), status=404
             )
-        
+
         try:
             review = MechanicReview.objects.get(
                 pk=pk,
                 mechanic=mechanic_profile,  # Use mechanic object, not mechanic_id with UUID
-                user=request.user
+                user=request.user,
             )
         except MechanicReview.DoesNotExist:
             return Response(
-                api_response(
-                    message="Review not found.",
-                    status=False
-                ),
-                status=404
+                api_response(message="Review not found.", status=False), status=404
             )
         review.delete()
         return Response(
-            api_response(
-                message="Review deleted successfully.",
-                status=True
-            ),
-            status=200
+            api_response(message="Review deleted successfully.", status=True),
+            status=200,
         )
 
 
@@ -3737,8 +3879,9 @@ class DriverReviewListCreateView(APIView):
         # Get the DriverProfile from the User UUID
         try:
             from users.models import User
+
             driver_user = User.objects.get(id=driver_id)
-            driver_profile = getattr(driver_user, 'driver_profile', None)
+            driver_profile = getattr(driver_user, "driver_profile", None)
             if not driver_profile:
                 return Response(
                     api_response(
@@ -3755,18 +3898,16 @@ class DriverReviewListCreateView(APIView):
                 ),
                 status=404,
             )
-        
-        reviews = (
-            DriverReview.objects
-            .filter(driver=driver_profile)
-            .order_by('-created_at')
+
+        reviews = DriverReview.objects.filter(driver=driver_profile).order_by(
+            "-created_at"
         )
         serializer = DriverReviewSerializer(reviews, many=True)
         return Response(
             api_response(
                 message="Driver reviews retrieved successfully.",
                 status=True,
-                data=serializer.data
+                data=serializer.data,
             )
         )
 
@@ -3775,24 +3916,22 @@ class DriverReviewListCreateView(APIView):
         request_body=DriverReviewSerializer,
         responses={
             201: DriverReviewSerializer,
-            400: 'Bad Request',
-            403: 'Forbidden',
-            404: 'Not Found',
-        }
+            400: "Bad Request",
+            403: "Forbidden",
+            404: "Not Found",
+        },
     )
     def post(self, request, driver_id):
         status_, data = incoming_request_checks(request)
         if not status_:
-            return Response(
-                api_response(message=data, status=False),
-                status=400
-            )
-        
+            return Response(api_response(message=data, status=False), status=400)
+
         # Get the DriverProfile from the User UUID
         try:
             from users.models import User, DriverReview
+
             driver_user = User.objects.get(id=driver_id)
-            driver_profile = getattr(driver_user, 'driver_profile', None)
+            driver_profile = getattr(driver_user, "driver_profile", None)
             if not driver_profile:
                 return Response(
                     api_response(
@@ -3818,11 +3957,10 @@ class DriverReviewListCreateView(APIView):
                 ),
                 status=404,
             )
-        
+
         # Check if user has already reviewed this driver
         if DriverReview.objects.filter(
-            user=request.user, 
-            driver=driver_profile
+            user=request.user, driver=driver_profile
         ).exists():
             return Response(
                 api_response(
@@ -3831,23 +3969,20 @@ class DriverReviewListCreateView(APIView):
                 ),
                 status=400,
             )
-        
+
         # Remove driver_id from data if present (it's in the URL)
-        data.pop('driver_id', None)
-        
-        serializer = DriverReviewSerializer(
-            data=data,
-            context={'request': request}
-        )
+        data.pop("driver_id", None)
+
+        serializer = DriverReviewSerializer(data=data, context={"request": request})
         if serializer.is_valid():
             serializer.save(user=request.user, driver=driver_profile)
             return Response(
                 api_response(
                     message="Review created successfully.",
                     status=True,
-                    data=serializer.data
+                    data=serializer.data,
                 ),
-                status=201
+                status=201,
             )
         return Response(
             api_response(
@@ -3864,7 +3999,7 @@ class DriverReviewListCreateView(APIView):
                 status=False,
                 errors=serializer.errors,
             ),
-            status=400
+            status=400,
         )
 
 
@@ -3874,29 +4009,25 @@ class DriverReviewDetailView(APIView):
     @swagger_auto_schema(
         operation_description="Update or delete a driver review",
         request_body=DriverReviewSerializer,
-        responses={200: DriverReviewSerializer()}
+        responses={200: DriverReviewSerializer()},
     )
     def put(self, request, driver_id, pk):
         # Get the DriverProfile from the User UUID
         from users.models import User, DriverReview
+
         try:
             driver_user = User.objects.get(id=driver_id)
-            driver_profile = getattr(driver_user, 'driver_profile', None)
+            driver_profile = getattr(driver_user, "driver_profile", None)
             if not driver_profile:
                 return Response(
                     api_response(
-                        message="User does not have a driver profile.",
-                        status=False
+                        message="User does not have a driver profile.", status=False
                     ),
-                    status=404
+                    status=404,
                 )
         except User.DoesNotExist:
             return Response(
-                api_response(
-                    message="Driver not found.",
-                    status=False
-                ),
-                status=404
+                api_response(message="Driver not found.", status=False), status=404
             )
 
         # Get the DriverReview, ensure ownership
@@ -3904,17 +4035,13 @@ class DriverReviewDetailView(APIView):
             review = DriverReview.objects.get(
                 pk=pk,
                 driver=driver_profile,  # Use driver object, not driver_id with UUID
-                user=request.user
+                user=request.user,
             )
         except DriverReview.DoesNotExist:
             return Response(
-                api_response(
-                    message="Review not found.",
-                    status=False
-                ),
-                status=404
+                api_response(message="Review not found.", status=False), status=404
             )
-        
+
         # Validate driver profile is still reviewable/approved
         if not getattr(driver_profile, "is_approved", False):
             return Response(
@@ -3924,19 +4051,16 @@ class DriverReviewDetailView(APIView):
                 ),
                 status=403,
             )
-        
+
         # Remove driver_id and user from data if present (since those can't be updated)
-        data = request.data.copy() if hasattr(request, 'data') else {}
-        data.pop('driver', None)
-        data.pop('driver_id', None)
-        data.pop('user', None)
-        data.pop('user_id', None)
-        
+        data = request.data.copy() if hasattr(request, "data") else {}
+        data.pop("driver", None)
+        data.pop("driver_id", None)
+        data.pop("user", None)
+        data.pop("user_id", None)
+
         serializer = DriverReviewSerializer(
-            review,
-            data=data,
-            partial=True,
-            context={'request': request}
+            review, data=data, partial=True, context={"request": request}
         )
         if serializer.is_valid():
             serializer.save()
@@ -3944,7 +4068,7 @@ class DriverReviewDetailView(APIView):
                 api_response(
                     message="Review updated successfully.",
                     status=True,
-                    data=serializer.data
+                    data=serializer.data,
                 )
             )
         return Response(
@@ -3962,7 +4086,7 @@ class DriverReviewDetailView(APIView):
                 status=False,
                 errors=serializer.errors,
             ),
-            status=400
+            status=400,
         )
 
     @swagger_auto_schema(
@@ -3974,67 +4098,55 @@ class DriverReviewDetailView(APIView):
                     "application/json": {
                         "message": "Review deleted successfully.",
                         "status": True,
-                        "data": {}
+                        "data": {},
                     }
-                }
+                },
             ),
             404: openapi.Response(
                 description="Driver or review not found.",
                 examples={
                     "application/json": {
                         "message": "Review not found.",
-                        "status": False
+                        "status": False,
                     }
-                }
+                },
             ),
-        }
+        },
     )
     def delete(self, request, driver_id, pk):
         """
         Delete a review for a driver.
         """
         from users.models import User, DriverReview
+
         try:
             driver_user = User.objects.get(id=driver_id)
-            driver_profile = getattr(driver_user, 'driver_profile', None)
+            driver_profile = getattr(driver_user, "driver_profile", None)
             if not driver_profile:
                 return Response(
                     api_response(
-                        message="User does not have a driver profile.",
-                        status=False
+                        message="User does not have a driver profile.", status=False
                     ),
-                    status=404
+                    status=404,
                 )
         except User.DoesNotExist:
             return Response(
-                api_response(
-                    message="Driver not found.",
-                    status=False
-                ),
-                status=404
+                api_response(message="Driver not found.", status=False), status=404
             )
-        
+
         try:
             review = DriverReview.objects.get(
                 pk=pk,
                 driver=driver_profile,  # Use driver object, not driver_id with UUID
-                user=request.user
+                user=request.user,
             )
         except DriverReview.DoesNotExist:
             return Response(
-                api_response(
-                    message="Review not found.",
-                    status=False
-                ),
-                status=404
+                api_response(message="Review not found.", status=False), status=404
             )
         review.delete()
         return Response(
-            api_response(
-                message="Review deleted successfully.",
-                status=True,
-                data={}
-            )
+            api_response(message="Review deleted successfully.", status=True, data={})
         )
 
 
@@ -4042,26 +4154,18 @@ class DriverLocationUpdateView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_description=(
-            "Update driver current location (latitude, longitude)"
-        ),
+        operation_description=("Update driver current location (latitude, longitude)"),
         request_body=DriverLocationUpdateSerializer,
-        responses={200: DriverLocationUpdateSerializer()}
+        responses={200: DriverLocationUpdateSerializer()},
     )
     def patch(self, request):
         user = request.user
-        if not hasattr(user, 'driver_profile'):
+        if not hasattr(user, "driver_profile"):
             return Response(
-                api_response(
-                    message="User is not a driver.",
-                    status=False
-                ),
-                status=403
+                api_response(message="User is not a driver.", status=False), status=403
             )
         serializer = DriverLocationUpdateSerializer(
-            user.driver_profile,
-            data=request.data,
-            partial=True
+            user.driver_profile, data=request.data, partial=True
         )
         if serializer.is_valid():
             serializer.save()
@@ -4069,7 +4173,7 @@ class DriverLocationUpdateView(APIView):
                 api_response(
                     message="Driver location updated successfully.",
                     status=True,
-                    data=serializer.data
+                    data=serializer.data,
                 )
             )
         return Response(
@@ -4087,83 +4191,85 @@ class DriverLocationUpdateView(APIView):
                 status=False,
                 errors=serializer.errors,
             ),
-            status=400
+            status=400,
         )
 
 
 class BankAccountListCreateView(APIView):
     """List and create bank accounts."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="List user's bank accounts",
-        responses={200: BankAccountSerializer(many=True)}
+        responses={200: BankAccountSerializer(many=True)},
     )
     def get(self, request):
         """List user's bank accounts."""
         bank_accounts = BankAccount.objects.filter(
             user=request.user, is_active=True
-        ).order_by('-created_at')
-        
+        ).order_by("-created_at")
+
         serializer = BankAccountSerializer(bank_accounts, many=True)
         return Response(
             api_response(
                 message="Bank accounts retrieved successfully",
                 status=True,
-                data=serializer.data
+                data=serializer.data,
             )
         )
 
     @swagger_auto_schema(
         operation_description="Add a new bank account",
         request_body=BankAccountCreateSerializer,
-        responses={201: BankAccountSerializer()}
+        responses={201: BankAccountSerializer()},
     )
     def post(self, request):
         """Create a new bank account."""
         serializer = BankAccountCreateSerializer(
-            data=request.data, context={'request': request}
+            data=request.data, context={"request": request}
         )
         if serializer.is_valid():
             bank_account = serializer.save(user=request.user)
-            
+
             # Verify account with Paystack
             self._verify_bank_account(bank_account)
-            
+
             response_serializer = BankAccountSerializer(bank_account)
             return Response(
                 api_response(
                     message="Bank account added successfully",
                     status=True,
-                    data=response_serializer.data
+                    data=response_serializer.data,
                 ),
-                status=201
+                status=201,
             )
         return Response(
-            api_response(message=serializer.errors, status=False),
-            status=400
+            api_response(message=serializer.errors, status=False), status=400
         )
 
     def _verify_bank_account(self, bank_account):
         """Verify bank account with Paystack."""
         from django.conf import settings
         import requests
-        
+
         try:
             # Verify account number
             response = requests.post(
-                'https://api.paystack.co/bank/resolve',
+                "https://api.paystack.co/bank/resolve",
                 json={
-                    'account_number': bank_account.account_number,
-                    'bank_code': bank_account.bank_code
+                    "account_number": bank_account.account_number,
+                    "bank_code": bank_account.bank_code,
                 },
-                headers={'Authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}'}  # noqa
+                headers={
+                    "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"
+                },  # noqa
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
-                if data.get('status'):
-                    bank_account.account_name = data['data']['account_name']
+                if data.get("status"):
+                    bank_account.account_name = data["data"]["account_name"]
                     bank_account.is_verified = True
                     bank_account.save()
         except Exception:
@@ -4172,43 +4278,39 @@ class BankAccountListCreateView(APIView):
 
 class BankAccountDetailView(APIView):
     """Retrieve, update, and delete bank account."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="Get bank account details",
-        responses={200: BankAccountSerializer()}
+        responses={200: BankAccountSerializer()},
     )
     def get(self, request, account_id):
         """Get bank account details."""
         try:
-            bank_account = BankAccount.objects.get(
-                id=account_id, user=request.user
-            )
+            bank_account = BankAccount.objects.get(id=account_id, user=request.user)
             serializer = BankAccountSerializer(bank_account)
             return Response(
                 api_response(
                     message="Bank account details retrieved",
                     status=True,
-                    data=serializer.data
+                    data=serializer.data,
                 )
             )
         except BankAccount.DoesNotExist:
             return Response(
-                api_response(message="Bank account not found", status=False),
-                status=404
+                api_response(message="Bank account not found", status=False), status=404
             )
 
     @swagger_auto_schema(
         operation_description="Update bank account",
         request_body=BankAccountSerializer,
-        responses={200: BankAccountSerializer()}
+        responses={200: BankAccountSerializer()},
     )
     def patch(self, request, account_id):
         """Update bank account."""
         try:
-            bank_account = BankAccount.objects.get(
-                id=account_id, user=request.user
-            )
+            bank_account = BankAccount.objects.get(id=account_id, user=request.user)
             serializer = BankAccountSerializer(
                 bank_account, data=request.data, partial=True
             )
@@ -4218,50 +4320,41 @@ class BankAccountDetailView(APIView):
                     api_response(
                         message="Bank account updated successfully",
                         status=True,
-                        data=serializer.data
+                        data=serializer.data,
                     )
                 )
             return Response(
-                api_response(message=serializer.errors, status=False),
-                status=400
+                api_response(message=serializer.errors, status=False), status=400
             )
         except BankAccount.DoesNotExist:
             return Response(
-                api_response(message="Bank account not found", status=False),
-                status=404
+                api_response(message="Bank account not found", status=False), status=404
             )
 
-    @swagger_auto_schema(
-        operation_description="Delete bank account"
-    )
+    @swagger_auto_schema(operation_description="Delete bank account")
     def delete(self, request, account_id):
         """Delete bank account."""
         try:
-            bank_account = BankAccount.objects.get(
-                id=account_id, user=request.user
-            )
+            bank_account = BankAccount.objects.get(id=account_id, user=request.user)
             bank_account.is_active = False
             bank_account.save()
             return Response(
-                api_response(
-                    message="Bank account deleted successfully",
-                    status=True
-                )
+                api_response(message="Bank account deleted successfully", status=True)
             )
         except BankAccount.DoesNotExist:
             return Response(
-                api_response(message="Bank account not found", status=False),
-                status=404
+                api_response(message="Bank account not found", status=False), status=404
             )
 
 
 class WalletDetailView(APIView):
     """Get wallet details and balance."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="Get wallet details and balance",
-        responses={200: WalletSerializer()}
+        responses={200: WalletSerializer()},
     )
     def get(self, request):
         """Get wallet details."""
@@ -4271,48 +4364,49 @@ class WalletDetailView(APIView):
             api_response(
                 message="Wallet details retrieved successfully",
                 status=True,
-                data=serializer.data
+                data=serializer.data,
             )
         )
 
 
 class TransactionListView(APIView):
     """List user's transactions."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="List user's transactions with filtering",
         manual_parameters=[
             openapi.Parameter(
-                'transaction_type',
+                "transaction_type",
                 openapi.IN_QUERY,
                 description="Filter by transaction type",
                 type=openapi.TYPE_STRING,
-                required=False
+                required=False,
             ),
             openapi.Parameter(
-                'status',
+                "status",
                 openapi.IN_QUERY,
                 description="Filter by transaction status",
                 type=openapi.TYPE_STRING,
-                required=False
+                required=False,
             ),
             openapi.Parameter(
-                'start_date',
+                "start_date",
                 openapi.IN_QUERY,
                 description="Filter from date (YYYY-MM-DD)",
                 type=openapi.TYPE_STRING,
-                required=False
+                required=False,
             ),
             openapi.Parameter(
-                'end_date',
+                "end_date",
                 openapi.IN_QUERY,
                 description="Filter to date (YYYY-MM-DD)",
                 type=openapi.TYPE_STRING,
-                required=False
-            )
+                required=False,
+            ),
         ],
-        responses={200: TransactionListSerializer(many=True)}
+        responses={200: TransactionListSerializer(many=True)},
     )
     def get(self, request):
         """List user's transactions with filtering."""
@@ -4320,73 +4414,76 @@ class TransactionListView(APIView):
         transactions = wallet.transactions.all()
 
         # Apply filters
-        transaction_type = request.query_params.get('transaction_type')
+        transaction_type = request.query_params.get("transaction_type")
         if transaction_type:
-            transactions = transactions.filter(transaction_type=transaction_type)  # noqa
+            transactions = transactions.filter(
+                transaction_type=transaction_type
+            )  # noqa
 
-        status = request.query_params.get('status')
+        status = request.query_params.get("status")
         if status:
             transactions = transactions.filter(status=status)
 
-        start_date = request.query_params.get('start_date')
+        start_date = request.query_params.get("start_date")
         if start_date:
             transactions = transactions.filter(created_at__date__gte=start_date)  # noqa
 
-        end_date = request.query_params.get('end_date')
+        end_date = request.query_params.get("end_date")
         if end_date:
             transactions = transactions.filter(created_at__date__lte=end_date)
 
         # Pagination
         paginator = CustomLimitOffsetPagination()
-        paginated_transactions = paginator.paginate_queryset(
-            transactions, request
-        )
-        
-        serializer = TransactionListSerializer(paginated_transactions, many=True)  # noqa
+        paginated_transactions = paginator.paginate_queryset(transactions, request)
+
+        serializer = TransactionListSerializer(
+            paginated_transactions, many=True
+        )  # noqa
         return paginator.get_paginated_response(serializer.data)
 
 
 class WalletTopUpView(APIView):
     """Top up wallet balance."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="Top up wallet balance",
         request_body=WalletTopUpSerializer,
-        responses={200: openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'payment_reference': openapi.Schema(type=openapi.TYPE_STRING),
-                'payment_url': openapi.Schema(type=openapi.TYPE_STRING),
-                'amount': openapi.Schema(type=openapi.TYPE_NUMBER),
-            }
-        )}
+        responses={
+            200: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    "payment_reference": openapi.Schema(type=openapi.TYPE_STRING),
+                    "payment_url": openapi.Schema(type=openapi.TYPE_STRING),
+                    "amount": openapi.Schema(type=openapi.TYPE_NUMBER),
+                },
+            )
+        },
     )
     def post(self, request):
         """Top up wallet balance."""
         serializer = WalletTopUpSerializer(data=request.data)
         if serializer.is_valid():
-            amount = serializer.validated_data['amount']
-            payment_method = serializer.validated_data['payment_method']
-            
+            amount = serializer.validated_data["amount"]
+            payment_method = serializer.validated_data["payment_method"]
+
             wallet, _ = Wallet.objects.get_or_create(user=request.user)
-            
+
             # Check transaction limits
             can_transact, message = wallet.can_transact(amount)
             if not can_transact:
-                return Response(
-                    api_response(message=message, status=False),
-                    status=400
-                )
+                return Response(api_response(message=message, status=False), status=400)
 
-            if payment_method == 'paystack':
+            if payment_method == "paystack":
                 return self._initiate_paystack_payment(request, wallet, amount)
-            elif payment_method == 'bank_transfer':
-                return self._initiate_bank_transfer(request, wallet, amount, serializer.validated_data)  # noqa
-        
+            elif payment_method == "bank_transfer":
+                return self._initiate_bank_transfer(
+                    request, wallet, amount, serializer.validated_data
+                )  # noqa
+
         return Response(
-            api_response(message=serializer.errors, status=False),
-            status=400
+            api_response(message=serializer.errors, status=False), status=400
         )
 
     def _initiate_paystack_payment(self, request, wallet, amount):
@@ -4399,94 +4496,84 @@ class WalletTopUpView(APIView):
         transaction = Transaction.objects.create(
             wallet=wallet,
             amount=amount,
-            transaction_type='top_up',
-            status='pending',
+            transaction_type="top_up",
+            status="pending",
             reference=f"TOPUP_{uuid.uuid4().hex[:8].upper()}",
-            description="Wallet top-up via Paystack"
+            description="Wallet top-up via Paystack",
         )
 
         # Initialize Paystack payment
         headers = {
-            'Authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}',
-            'Content-Type': 'application/json',
+            "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
+            "Content-Type": "application/json",
         }
         payload = {
-            'email': request.user.email,
-            'amount': int(amount * 100),  # Paystack expects kobo
-            'reference': transaction.reference,
-            'callback_url': f"{settings.PAYSTACK_CALLBACK_URL}/wallet/topup/",
-            'metadata': {
-                'transaction_id': str(transaction.id),
-                'wallet_id': str(wallet.id),
-                'user_id': str(request.user.id)
-            }
+            "email": request.user.email,
+            "amount": int(amount * 100),  # Paystack expects kobo
+            "reference": transaction.reference,
+            "callback_url": f"{settings.PAYSTACK_CALLBACK_URL}/wallet/topup/",
+            "metadata": {
+                "transaction_id": str(transaction.id),
+                "wallet_id": str(wallet.id),
+                "user_id": str(request.user.id),
+            },
         }
 
         try:
             response = requests.post(
-                'https://api.paystack.co/transaction/initialize',
+                "https://api.paystack.co/transaction/initialize",
                 json=payload,
-                headers=headers
+                headers=headers,
             )
-            
+
             if response.status_code == 200:
-                data = response.json().get('data', {})
+                data = response.json().get("data", {})
                 return Response(
                     api_response(
                         message="Payment initialized successfully",
                         status=True,
                         data={
-                            'payment_reference': data.get('reference'),
-                            'payment_url': data.get('authorization_url'),
-                            'amount': amount,
-                            'transaction_id': str(transaction.id)
-                        }
+                            "payment_reference": data.get("reference"),
+                            "payment_url": data.get("authorization_url"),
+                            "amount": amount,
+                            "transaction_id": str(transaction.id),
+                        },
                     )
                 )
             else:
                 transaction.mark_as_failed("Paystack initialization failed")
                 return Response(
-                    api_response(
-                        message="Failed to initialize payment",
-                        status=False
-                    ),
-                    status=400
+                    api_response(message="Failed to initialize payment", status=False),
+                    status=400,
                 )
         except Exception as e:
             transaction.mark_as_failed(str(e))
             return Response(
-                api_response(
-                    message="Payment initialization error",
-                    status=False
-                ),
-                status=500
+                api_response(message="Payment initialization error", status=False),
+                status=500,
             )
 
     def _initiate_bank_transfer(self, request, wallet, amount, data):
         """Initiate bank transfer for wallet top-up."""
-        bank_account_id = data.get('bank_account_id')
-        
+        bank_account_id = data.get("bank_account_id")
+
         try:
             bank_account = BankAccount.objects.get(
                 id=bank_account_id, user=request.user, is_active=True
             )
         except BankAccount.DoesNotExist:
             return Response(
-                api_response(
-                    message="Invalid bank account",
-                    status=False
-                ),
-                status=400
+                api_response(message="Invalid bank account", status=False), status=400
             )
 
         # Create transaction record
         transaction = Transaction.objects.create(
             wallet=wallet,
             amount=amount,
-            transaction_type='top_up',
-            status='pending',
+            transaction_type="top_up",
+            status="pending",
             reference=f"BANK_TRANSFER_{uuid.uuid4().hex[:8].upper()}",  # noqa
-            description=f"Bank transfer to {bank_account.get_display_name()}"
+            description=f"Bank transfer to {bank_account.get_display_name()}",
         )
 
         return Response(
@@ -4494,23 +4581,24 @@ class WalletTopUpView(APIView):
                 message="Bank transfer initiated",
                 status=True,
                 data={
-                    'transaction_id': str(transaction.id),
-                    'amount': amount,
-                    'bank_account': BankAccountSerializer(bank_account).data,
-                    'reference': transaction.reference
-                }
+                    "transaction_id": str(transaction.id),
+                    "amount": amount,
+                    "bank_account": BankAccountSerializer(bank_account).data,
+                    "reference": transaction.reference,
+                },
             )
         )
 
 
 class WalletWithdrawalView(APIView):
     """Withdraw from wallet to bank account."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="Withdraw from wallet to bank account",
         request_body=WalletWithdrawalSerializer,
-        responses={200: TransactionSerializer()}
+        responses={200: TransactionSerializer()},
     )
     def post(self, request):
         """Withdraw from wallet to bank account."""
@@ -4518,20 +4606,19 @@ class WalletWithdrawalView(APIView):
 
         serializer = WalletWithdrawalSerializer(data=request.data)
         if serializer.is_valid():
-            amount = serializer.validated_data['amount']
-            bank_account_id = serializer.validated_data['bank_account_id']
-            description = serializer.validated_data.get('description', 'Wallet withdrawal')  # noqa
+            amount = serializer.validated_data["amount"]
+            bank_account_id = serializer.validated_data["bank_account_id"]
+            description = serializer.validated_data.get(
+                "description", "Wallet withdrawal"
+            )  # noqa
 
             wallet, _ = Wallet.objects.get_or_create(user=request.user)
-            
+
             # Check if user has sufficient balance
             if wallet.balance < amount:
                 return Response(
-                    api_response(
-                        message="Insufficient wallet balance",
-                        status=False
-                    ),
-                    status=400
+                    api_response(message="Insufficient wallet balance", status=False),
+                    status=400,
                 )
 
             try:
@@ -4540,26 +4627,23 @@ class WalletWithdrawalView(APIView):
                 )
             except BankAccount.DoesNotExist:
                 return Response(
-                    api_response(
-                        message="Invalid bank account",
-                        status=False
-                    ),
-                    status=400
+                    api_response(message="Invalid bank account", status=False),
+                    status=400,
                 )
 
             # Create withdrawal transaction
             transaction = Transaction.objects.create(
                 wallet=wallet,
                 amount=amount,
-                transaction_type='withdrawal',
-                status='pending',
+                transaction_type="withdrawal",
+                status="pending",
                 reference=f"WITHDRAWAL_{uuid.uuid4().hex[:8].upper()}",
                 description=description,
                 metadata={
-                    'bank_account_id': str(bank_account.id),
-                    'bank_name': bank_account.bank_name,
-                    'account_number': bank_account.account_number
-                }
+                    "bank_account_id": str(bank_account.id),
+                    "bank_name": bank_account.bank_name,
+                    "account_number": bank_account.account_number,
+                },
             )
 
             # Process withdrawal (in production, this would integrate with Paystack transfer API)  # noqa
@@ -4567,110 +4651,109 @@ class WalletWithdrawalView(APIView):
                 # For now, we'll simulate the withdrawal process
                 # In production, this would call Paystack's transfer API
                 transaction.mark_as_processing()
-                
+
                 # Simulate processing delay
                 import time
+
                 time.sleep(1)
-                
+
                 # Mark as completed (in production, this would be done via webhook)  # noqa
                 transaction.mark_as_completed()
-                wallet.debit(amount, f"Withdrawal to {bank_account.get_display_name()}")  # noqa
+                wallet.debit(
+                    amount, f"Withdrawal to {bank_account.get_display_name()}"
+                )  # noqa
 
                 return Response(
                     api_response(
                         message="Withdrawal initiated successfully",
                         status=True,
-                        data=TransactionSerializer(transaction).data
+                        data=TransactionSerializer(transaction).data,
                     )
                 )
             except Exception as e:
                 transaction.mark_as_failed(str(e))
                 return Response(
-                    api_response(
-                        message="Withdrawal failed",
-                        status=False
-                    ),
-                    status=500
+                    api_response(message="Withdrawal failed", status=False), status=500
                 )
 
         return Response(
-            api_response(message=serializer.errors, status=False),
-            status=400
+            api_response(message=serializer.errors, status=False), status=400
         )
 
 
 class PaystackWebhookView(APIView):
     """Handle Paystack webhooks for wallet transactions."""
+
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
 
     @swagger_auto_schema(
         operation_description="Handle Paystack webhooks",
         request_body=PaystackWebhookSerializer,
-        responses={200: openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'status': openapi.Schema(type=openapi.TYPE_STRING)
-            }
-        )}
+        responses={
+            200: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={"status": openapi.Schema(type=openapi.TYPE_STRING)},
+            )
+        },
     )
     def post(self, request):
         """Handle Paystack webhooks."""
         from django.conf import settings
         import hmac
         import hashlib
-        
+
         # Verify webhook signature
-        signature = request.headers.get('X-Paystack-Signature')
+        signature = request.headers.get("X-Paystack-Signature")
         if not signature:
-            return Response({'status': 'error'}, status=400)
+            return Response({"status": "error"}, status=400)
 
         # Verify signature
         expected_signature = hmac.new(
-            settings.PAYSTACK_SECRET_KEY.encode('utf-8'),
-            request.body,
-            hashlib.sha512
+            settings.PAYSTACK_SECRET_KEY.encode("utf-8"), request.body, hashlib.sha512
         ).hexdigest()
 
         if not hmac.compare_digest(signature, expected_signature):
-            return Response({'status': 'error'}, status=400)
+            return Response({"status": "error"}, status=400)
 
         # Process webhook
-        event = request.data.get('event')
-        data = request.data.get('data', {})
-        reference = data.get('reference')
+        event = request.data.get("event")
+        data = request.data.get("data", {})
+        reference = data.get("reference")
 
-        if event == 'charge.success' and reference:
+        if event == "charge.success" and reference:
             try:
                 from django.db import transaction
+
                 with transaction.atomic():
                     # Handle wallet top-up
-                    if reference.startswith('TOPUP_'):
+                    if reference.startswith("TOPUP_"):
                         self._handle_wallet_topup(data)
                     # Handle order payment
                     else:
                         self._handle_order_payment(data)
             except Exception as e:
                 from django.utils.log import logger
-                logger.error(f"Webhook processing error: {e}")
-                return Response({'status': 'error'}, status=500)
 
-        return Response({'status': 'success'})
+                logger.error(f"Webhook processing error: {e}")
+                return Response({"status": "error"}, status=500)
+
+        return Response({"status": "success"})
 
     def _handle_wallet_topup(self, data):
         """Handle wallet top-up webhook."""
-        reference = data.get('reference')
-        amount = data.get('amount', 0) / 100  # Convert from kobo to naira
-        
+        reference = data.get("reference")
+        amount = data.get("amount", 0) / 100  # Convert from kobo to naira
+
         try:
             transaction = Transaction.objects.select_for_update().get(
-                reference=reference, status='pending'
+                reference=reference, status="pending"
             )
-            
-            if transaction.transaction_type == 'top_up':
+
+            if transaction.transaction_type == "top_up":
                 transaction.mark_as_completed()
                 transaction.wallet.credit(amount, "Wallet top-up via Paystack")  # noqa
-                
+
                 # Send notification
                 self._send_topup_notification(transaction)
         except Transaction.DoesNotExist:
@@ -4679,16 +4762,14 @@ class PaystackWebhookView(APIView):
     def _handle_order_payment(self, data):
         """Handle order payment webhook."""
         from products.models import Order
-        
-        reference = data.get('reference')
-        
+
+        reference = data.get("reference")
+
         try:
-            order = Order.objects.select_for_update().get(
-                payment_reference=reference
-            )
-            if order.payment_status != 'paid':
-                order.payment_status = 'paid'
-                order.status = 'paid'
+            order = Order.objects.select_for_update().get(payment_reference=reference)
+            if order.payment_status != "paid":
+                order.payment_status = "paid"
+                order.status = "paid"
                 order.paid_at = timezone.now()
                 order.save()
         except Order.DoesNotExist:
@@ -4697,480 +4778,479 @@ class PaystackWebhookView(APIView):
     def _send_topup_notification(self, transaction):
         """Send top-up notification to user."""
         from users.services import NotificationService
-        
+
         NotificationService.create_notification(
             user=transaction.wallet.user,
             title="Wallet Top-up Successful",
             message=f"Your wallet has been credited with {transaction.amount} NGN",  # noqa
-            notification_type='success'
+            notification_type="success",
         )
 
 
 class SecureDocumentListCreateView(APIView):
     """List and create secure documents."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="List user's secure documents",
         manual_parameters=[
             openapi.Parameter(
-                'document_type',
+                "document_type",
                 openapi.IN_QUERY,
                 description="Filter by document type",
                 type=openapi.TYPE_STRING,
-                required=False
+                required=False,
             ),
             openapi.Parameter(
-                'verification_status',
+                "verification_status",
                 openapi.IN_QUERY,
                 description="Filter by verification status",
                 type=openapi.TYPE_STRING,
-                required=False
-            )
+                required=False,
+            ),
         ],
-        responses={200: SecureDocumentSerializer(many=True)}
+        responses={200: SecureDocumentSerializer(many=True)},
     )
     def get(self, request):
         """List user's secure documents."""
         documents = SecureDocument.objects.filter(user=request.user)
-        
+
         # Apply filters
-        document_type = request.query_params.get('document_type')
+        document_type = request.query_params.get("document_type")
         if document_type:
             documents = documents.filter(document_type=document_type)
-        
-        verification_status = request.query_params.get('verification_status')
+
+        verification_status = request.query_params.get("verification_status")
         if verification_status:
-            documents = documents.filter(verification_status=verification_status)  # noqa
-        
+            documents = documents.filter(
+                verification_status=verification_status
+            )  # noqa
+
         # Pagination
         paginator = CustomLimitOffsetPagination()
         paginated_documents = paginator.paginate_queryset(documents, request)
-        
+
         serializer = SecureDocumentSerializer(paginated_documents, many=True)
         return paginator.get_paginated_response(serializer.data)
 
     @swagger_auto_schema(
         operation_description="Upload a secure document",
         request_body=SecureDocumentCreateSerializer,
-        responses={201: SecureDocumentSerializer()}
+        responses={201: SecureDocumentSerializer()},
     )
     def post(self, request):
         """Upload a secure document."""
         serializer = SecureDocumentCreateSerializer(
-            data=request.data, context={'request': request}
+            data=request.data, context={"request": request}
         )
         if serializer.is_valid():
             document = serializer.save()
-            
+
             # Log file upload audit
             FileSecurityAudit.objects.create(
                 user=request.user,
-                audit_type='upload',
+                audit_type="upload",
                 file_path=document.file_path,
                 file_hash=document.file_hash,
-                ip_address=request.META.get('REMOTE_ADDR'),
-                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                ip_address=request.META.get("REMOTE_ADDR"),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
                 session_id=request.session.session_key,
                 metadata={
-                    'document_type': document.document_type,
-                    'file_size': document.file_size,
-                    'mime_type': document.mime_type
-                }
+                    "document_type": document.document_type,
+                    "file_size": document.file_size,
+                    "mime_type": document.mime_type,
+                },
             )
-            
+
             response_serializer = SecureDocumentSerializer(document)
             return Response(
                 api_response(
                     message="Document uploaded successfully",
                     status=True,
-                    data=response_serializer.data
+                    data=response_serializer.data,
                 ),
-                status=201
+                status=201,
             )
         return Response(
-            api_response(message=serializer.errors, status=False),
-            status=400
+            api_response(message=serializer.errors, status=False), status=400
         )
 
 
 class SecureDocumentDetailView(APIView):
     """Retrieve, update, and delete secure document."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="Get secure document details",
-        responses={200: SecureDocumentSerializer()}
+        responses={200: SecureDocumentSerializer()},
     )
     def get(self, request, document_id):
         """Get secure document details."""
         try:
-            document = SecureDocument.objects.get(
-                id=document_id, user=request.user
-            )
-            
+            document = SecureDocument.objects.get(id=document_id, user=request.user)
+
             # Increment access count
             document.increment_access_count()
-            
+
             # Log file access
             FileSecurityAudit.objects.create(
                 user=request.user,
-                audit_type='access',
+                audit_type="access",
                 file_path=document.file_path,
                 file_hash=document.file_hash,
-                ip_address=request.META.get('REMOTE_ADDR'),
-                user_agent=request.META.get('HTTP_USER_AGENT', ''),
-                session_id=request.session.session_key
+                ip_address=request.META.get("REMOTE_ADDR"),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+                session_id=request.session.session_key,
             )
-            
+
             serializer = SecureDocumentSerializer(document)
             return Response(
                 api_response(
                     message="Document details retrieved",
                     status=True,
-                    data=serializer.data
+                    data=serializer.data,
                 )
             )
         except SecureDocument.DoesNotExist:
             return Response(
-                api_response(message="Document not found", status=False),
-                status=404
+                api_response(message="Document not found", status=False), status=404
             )
 
-    @swagger_auto_schema(
-        operation_description="Delete secure document"
-    )
+    @swagger_auto_schema(operation_description="Delete secure document")
     def delete(self, request, document_id):
         """Delete secure document."""
         try:
-            document = SecureDocument.objects.get(
-                id=document_id, user=request.user
-            )
-            
+            document = SecureDocument.objects.get(id=document_id, user=request.user)
+
             # Log file deletion
             FileSecurityAudit.objects.create(
                 user=request.user,
-                audit_type='delete',
+                audit_type="delete",
                 file_path=document.file_path,
                 file_hash=document.file_hash,
-                ip_address=request.META.get('REMOTE_ADDR'),
-                user_agent=request.META.get('HTTP_USER_AGENT', ''),
-                session_id=request.session.session_key
+                ip_address=request.META.get("REMOTE_ADDR"),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+                session_id=request.session.session_key,
             )
-            
+
             document.delete()
             return Response(
-                api_response(
-                    message="Document deleted successfully",
-                    status=True
-                )
+                api_response(message="Document deleted successfully", status=True)
             )
         except SecureDocument.DoesNotExist:
             return Response(
-                api_response(message="Document not found", status=False),
-                status=404
+                api_response(message="Document not found", status=False), status=404
             )
 
 
 class DocumentVerificationView(APIView):
     """Admin view for document verification."""
+
     permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
 
     @swagger_auto_schema(
         operation_description="Verify or reject a document",
         request_body=DocumentVerificationSerializer,
-        responses={200: SecureDocumentSerializer()}
+        responses={200: SecureDocumentSerializer()},
     )
     def post(self, request, document_id):
         """Verify or reject a document."""
         try:
             document = SecureDocument.objects.get(id=document_id)
             serializer = DocumentVerificationSerializer(data=request.data)
-            
+
             if serializer.is_valid():
-                action = serializer.validated_data['action']
-                notes = serializer.validated_data.get('notes', '')
-                
-                if action == 'verify':
+                action = serializer.validated_data["action"]
+                notes = serializer.validated_data.get("notes", "")
+
+                if action == "verify":
                     document.mark_as_verified(request.user, notes)
                     message = "Document verified successfully"
                 else:
                     document.mark_as_rejected(notes)
                     message = "Document rejected"
-                
+
                 # Log verification action
                 DocumentVerificationLog.objects.create(
                     document=document,
                     action=action,
                     performed_by=request.user,
                     notes=notes,
-                    ip_address=request.META.get('REMOTE_ADDR'),
-                    user_agent=request.META.get('HTTP_USER_AGENT', '')
+                    ip_address=request.META.get("REMOTE_ADDR"),
+                    user_agent=request.META.get("HTTP_USER_AGENT", ""),
                 )
-                
+
                 response_serializer = SecureDocumentSerializer(document)
                 return Response(
                     api_response(
-                        message=message,
-                        status=True,
-                        data=response_serializer.data
+                        message=message, status=True, data=response_serializer.data
                     )
                 )
-            
+
             return Response(
-                api_response(message=serializer.errors, status=False),
-                status=400
+                api_response(message=serializer.errors, status=False), status=400
             )
         except SecureDocument.DoesNotExist:
             return Response(
-                api_response(message="Document not found", status=False),
-                status=404
+                api_response(message="Document not found", status=False), status=404
             )
 
 
 class DocumentVerificationLogView(APIView):
     """View for document verification logs."""
+
     permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
 
     @swagger_auto_schema(
         operation_description="List document verification logs",
         manual_parameters=[
             openapi.Parameter(
-                'document_id',
+                "document_id",
                 openapi.IN_QUERY,
                 description="Filter by document ID",
                 type=openapi.TYPE_STRING,
-                required=False
+                required=False,
             ),
             openapi.Parameter(
-                'action',
+                "action",
                 openapi.IN_QUERY,
                 description="Filter by action",
                 type=openapi.TYPE_STRING,
-                required=False
-            )
+                required=False,
+            ),
         ],
-        responses={200: DocumentVerificationLogSerializer(many=True)}
+        responses={200: DocumentVerificationLogSerializer(many=True)},
     )
     def get(self, request):
         """List document verification logs."""
         logs = DocumentVerificationLog.objects.all()
-        
+
         # Apply filters
-        document_id = request.query_params.get('document_id')
+        document_id = request.query_params.get("document_id")
         if document_id:
             logs = logs.filter(document_id=document_id)
-        
-        action = request.query_params.get('action')
+
+        action = request.query_params.get("action")
         if action:
             logs = logs.filter(action=action)
-        
+
         # Pagination
         paginator = CustomLimitOffsetPagination()
         paginated_logs = paginator.paginate_queryset(logs, request)
-        
-        serializer = DocumentVerificationLogSerializer(paginated_logs, many=True)  # noqa
+
+        serializer = DocumentVerificationLogSerializer(
+            paginated_logs, many=True
+        )  # noqa
         return paginator.get_paginated_response(serializer.data)
 
 
 class FileSecurityAuditView(APIView):
     """View for file security audit logs."""
+
     permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
 
     @swagger_auto_schema(
         operation_description="List file security audit logs",
         manual_parameters=[
             openapi.Parameter(
-                'audit_type',
+                "audit_type",
                 openapi.IN_QUERY,
                 description="Filter by audit type",
                 type=openapi.TYPE_STRING,
-                required=False
+                required=False,
             ),
             openapi.Parameter(
-                'user_id',
+                "user_id",
                 openapi.IN_QUERY,
                 description="Filter by user ID",
                 type=openapi.TYPE_STRING,
-                required=False
+                required=False,
             ),
             openapi.Parameter(
-                'success',
+                "success",
                 openapi.IN_QUERY,
                 description="Filter by success status",
                 type=openapi.TYPE_BOOLEAN,
-                required=False
-            )
+                required=False,
+            ),
         ],
-        responses={200: FileSecurityAuditSerializer(many=True)}
+        responses={200: FileSecurityAuditSerializer(many=True)},
     )
     def get(self, request):
         """List file security audit logs."""
         audits = FileSecurityAudit.objects.all()
-        
+
         # Apply filters
-        audit_type = request.query_params.get('audit_type')
+        audit_type = request.query_params.get("audit_type")
         if audit_type:
             audits = audits.filter(audit_type=audit_type)
-        
-        user_id = request.query_params.get('user_id')
+
+        user_id = request.query_params.get("user_id")
         if user_id:
             audits = audits.filter(user_id=user_id)
-        
-        success = request.query_params.get('success')
+
+        success = request.query_params.get("success")
         if success is not None:
-            audits = audits.filter(success=success.lower() == 'true')
-        
+            audits = audits.filter(success=success.lower() == "true")
+
         # Pagination
         paginator = CustomLimitOffsetPagination()
         paginated_audits = paginator.paginate_queryset(audits, request)
-        
+
         serializer = FileSecurityAuditSerializer(paginated_audits, many=True)
         return paginator.get_paginated_response(serializer.data)
 
 
 class FileUploadView(APIView):
     """General file upload view."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="Upload a file securely",
         request_body=FileUploadSerializer,
-        responses={201: openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'file_path': openapi.Schema(type=openapi.TYPE_STRING),
-                'file_hash': openapi.Schema(type=openapi.TYPE_STRING),
-                'secure_url': openapi.Schema(type=openapi.TYPE_STRING),
-            }
-        )}
+        responses={
+            201: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    "file_path": openapi.Schema(type=openapi.TYPE_STRING),
+                    "file_hash": openapi.Schema(type=openapi.TYPE_STRING),
+                    "secure_url": openapi.Schema(type=openapi.TYPE_STRING),
+                },
+            )
+        },
     )
     def post(self, request):
         """Upload a file securely."""
         serializer = FileUploadSerializer(data=request.data)
         if serializer.is_valid():
-            file = serializer.validated_data['file']
-            file_type = serializer.validated_data['file_type']
-            category = serializer.validated_data.get('category', 'general')
-            
+            file = serializer.validated_data["file"]
+            file_type = serializer.validated_data["file_type"]
+            category = serializer.validated_data.get("category", "general")
+
             try:
-                from ogamechanic.modules.file_storage_service import FileStorageService  # noqa
+                from ogamechanic.modules.file_storage_service import (
+                    FileStorageService,
+                )  # noqa
+
                 file_metadata = FileStorageService.save_file(
                     file, file_type, str(request.user.id), category
                 )
-                
+
                 # Log file upload
                 FileSecurityAudit.objects.create(
                     user=request.user,
-                    audit_type='upload',
-                    file_path=file_metadata['file_path'],
-                    file_hash=file_metadata['file_hash'],
-                    ip_address=request.META.get('REMOTE_ADDR'),
-                    user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                    audit_type="upload",
+                    file_path=file_metadata["file_path"],
+                    file_hash=file_metadata["file_hash"],
+                    ip_address=request.META.get("REMOTE_ADDR"),
+                    user_agent=request.META.get("HTTP_USER_AGENT", ""),
                     session_id=request.session.session_key,
                     metadata={
-                        'file_type': file_type,
-                        'category': category,
-                        'file_size': file_metadata['file_size'],
-                        'mime_type': file_metadata['mime_type']
-                    }
+                        "file_type": file_type,
+                        "category": category,
+                        "file_size": file_metadata["file_size"],
+                        "mime_type": file_metadata["mime_type"],
+                    },
                 )
-                
+
                 return Response(
                     api_response(
                         message="File uploaded successfully",
                         status=True,
                         data={
-                            'file_path': file_metadata['file_path'],
-                            'file_hash': file_metadata['file_hash'],
-                            'secure_url': f"/media/{file_metadata['file_path']}"  # noqa
-                        }
+                            "file_path": file_metadata["file_path"],
+                            "file_hash": file_metadata["file_hash"],
+                            "secure_url": f"/media/{file_metadata['file_path']}",  # noqa
+                        },
                     ),
-                    status=201
+                    status=201,
                 )
             except Exception as e:
                 return Response(
-                    api_response(
-                        message=f"File upload failed: {str(e)}",
-                        status=False
-                    ),
-                    status=500
+                    api_response(message=f"File upload failed: {str(e)}", status=False),
+                    status=500,
                 )
-        
+
         return Response(
-            api_response(message=serializer.errors, status=False),
-            status=400
+            api_response(message=serializer.errors, status=False), status=400
         )
 
 
 class CACUploadView(APIView):
     """Specialized view for CAC document uploads."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="Upload CAC document for merchant verification",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['file'],
+            required=["file"],
             properties={
-                'file': openapi.Schema(type=openapi.TYPE_FILE),
-            }
+                "file": openapi.Schema(type=openapi.TYPE_FILE),
+            },
         ),
-        responses={201: SecureDocumentSerializer()}
+        responses={201: SecureDocumentSerializer()},
     )
     def post(self, request):
         """Upload CAC document."""
-        if 'file' not in request.FILES:
+        if "file" not in request.FILES:
             return Response(
-                api_response(message="No file provided", status=False),
-                status=400
+                api_response(message="No file provided", status=False), status=400
             )
-        
-        file = request.FILES['file']
-        
+
+        file = request.FILES["file"]
+
         try:
-            from ogamechanic.modules.file_storage_service import CACDocumentService  # noqa
-            file_metadata = CACDocumentService.process_cac_document(file, str(request.user.id))  # noqa
-            
+            from ogamechanic.modules.file_storage_service import (
+                CACDocumentService,
+            )  # noqa
+
+            file_metadata = CACDocumentService.process_cac_document(
+                file, str(request.user.id)
+            )  # noqa
+
             # Create secure document
             document = SecureDocument.objects.create(
                 user=request.user,
-                document_type='cac_document',
-                original_filename=file_metadata['original_filename'],
-                secure_filename=file_metadata['secure_filename'],
-                file_path=file_metadata['file_path'],
-                file_size=file_metadata['file_size'],
-                file_hash=file_metadata['file_hash'],
-                mime_type=file_metadata['mime_type'],
-                extracted_info=file_metadata.get('cac_info', {})
+                document_type="cac_document",
+                original_filename=file_metadata["original_filename"],
+                secure_filename=file_metadata["secure_filename"],
+                file_path=file_metadata["file_path"],
+                file_size=file_metadata["file_size"],
+                file_hash=file_metadata["file_hash"],
+                mime_type=file_metadata["mime_type"],
+                extracted_info=file_metadata.get("cac_info", {}),
             )
-            
+
             # Log document upload
             DocumentVerificationLog.objects.create(
                 document=document,
-                action='upload',
+                action="upload",
                 performed_by=request.user,
                 notes="CAC document uploaded for merchant verification",
-                ip_address=request.META.get('REMOTE_ADDR'),
-                user_agent=request.META.get('HTTP_USER_AGENT', '')
+                ip_address=request.META.get("REMOTE_ADDR"),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
             )
-            
+
             serializer = SecureDocumentSerializer(document)
             return Response(
                 api_response(
                     message="CAC document uploaded successfully",
                     status=True,
-                    data=serializer.data
+                    data=serializer.data,
                 ),
-                status=201
+                status=201,
             )
         except Exception as e:
             return Response(
                 api_response(
-                    message=f"CAC document upload failed: {str(e)}",
-                    status=False
+                    message=f"CAC document upload failed: {str(e)}", status=False
                 ),
-                status=500
+                status=500,
             )
 
 
@@ -5178,6 +5258,7 @@ class RoleManagementView(APIView):
     """
     View for managing user roles and active role switching.
     """
+
     permission_classes = [IsAuthenticated]
     throttle_classes = [UserRateThrottle]
 
@@ -5186,44 +5267,43 @@ class RoleManagementView(APIView):
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                'active_role_id': openapi.Schema(
+                "active_role_id": openapi.Schema(
                     type=openapi.TYPE_INTEGER,
-                    description="ID of the role to set as active"
+                    description="ID of the role to set as active",
                 ),
-                'add_roles': openapi.Schema(
+                "add_roles": openapi.Schema(
                     type=openapi.TYPE_ARRAY,
                     items=openapi.Schema(type=openapi.TYPE_INTEGER),
-                    description="Role IDs to add to user"
+                    description="Role IDs to add to user",
                 ),
-                'remove_roles': openapi.Schema(
+                "remove_roles": openapi.Schema(
                     type=openapi.TYPE_ARRAY,
                     items=openapi.Schema(type=openapi.TYPE_INTEGER),
-                    description="Role IDs to remove from user"
+                    description="Role IDs to remove from user",
                 ),
-            }
+            },
         ),
         responses={
             200: openapi.Response(
-                description="Role management successful",
-                schema=UserSerializer()
+                description="Role management successful", schema=UserSerializer()
             ),
             400: "Bad Request",
             401: "Unauthorized",
-            429: "Too Many Requests"
-        }
+            429: "Too Many Requests",
+        },
     )
     def put(self, request):
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         user = request.user
-        active_role_id = data.get('active_role_id')
-        add_roles = data.get('add_roles', [])
-        remove_roles = data.get('remove_roles', [])
+        active_role_id = data.get("active_role_id")
+        add_roles = data.get("add_roles", [])
+        remove_roles = data.get("remove_roles", [])
 
         # Validate active role
         if active_role_id:
@@ -5236,18 +5316,15 @@ class RoleManagementView(APIView):
                                 "You can only set a role as active if you have "  # noqa
                                 "that role."
                             ),
-                            status=False
+                            status=False,
                         ),
-                        status=http_status.HTTP_400_BAD_REQUEST
+                        status=http_status.HTTP_400_BAD_REQUEST,
                     )
                 user.active_role = new_active_role
             except Role.DoesNotExist:
                 return Response(
-                    api_response(
-                        message="Invalid role ID.",
-                        status=False
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    api_response(message="Invalid role ID.", status=False),
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
 
         # Handle role additions
@@ -5257,11 +5334,8 @@ class RoleManagementView(APIView):
                 user.roles.add(*roles_to_add)
             except Exception as e:
                 return Response(
-                    api_response(
-                        message=f"Error adding roles: {str(e)}",
-                        status=False
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    api_response(message=f"Error adding roles: {str(e)}", status=False),
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
 
         # Handle role removals
@@ -5276,27 +5350,26 @@ class RoleManagementView(APIView):
                                 "You cannot remove your active role. "
                                 "Please set a different active role first."
                             ),
-                            status=False
+                            status=False,
                         ),
-                        status=http_status.HTTP_400_BAD_REQUEST
+                        status=http_status.HTTP_400_BAD_REQUEST,
                     )
                 user.roles.remove(*roles_to_remove)
             except Exception as e:
                 return Response(
                     api_response(
-                        message=f"Error removing roles: {str(e)}",
-                        status=False
+                        message=f"Error removing roles: {str(e)}", status=False
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
 
         user.save()
-        
+
         return Response(
             api_response(
                 message="Role management successful",
                 status=True,
-                data=UserSerializer(user).data
+                data=UserSerializer(user).data,
             )
         )
 
@@ -5308,44 +5381,53 @@ class RoleManagementView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'roles': openapi.Schema(
+                        "roles": openapi.Schema(
                             type=openapi.TYPE_ARRAY,
                             items=openapi.Schema(
                                 type=openapi.TYPE_OBJECT,
                                 properties={
-                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER), # noqa
-                                    'name': openapi.Schema(type=openapi.TYPE_STRING), # noqa
-                                    'description': openapi.Schema(type=openapi.TYPE_STRING), # noqa
-                                }
-                            )
+                                    "id": openapi.Schema(
+                                        type=openapi.TYPE_INTEGER
+                                    ),  # noqa
+                                    "name": openapi.Schema(
+                                        type=openapi.TYPE_STRING
+                                    ),  # noqa
+                                    "description": openapi.Schema(
+                                        type=openapi.TYPE_STRING
+                                    ),  # noqa
+                                },
+                            ),
                         ),
-                        'active_role': openapi.Schema(
+                        "active_role": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'id': openapi.Schema(type=openapi.TYPE_INTEGER), # noqa
-                                'name': openapi.Schema(type=openapi.TYPE_STRING), # noqa
-                                'description': openapi.Schema(type=openapi.TYPE_STRING), # noqa
-                            }
+                                "id": openapi.Schema(type=openapi.TYPE_INTEGER),  # noqa
+                                "name": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),  # noqa
+                                "description": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),  # noqa
+                            },
                         ),
-                    }
-                )
+                    },
+                ),
             ),
-            401: "Unauthorized"
-        }
+            401: "Unauthorized",
+        },
     )
     def get(self, request):
         user = request.user
         roles_data = RoleSerializer(user.roles.all(), many=True).data
-        active_role_data = RoleSerializer(user.active_role).data if user.active_role else None # noqa
-        
+        active_role_data = (
+            RoleSerializer(user.active_role).data if user.active_role else None
+        )  # noqa
+
         return Response(
             api_response(
                 message="User roles retrieved successfully",
                 status=True,
-                data={
-                    'roles': roles_data,
-                    'active_role': active_role_data
-                }
+                data={"roles": roles_data, "active_role": active_role_data},
             )
         )
 
@@ -5353,11 +5435,12 @@ class RoleManagementView(APIView):
 class RoleListView(APIView):
     """
     API to retrieve all available user roles for registration and display.
-    
+
     This endpoint provides a list of all roles that users can select during
     the registration process. Essential for populating role selection dropdowns
     in the frontend.
     """
+
     permission_classes = [AllowAny]  # Allow public access for registration
 
     @swagger_auto_schema(
@@ -5402,114 +5485,127 @@ class RoleListView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(
+                        "status": openapi.Schema(
                             type=openapi.TYPE_BOOLEAN,
                             example=True,
-                            description="Success status"
+                            description="Success status",
                         ),
-                        'message': openapi.Schema(
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
                             example="Roles retrieved successfully",
-                            description="Success message"
+                            description="Success message",
                         ),
-                        'data': openapi.Schema(
+                        "data": openapi.Schema(
                             type=openapi.TYPE_ARRAY,
                             description="Array of available roles",
                             items=openapi.Schema(
                                 type=openapi.TYPE_OBJECT,
                                 properties={
-                                    'id': openapi.Schema(
+                                    "id": openapi.Schema(
                                         type=openapi.TYPE_INTEGER,
                                         example=1,
-                                        description="Unique role identifier"
+                                        description="Unique role identifier",
                                     ),
-                                    'name': openapi.Schema(
+                                    "name": openapi.Schema(
                                         type=openapi.TYPE_STRING,
                                         example="primary_user",
-                                        description="Role system name"
+                                        description="Role system name",
                                     ),
-                                    'description': openapi.Schema(
+                                    "description": openapi.Schema(
                                         type=openapi.TYPE_STRING,
                                         example="Primary User",
-                                        description="Human-readable role description"  # noqa
-                                    )
+                                        description="Human-readable role description",  # noqa
+                                    ),
                                 },
-                                required=['id', 'name', 'description']
-                            )
-                        )
+                                required=["id", "name", "description"],
+                            ),
+                        ),
                     },
-                    required=['status', 'message', 'data']
+                    required=["status", "message", "data"],
                 ),
                 examples={
-                    'application/json': {
-                        'status': True,
-                        'message': 'Roles retrieved successfully',
-                        'data': [
-                            {'id': 1, 'name': 'primary_user', 'description': 'Primary User'},  # noqa
-                            {'id': 2, 'name': 'driver', 'description': 'Driver'},  # noqa
-                            {'id': 3, 'name': 'rider', 'description': 'Rider'},  # noqa
-                            {'id': 4, 'name': 'merchant', 'description': 'Merchant'},  # noqa
-                            {'id': 5, 'name': 'mechanic', 'description': 'Mechanic'}  # noqa
-                        ]
+                    "application/json": {
+                        "status": True,
+                        "message": "Roles retrieved successfully",
+                        "data": [
+                            {
+                                "id": 1,
+                                "name": "primary_user",
+                                "description": "Primary User",
+                            },  # noqa
+                            {
+                                "id": 2,
+                                "name": "driver",
+                                "description": "Driver",
+                            },  # noqa
+                            {"id": 3, "name": "rider", "description": "Rider"},  # noqa
+                            {
+                                "id": 4,
+                                "name": "merchant",
+                                "description": "Merchant",
+                            },  # noqa
+                            {
+                                "id": 5,
+                                "name": "mechanic",
+                                "description": "Mechanic",
+                            },  # noqa
+                        ],
                     }
-                }
+                },
             ),
             500: openapi.Response(
                 description="Internal server error",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),  # noqa
-                        'message': openapi.Schema(
+                        "status": openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN, example=False
+                        ),  # noqa
+                        "message": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            example="An error occurred while retrieving roles"
-                        )
-                    }
-                )
-            )
-        }
+                            example="An error occurred while retrieving roles",
+                        ),
+                    },
+                ),
+            ),
+        },
     )
     def get(self, request):
         """Get all available roles."""
         try:
-            roles = Role.objects.all().order_by('id')
+            roles = Role.objects.all().order_by("id")
             roles_data = RoleSerializer(roles, many=True).data
-            
+
             return Response(
                 api_response(
-                    message="Roles retrieved successfully",
-                    status=True,
-                    data=roles_data
+                    message="Roles retrieved successfully", status=True, data=roles_data
                 )
             )
         except Exception as e:
             return Response(
-                api_response(
-                    message=f"Error retrieving roles: {str(e)}",
-                    status=False
-                ),
-                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+                api_response(message=f"Error retrieving roles: {str(e)}", status=False),
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
 class StepByStepRegistrationView(APIView):
     """
     Comprehensive step-by-step user registration process.
-    
+
     This API handles user registration through 5 distinct steps:
     1. Role selection (primary_user, driver, merchant, mechanic)
     2. User information collection (role-specific)
     3. Email verification with 6-digit code
     4. Role-specific details collection
     5. Password setup and account creation
-    
+
     The process uses Django sessions to maintain state between steps.
     Each step validates previous steps and guides users to the next step.
 
     **Image/File Upload Format:**
     For any step that requires uploading images or files (such as license images, selfies, CAC documents, vehicle photos, etc.), # noqa
-    you MUST send the request as `multipart/form-data` (not JSON). 
-    All image and file fields should be sent as file uploads in the form-data body, 
+    you MUST send the request as `multipart/form-data` (not JSON).
+    All image and file fields should be sent as file uploads in the form-data body,
     while other fields (strings, numbers, etc.) can be sent as regular form fields.
 
     - For steps that do NOT require file/image uploads, you may use JSON.
@@ -5525,10 +5621,10 @@ class StepByStepRegistrationView(APIView):
         - vehicle_photo_front: (file upload)
         - ... (other fields as text or file as appropriate)
     """
+
     permission_classes = [AllowAny]
     throttle_classes = [AuthRateThrottle]
-    parser_classes = [
-        parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
 
     @swagger_auto_schema(
         operation_summary="Step-by-Step User Registration",
@@ -5552,72 +5648,124 @@ class StepByStepRegistrationView(APIView):
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                'requestType': openapi.Schema(
+                "requestType": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Request type identifier (must be 'inbound')",
-                    example="inbound"
+                    example="inbound",
                 ),
-                'data': openapi.Schema(
+                "data": openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     description="Step-specific data payload",
                     example={
-                        "step_1": {"role_id": 1}, 
-                        "step_2_primary_user": { 
-                            "first_name": "John", "last_name": "Doe",
-                            "email": "john@example.com", "phone_number":
-                            "08012345678"
+                        "step_1": {"role_id": 1},
+                        "step_2_primary_user": {
+                            "first_name": "John",
+                            "last_name": "Doe",
+                            "email": "john@example.com",
+                            "phone_number": "08012345678",
                         },
-                        "step_2_driver_sub_role": {
-                             "sub_role": "driver"
-                        },
-                        "step_2_driver_info": {"email": "driver@example.com", "phone_number": "08012345678", "city": "Lagos" }, # noqa
-                        "step_2_merchant_mechanic": {"first_name": "Jane", "last_name": "Smith", "email": "jane@example.com", "phone_number": "08087654321" },  # noqa
+                        "step_2_driver_sub_role": {"sub_role": "driver"},
+                        "step_2_driver_info": {
+                            "email": "driver@example.com",
+                            "phone_number": "08012345678",
+                            "city": "Lagos",
+                        },  # noqa
+                        "step_2_merchant_mechanic": {
+                            "first_name": "Jane",
+                            "last_name": "Smith",
+                            "email": "jane@example.com",
+                            "phone_number": "08087654321",
+                        },  # noqa
                         "step_3": {
-                            "email": "john@example.com", 
-                            "verification_code": "123456" },  # noqa
+                            "email": "john@example.com",
+                            "verification_code": "123456",
+                        },  # noqa
                         "step_4_primary_user": {
-                            "has_car": True, "car_make": "Toyota", 
-                            "car_model": "Corolla", "car_year": 2020, 
-                            "license_plate": "ABC123"
-                        }, 
-                        # For step_4_driver, step_4_merchant, step_4_mechanic: # All image/file fields must be sent as file uploads in multipart/form-data # noqa 
+                            "has_car": True,
+                            "car_make": "Toyota",
+                            "car_model": "Corolla",
+                            "car_year": 2020,
+                            "license_plate": "ABC123",
+                        },
+                        # For step_4_driver, step_4_merchant, step_4_mechanic: # All image/file fields must be sent as file uploads in multipart/form-data # noqa
                         "step_4_driver": {
-                            "full_name": "John Driver", 
-                            "date_of_birth": "1990-01-01", "gender": "male", "address": "123 Street", "location": "Lagos", "license_number": "LIC123", "license_issue_date": "2015-01-01", "license_expiry_date": "2025-01-01", "license_front_image": "(file upload)", "license_back_image": "(file upload)", "vin": "VIN123", "vehicle_name": "Toyota", "plate_number": "ABC123", "vehicle_model": "Corolla", "vehicle_color": "Red", "vehicle_photo_front": "(file upload)", "vehicle_photo_back": "(file upload)", "vehicle_photo_right": "(file upload)", "vehicle_photo_left": "(file upload)", "bank_name": "GTBank", "account_number": "0123456789" },  # noqa
-                        "step_4_merchant": { "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", "selfie": "(file upload)" }, 
+                            "full_name": "John Driver",
+                            "date_of_birth": "1990-01-01",
+                            "gender": "male",
+                            "address": "123 Street",
+                            "location": "Lagos",
+                            "license_number": "LIC123",
+                            "license_issue_date": "2015-01-01",
+                            "license_expiry_date": "2025-01-01",
+                            "license_front_image": "(file upload)",
+                            "license_back_image": "(file upload)",
+                            "vin": "VIN123",
+                            "vehicle_name": "Toyota",
+                            "plate_number": "ABC123",
+                            "vehicle_model": "Corolla",
+                            "vehicle_color": "Red",
+                            "vehicle_photo_front": "(file upload)",
+                            "vehicle_photo_back": "(file upload)",
+                            "vehicle_photo_right": "(file upload)",
+                            "vehicle_photo_left": "(file upload)",
+                            "bank_name": "GTBank",
+                            "account_number": "0123456789",
+                        },  # noqa
+                        "step_4_merchant": {
+                            "location": "Lagos",
+                            "lga": "Ikeja",
+                            "cac_number": "CAC123",
+                            "cac_document": "(file upload)",
+                            "selfie": "(file upload)",
+                        },
                         "step_4_mechanic": {
-                            "location": "Lagos", "lga": "Ikeja", "cac_number": "CAC123", "cac_document": "(file upload)", 
+                            "location": "Lagos",
+                            "lga": "Ikeja",
+                            "cac_number": "CAC123",
+                            "cac_document": "(file upload)",
                             "selfie": "(file upload)",
                             "govt_id_type": "(choice)",
                             "government_id_front": "(file upload)",
                             "government_id_back": "(file upload)",
-                            
-                            # "vehicle_make_ids": [1, 2], 
-                            "expertise_details": [ {
-                                "vehicle_make_id": 1, "years_of_experience": 5, "certification_level": "advanced" 
-                            }, { "vehicle_make_id": 2, "years_of_experience": 2, "certification_level": "basic" } ] },  # noqa
-                        "step_5": { "password": "strongpassword", "confirm_password": "strongpassword" }  # noqa
-                    }
-                )
+                            # "vehicle_make_ids": [1, 2],
+                            "expertise_details": [
+                                {
+                                    "vehicle_make_id": 1,
+                                    "years_of_experience": 5,
+                                    "certification_level": "advanced",
+                                },
+                                {
+                                    "vehicle_make_id": 2,
+                                    "years_of_experience": 2,
+                                    "certification_level": "basic",
+                                },
+                            ],
+                        },  # noqa
+                        "step_5": {
+                            "password": "strongpassword",
+                            "confirm_password": "strongpassword",
+                        },  # noqa
+                    },
+                ),
             },
-            required=['requestType', 'data']
+            required=["requestType", "data"],
         ),
         responses={
-            200: openapi.Response(
-                description="Step completed successfully"
-            ),
+            200: openapi.Response(description="Step completed successfully"),
             201: openapi.Response(
                 description="Registration completed successfully (step 5)"
             ),
             400: openapi.Response(
                 description="Invalid request data or step requirements not met"
             ),
-            429: openapi.Response(description="Too many requests - rate limited")  # noqa
-        }
+            429: openapi.Response(
+                description="Too many requests - rate limited"
+            ),  # noqa
+        },
     )
     def post(self, request, step):
         """Handle different steps of registration"""
-        
+
         if step == 1:
             return self.step_one_role_selection(request)
         elif step == 2:
@@ -5629,15 +5777,11 @@ class StepByStepRegistrationView(APIView):
         elif step == 5:
             return self.step_five_password_setup(request)
         else:
-            logger.critical(
-                f"Stepbystep registration post: {traceback.format_exc()}")
+            logger.critical(f"Stepbystep registration post: {traceback.format_exc()}")
 
             return Response(
-                api_response(
-                    message="Invalid step number",
-                    status=False
-                ),
-                status=http_status.HTTP_400_BAD_REQUEST
+                api_response(message="Invalid step number", status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
     def step_one_role_selection(self, request):
@@ -5646,205 +5790,191 @@ class StepByStepRegistrationView(APIView):
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         serializer = StepOneRoleSelectionSerializer(data=data)
         if serializer.is_valid():
-            role = serializer.validated_data['role_id']
-            
+            role = serializer.validated_data["role_id"]
+
             # Store role selection in session
-            request.session['registration_role_id'] = role.id
-            request.session['registration_step'] = 1
-            
+            request.session["registration_role_id"] = role.id
+            request.session["registration_step"] = 1
+
             return Response(
                 api_response(
                     message="Role selected successfully",
                     status=True,
-                    data={
-                        'role_id': role.id,
-                        'role_name': role.name,
-                        'next_step': 2
-                    }
+                    data={"role_id": role.id, "role_name": role.name, "next_step": 2},
                 )
             )
-        
+
         return Response(
             api_response(
-                message="Invalid role selection",
-                status=False,
-                errors=serializer.errors
+                message="Invalid role selection", status=False, errors=serializer.errors
             ),
-            status=http_status.HTTP_400_BAD_REQUEST
+            status=http_status.HTTP_400_BAD_REQUEST,
         )
 
     def step_two_user_info(self, request):
         """Step 2: User information based on role"""
-        role_id = request.session.get('registration_role_id')
+        role_id = request.session.get("registration_role_id")
         if not role_id:
             return Response(
-                api_response(
-                    message="Please select a role first",
-                    status=False
-                ),
-                status=http_status.HTTP_400_BAD_REQUEST
+                api_response(message="Please select a role first", status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         try:
             role = Role.objects.get(id=role_id)
         except Role.DoesNotExist:
             return Response(
-                api_response(
-                    message="Invalid role",
-                    status=False
-                ),
-                status=http_status.HTTP_400_BAD_REQUEST
+                api_response(message="Invalid role", status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         # Handle driver's special case - sub-role selection first
-        if role.name == 'driver':
+        if role.name == "driver":
             # Check if this is sub-role selection or driver info
-            if 'sub_role' in data:
+            if "sub_role" in data:
                 return self.step_two_driver_sub_role(request, data)
-            elif 'email' in data:
+            elif "email" in data:
                 return self.step_two_driver_info(request, data)
             else:
                 return Response(
                     api_response(
-                        message="Please select driver or rider first",
-                        status=False
+                        message="Please select driver or rider first", status=False
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
 
         # Choose serializer based on role
-        if role.name == 'primary_user':
+        if role.name == "primary_user":
             serializer = StepTwoPrimaryUserInfoSerializer(data=data)
-        elif role.name == 'mechanic':
+        elif role.name == "mechanic":
             serializer = StepTwoMechanicInfoSerializer(data=data)
-        elif role.name == 'merchant':
+        elif role.name == "merchant":
             serializer = StepTwoMerchantInfoSerializer(data=data)
         else:
             return Response(
-                api_response(
-                    message="Invalid role for registration",
-                    status=False
-                ),
-                status=http_status.HTTP_400_BAD_REQUEST
+                api_response(message="Invalid role for registration", status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         if serializer.is_valid():
             # Store user info in session
-            request.session['registration_user_info'] = serializer.validated_data  # noqa
-            request.session['registration_step'] = 2
-            
+            request.session["registration_user_info"] = (
+                serializer.validated_data
+            )  # noqa
+            request.session["registration_step"] = 2
+
             # Send verification email
-            email = serializer.validated_data['email']
+            email = serializer.validated_data["email"]
             verification_code = self.generate_verification_code()
-            request.session['verification_code'] = verification_code
-            request.session['verification_email'] = email
-            
+            request.session["verification_code"] = verification_code
+            request.session["verification_email"] = email
+
             # Send email
             self.send_verification_email(email, verification_code)
             print(f"{verification_code} for {email}")
             logger.info(f"{verification_code} for {email}")
-            
+
             return Response(
                 api_response(
                     message="User info saved. Verification code sent to email.",  # noqa
                     status=True,
-                    data={'next_step': 3}
+                    data={"next_step": 3},
                 )
             )
-        
+
         logger.critical(
-            f"step_two_user_info: {serializer.errors}\n {traceback.format_exc()}") # noqa
+            f"step_two_user_info: {serializer.errors}\n {traceback.format_exc()}"
+        )  # noqa
         return Response(
             api_response(
                 message="Invalid user information",
                 status=False,
-                errors=serializer.errors
+                errors=serializer.errors,
             ),
-            status=http_status.HTTP_400_BAD_REQUEST
+            status=http_status.HTTP_400_BAD_REQUEST,
         )
 
     def step_two_driver_sub_role(self, request, data):
         """Step 2a: Driver sub-role selection"""
         serializer = StepTwoDriverSubRoleSerializer(data=data)
         if serializer.is_valid():
-            request.session['registration_driver_sub_role'] = (
-                serializer.validated_data['sub_role']
-            )
+            request.session["registration_driver_sub_role"] = serializer.validated_data[
+                "sub_role"
+            ]
             return Response(
                 api_response(
                     message="Sub-role selected. Please provide information.",
                     status=True,
-                    data={'next_step': '2b'}
+                    data={"next_step": "2b"},
                 )
             )
         return Response(
             api_response(
                 message="Invalid sub-role selection",
                 status=False,
-                errors=serializer.errors
+                errors=serializer.errors,
             ),
-            status=http_status.HTTP_400_BAD_REQUEST
+            status=http_status.HTTP_400_BAD_REQUEST,
         )
 
     def step_two_driver_info(self, request, data):
         """Step 2b: Driver information"""
         # Check if sub-role was selected
-        driver_sub_role = request.session.get('registration_driver_sub_role')
+        driver_sub_role = request.session.get("registration_driver_sub_role")
         if not driver_sub_role:
             return Response(
                 api_response(
-                    message="Please select driver or rider sub-role first",
-                    status=False
+                    message="Please select driver or rider sub-role first", status=False
                 ),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         serializer = StepTwoDriverInfoSerializer(data=data)
         if serializer.is_valid():
             # Store driver info and sub-role
             user_info = serializer.validated_data
-            user_info['driver_sub_role'] = driver_sub_role
-            request.session['registration_user_info'] = user_info
-            request.session['registration_step'] = 2
-            
+            user_info["driver_sub_role"] = driver_sub_role
+            request.session["registration_user_info"] = user_info
+            request.session["registration_step"] = 2
+
             # Send verification email
-            email = serializer.validated_data['email']
+            email = serializer.validated_data["email"]
             verification_code = self.generate_verification_code()
-            request.session['verification_code'] = verification_code
-            request.session['verification_email'] = email
-            
+            request.session["verification_code"] = verification_code
+            request.session["verification_email"] = email
+
             # Send email
             self.send_verification_email(email, verification_code)
             print(f"{verification_code} for {email}")
             logger.info(f"{verification_code} for {email}")
-            
+
             return Response(
                 api_response(
                     message="Driver info saved. Verification code sent.",
                     status=True,
-                    data={'next_step': 3}
+                    data={"next_step": 3},
                 )
             )
-        
+
         return Response(
             api_response(
                 message="Invalid driver information",
                 status=False,
-                errors=serializer.errors
+                errors=serializer.errors,
             ),
-            status=http_status.HTTP_400_BAD_REQUEST
+            status=http_status.HTTP_400_BAD_REQUEST,
         )
 
     def step_three_email_verification(self, request):
@@ -5853,131 +5983,119 @@ class StepByStepRegistrationView(APIView):
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         serializer = StepThreeEmailVerificationSerializer(data=data)
         if serializer.is_valid():
-            email = serializer.validated_data['email']
-            code = serializer.validated_data['verification_code']
-            
+            email = serializer.validated_data["email"]
+            code = serializer.validated_data["verification_code"]
+
             # Check if code matches
-            stored_code = request.session.get('verification_code')
-            stored_email = request.session.get('verification_email')
-            
+            stored_code = request.session.get("verification_code")
+            stored_email = request.session.get("verification_email")
+
             if not stored_code or not stored_email:
                 return Response(
                     api_response(
                         message="Verification session expired. Please start over.",  # noqa
-                        status=False
+                        status=False,
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             if email != stored_email:
                 return Response(
                     api_response(
                         message="Email does not match verification session",
-                        status=False
+                        status=False,
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             if code != stored_code:
                 return Response(
-                    api_response(
-                        message="Invalid verification code",
-                        status=False
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    api_response(message="Invalid verification code", status=False),
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Mark email as verified
-            request.session['email_verified'] = True
-            request.session['registration_step'] = 3
-            
+            request.session["email_verified"] = True
+            request.session["registration_step"] = 3
+
             # Determine next step based on role
-            role_id = request.session.get('registration_role_id')
+            role_id = request.session.get("registration_role_id")
             role = Role.objects.get(id=role_id)
-            
-            next_step = 4 if role.name == 'primary_user' else 4
-            
+
+            next_step = 4 if role.name == "primary_user" else 4
+
             return Response(
                 api_response(
                     message="Email verified successfully",
                     status=True,
-                    data={'next_step': next_step}
+                    data={"next_step": next_step},
                 )
             )
-        
+
         return Response(
             api_response(
                 message="Invalid verification data",
                 status=False,
-                errors=serializer.errors
+                errors=serializer.errors,
             ),
-            status=http_status.HTTP_400_BAD_REQUEST
+            status=http_status.HTTP_400_BAD_REQUEST,
         )
 
     def step_four_details(self, request):
         """Step 4: Role-specific details
 
         **IMPORTANT:** If this step requires uploading images or files (e.g., license images, selfies, CAC documents, vehicle photos), # noqa
-        you MUST send the request as `multipart/form-data` and include the files as file uploads. 
+        you MUST send the request as `multipart/form-data` and include the files as file uploads.
         Do NOT send images/files as base64 or JSON fields.
         """
-        role_id = request.session.get('registration_role_id')
+        role_id = request.session.get("registration_role_id")
         if not role_id:
             return Response(
-                api_response(
-                    message="Please select a role first",
-                    status=False
-                ),
-                status=http_status.HTTP_400_BAD_REQUEST
+                api_response(message="Please select a role first", status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         try:
             role = Role.objects.get(id=role_id)
         except Role.DoesNotExist:
             return Response(
-                api_response(
-                    message="Invalid role",
-                    status=False
-                ),
-                status=http_status.HTTP_400_BAD_REQUEST
+                api_response(message="Invalid role", status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         # Choose serializer and message based on role
-        if role.name == 'primary_user':
+        if role.name == "primary_user":
             serializer = StepFourPrimaryUserCarDetailsSerializer(data=data)
             success_message = "Car details saved"
-            session_key = 'registration_car_details'
-        elif role.name == 'driver':
+            session_key = "registration_car_details"
+        elif role.name == "driver":
             serializer = StepFourDriverDetailsSerializer(data=data)
             success_message = "Driver details saved"
-            session_key = 'registration_driver_details'
-        elif role.name == 'merchant':
+            session_key = "registration_driver_details"
+        elif role.name == "merchant":
             serializer = StepFourMerchantDetailsSerializer(data=data)
             success_message = "Merchant details saved"
-            session_key = 'registration_merchant_details'
-        elif role.name == 'mechanic':
+            session_key = "registration_merchant_details"
+        elif role.name == "mechanic":
             serializer = StepFourMechanicDetailsSerializer(data=data)
             success_message = "Mechanic details saved"
-            session_key = 'registration_mechanic_details'
+            session_key = "registration_mechanic_details"
         else:
             return Response(
-                api_response(
-                    message="Invalid role for this step",
-                    status=False
-                ),
-                status=http_status.HTTP_400_BAD_REQUEST
+                api_response(message="Invalid role for this step", status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         if serializer.is_valid():
@@ -5990,25 +6108,29 @@ class StepByStepRegistrationView(APIView):
                     if not value:
                         return value
                     # Save using original name; storage will handle collisions
-                    path = default_storage.save(
-                        getattr(value, 'name', 'upload'), value)
+                    path = default_storage.save(getattr(value, "name", "upload"), value)
                     return path
                 except Exception:
                     return value
 
-            if role.name == 'driver':
+            if role.name == "driver":
                 file_keys = [
-                    'license_front_image', 'license_back_image',
-                    'vehicle_photo_front', 'vehicle_photo_back',
-                    'vehicle_photo_right', 'vehicle_photo_left',
+                    "license_front_image",
+                    "license_back_image",
+                    "vehicle_photo_front",
+                    "vehicle_photo_back",
+                    "vehicle_photo_right",
+                    "vehicle_photo_left",
                 ]
-            elif role.name == 'merchant':
-                file_keys = ['cac_document', 'selfie']
-            elif role.name == 'mechanic':
+            elif role.name == "merchant":
+                file_keys = ["cac_document", "selfie"]
+            elif role.name == "mechanic":
                 file_keys = [
-                    'cac_document', 'selfie',
-                    'govt_id_type', 'government_id_front',
-                    'government_id_back'
+                    "cac_document",
+                    "selfie",
+                    "govt_id_type",
+                    "government_id_front",
+                    "government_id_back",
                 ]
             else:
                 file_keys = []
@@ -6018,63 +6140,58 @@ class StepByStepRegistrationView(APIView):
                     details[k] = save_file(details.get(k))
 
             request.session[session_key] = details
-            request.session['registration_step'] = 4
-            
+            request.session["registration_step"] = 4
+
             return Response(
                 api_response(
-                    message=success_message,
-                    status=True,
-                    data={'next_step': 5}
+                    message=success_message, status=True, data={"next_step": 5}
                 )
             )
-        logger.critical(
-            f"Step four: {serializer.errors}\n {traceback.format_exc()}")
-        
+        logger.critical(f"Step four: {serializer.errors}\n {traceback.format_exc()}")
+
         return Response(
             api_response(
-                message="Invalid details",
-                status=False,
-                errors=serializer.errors
+                message="Invalid details", status=False, errors=serializer.errors
             ),
-            status=http_status.HTTP_400_BAD_REQUEST
+            status=http_status.HTTP_400_BAD_REQUEST,
         )
 
     def step_five_password_setup(self, request):
         """Step 5: Password setup and account creation"""
         # Check if all previous steps are complete
         required_data = [
-            'registration_role_id',
-            'registration_user_info',
-            'email_verified'
+            "registration_role_id",
+            "registration_user_info",
+            "email_verified",
         ]
-        
+
         for key in required_data:
             if not request.session.get(key):
                 return Response(
                     api_response(
                         message="Previous steps not completed. Please start over.",  # noqa
-                        status=False
+                        status=False,
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
 
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
                 api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST
+                status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         serializer = StepFivePasswordSerializer(data=data)
         if serializer.is_valid():
             # Store password in session for account creation
-            request.session['password'] = serializer.validated_data['password']
-            request.session['registration_step'] = 5
-            
+            request.session["password"] = serializer.validated_data["password"]
+            request.session["registration_step"] = 5
+
             try:
                 # Create user account
                 user = self.create_user_account(request.session)
-                
+
                 # Log the user in after registration
                 # from django.contrib.auth import login
                 # login(request, user)
@@ -6083,59 +6200,62 @@ class StepByStepRegistrationView(APIView):
                 refresh = RefreshToken.for_user(user)
                 access_token = str(refresh.access_token)
                 refresh_token = str(refresh)
-                
+
                 # Clear session data
                 self.clear_registration_session(request)
-                
+
                 return Response(
                     api_response(
                         message="Account created successfully! You are now logged in.",  # noqa
                         status=True,
                         data={
-                            'access': access_token,
-                            'refresh': refresh_token,
-                            'user_id': str(user.id),
-                            'email': user.email,
-                            'role': user.active_role.name
-                        }
+                            "access": access_token,
+                            "refresh": refresh_token,
+                            "user_id": str(user.id),
+                            "email": user.email,
+                            "role": user.active_role.name,
+                        },
                     ),
-                    status=http_status.HTTP_201_CREATED
+                    status=http_status.HTTP_201_CREATED,
                 )
-                
+
             except Exception as e:
                 return Response(
                     api_response(
-                        message=f"Error creating account: {str(e)}",
-                        status=False
+                        message=f"Error creating account: {str(e)}", status=False
                     ),
-                    status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+                    status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
-        
+
         logger.critical(
-            f"step_five_password_setup: {serializer.errors}\n {traceback.format_exc()}") # noqa
+            f"step_five_password_setup: {serializer.errors}\n {traceback.format_exc()}"
+        )  # noqa
         return Response(
             api_response(
-                message="Invalid password data",
-                status=False,
-                errors=serializer.errors
+                message="Invalid password data", status=False, errors=serializer.errors
             ),
-            status=http_status.HTTP_400_BAD_REQUEST
+            status=http_status.HTTP_400_BAD_REQUEST,
         )
 
     def generate_verification_code(self):
         """Generate a 6-digit verification code"""
         import random
+
         return str(random.randint(100000, 999999))
 
     def send_verification_email(self, email, code):
         """Send verification email with code using Celery background task"""
         import logging
+
         logger = logging.getLogger(__name__)
         try:
             from .tasks import send_step_by_step_verification_email
+
             # Send verification email as background task
             send_step_by_step_verification_email.delay(email, code)
-            logger.info(f"Step-by-step verification email task queued for {email}: {code}")  # noqa
+            logger.info(
+                f"Step-by-step verification email task queued for {email}: {code}"
+            )  # noqa
         except Exception as e:
             logger.error(f"Failed to queue verification email task: {e}")
             # Fallback to direct sending if Celery is not available
@@ -6143,47 +6263,53 @@ class StepByStepRegistrationView(APIView):
 
     def create_user_account(self, session_data):
         """Create the user account with all collected data"""
-        role_id = session_data['registration_role_id']
-        user_info = session_data['registration_user_info']
-        password = session_data.get('password')
-    
+        role_id = session_data["registration_role_id"]
+        user_info = session_data["registration_user_info"]
+        password = session_data.get("password")
+
         if not password:
             raise ValueError("Password is required for account creation")
-        
+
         # Get role to determine account creation logic
         role = Role.objects.get(id=role_id)
-        
+
         # Check if user with this email already exists
-        email = user_info['email'].lower().strip()
+        email = user_info["email"].lower().strip()
         existing_user = User.objects.filter(email=email).first()
 
         if existing_user:
             # Check if user already has this role
             if existing_user.roles.filter(id=role_id).exists():
-                raise ValueError(f"User with email {email} already has the {role.name} role")   # noqa
+                raise ValueError(
+                    f"User with email {email} already has the {role.name} role"
+                )  # noqa
 
             # User exists but doesn't have this role - add the role
             user = existing_user
             user.roles.add(role)
 
             # Update user data if needed (merge information)
-            if role.name != 'driver' and (user_info.get('first_name') or user_info.get('last_name')):   # noqa
-                if user_info.get('first_name') and not user.first_name:
-                    user.first_name = user_info['first_name']
-                if user_info.get('last_name') and not user.last_name:
-                    user.last_name = user_info['last_name']
+            if role.name != "driver" and (
+                user_info.get("first_name") or user_info.get("last_name")
+            ):  # noqa
+                if user_info.get("first_name") and not user.first_name:
+                    user.first_name = user_info["first_name"]
+                if user_info.get("last_name") and not user.last_name:
+                    user.last_name = user_info["last_name"]
                 user.save()
 
             # Set phone number if not already set and phone number provided
-            if user_info.get('phone_number') and not user.phone_number:
+            if user_info.get("phone_number") and not user.phone_number:
                 try:
                     from ogamechanic.modules.utils import format_phone_number
-                    formatted_phone = format_phone_number(
-                        user_info.get('phone_number'))
+
+                    formatted_phone = format_phone_number(user_info.get("phone_number"))
                 except Exception as e:
-                    raise ValueError({
-                        "phone_number": f"Invalid phone number format: {str(e)}" # noqa
-                    })
+                    raise ValueError(
+                        {
+                            "phone_number": f"Invalid phone number format: {str(e)}"  # noqa
+                        }
+                    )
                 user.phone_number = formatted_phone
                 user.save()
 
@@ -6199,25 +6325,25 @@ class StepByStepRegistrationView(APIView):
         else:
             # Create new user
             # Prepare basic user data
-            if role.name == 'driver':
+            if role.name == "driver":
                 # For drivers, we only have email, phone, city from step 2
                 user_data = {
-                    'email': user_info['email'],
-                    'phone_number': user_info['phone_number'],
-                    'is_active': True,
-                    'is_verified': True
+                    "email": user_info["email"],
+                    "phone_number": user_info["phone_number"],
+                    "is_active": True,
+                    "is_verified": True,
                 }
             else:
                 # For primary_user, merchant, mechanic - we have first_name, last_name  # noqa
                 user_data = {
-                    'email': user_info['email'],
-                    'first_name': user_info.get('first_name', ''),
-                    'last_name': user_info.get('last_name', ''),
-                    'phone_number': user_info['phone_number'],
-                    'is_active': True,
-                    'is_verified': True
+                    "email": user_info["email"],
+                    "first_name": user_info.get("first_name", ""),
+                    "last_name": user_info.get("last_name", ""),
+                    "phone_number": user_info["phone_number"],
+                    "is_active": True,
+                    "is_verified": True,
                 }
-            
+
             # Add car details if primary user has a car
             # if role.name == 'primary_user':
             #     car_details = session_data.get('registration_car_details', {})
@@ -6228,22 +6354,18 @@ class StepByStepRegistrationView(APIView):
             #             'car_year': car_details.get('car_year'),
             #             'license_plate': car_details.get('license_plate', '')
             #         })
-            
+
             # Create user
-            user = User.objects.create_user(
-                password=password,
-                **user_data
-            )
-        
+            user = User.objects.create_user(password=password, **user_data)
+
         # Assign role (only for new users, existing users already had role added above)   # noqa
         if not existing_user:
-            if role.name == 'driver':
+            if role.name == "driver":
                 # For drivers, determine actual role based on sub_role
-                driver_sub_role = user_info.get('driver_sub_role', 'driver')
-                if driver_sub_role == 'rider':
+                driver_sub_role = user_info.get("driver_sub_role", "driver")
+                if driver_sub_role == "rider":
                     rider_role, _ = Role.objects.get_or_create(
-                        name=Role.RIDER,
-                        defaults={'description': 'Rider'}
+                        name=Role.RIDER, defaults={"description": "Rider"}
                     )
                     user.roles.add(rider_role)
                     user.active_role = rider_role
@@ -6253,87 +6375,96 @@ class StepByStepRegistrationView(APIView):
             else:
                 user.roles.add(role)
                 user.active_role = role
-            
+
             user.save()
         else:
             # For existing users, set the new role as active role
             user.active_role = role
             user.save()
-        
+
         # Create profile based on role
         self.create_user_profile(user, session_data, role)
-        
+
         return user
 
     def create_user_profile(self, user, session_data, role):
         """Create role-specific profile"""
-        if role.name == 'driver' or (role.name == 'driver' and session_data['registration_user_info'].get('driver_sub_role') == 'driver'):  # noqa
+        if role.name == "driver" or (
+            role.name == "driver"
+            and session_data["registration_user_info"].get("driver_sub_role")
+            == "driver"
+        ):  # noqa
             # Create driver profile
-            driver_details = session_data.get('registration_driver_details', {})  # noqa
-            user_info = session_data['registration_user_info']
-            
+            driver_details = session_data.get("registration_driver_details", {})  # noqa
+            user_info = session_data["registration_user_info"]
+
             DriverProfile.objects.create(
                 user=user,
-                full_name=driver_details.get('full_name', ''),
-                phone_number=user_info.get('phone_number', ''),
-                city=user_info.get('city', ''),
-                date_of_birth=driver_details.get('date_of_birth'),
-                gender=driver_details.get('gender'),
-                address=driver_details.get('address', ''),
-                location=driver_details.get('location', ''),
-                license_number=driver_details.get('license_number', ''),
-                license_issue_date=driver_details.get('license_issue_date'),
-                license_expiry_date=driver_details.get('license_expiry_date'),
-                license_front_image=driver_details.get('license_front_image'),
-                license_back_image=driver_details.get('license_back_image'),
-                vin=driver_details.get('vin', ''),
-                vehicle_name=driver_details.get('vehicle_name', ''),
-                plate_number=driver_details.get('plate_number', ''),
-                vehicle_model=driver_details.get('vehicle_model', ''),
-                vehicle_color=driver_details.get('vehicle_color', ''),
-                vehicle_photo_front=driver_details.get('vehicle_photo_front'),
-                vehicle_photo_back=driver_details.get('vehicle_photo_back'),
-                vehicle_photo_right=driver_details.get('vehicle_photo_right'),
-                vehicle_photo_left=driver_details.get('vehicle_photo_left'),
-                bank_name=driver_details.get('bank_name', ''),
-                account_number=driver_details.get('account_number', ''),
+                full_name=driver_details.get("full_name", ""),
+                phone_number=user_info.get("phone_number", ""),
+                city=user_info.get("city", ""),
+                date_of_birth=driver_details.get("date_of_birth"),
+                gender=driver_details.get("gender"),
+                address=driver_details.get("address", ""),
+                location=driver_details.get("location", ""),
+                license_number=driver_details.get("license_number", ""),
+                license_issue_date=driver_details.get("license_issue_date"),
+                license_expiry_date=driver_details.get("license_expiry_date"),
+                license_front_image=driver_details.get("license_front_image"),
+                license_back_image=driver_details.get("license_back_image"),
+                vin=driver_details.get("vin", ""),
+                vehicle_name=driver_details.get("vehicle_name", ""),
+                plate_number=driver_details.get("plate_number", ""),
+                vehicle_model=driver_details.get("vehicle_model", ""),
+                vehicle_color=driver_details.get("vehicle_color", ""),
+                vehicle_photo_front=driver_details.get("vehicle_photo_front"),
+                vehicle_photo_back=driver_details.get("vehicle_photo_back"),
+                vehicle_photo_right=driver_details.get("vehicle_photo_right"),
+                vehicle_photo_left=driver_details.get("vehicle_photo_left"),
+                bank_name=driver_details.get("bank_name", ""),
+                account_number=driver_details.get("account_number", ""),
             )
-        
-        elif role.name == 'merchant':
+
+        elif role.name == "merchant":
             # Create merchant profile
-            merchant_details = session_data.get('registration_merchant_details', {})  # noqa
-            
+            merchant_details = session_data.get(
+                "registration_merchant_details", {}
+            )  # noqa
+
             MerchantProfile.objects.create(
                 user=user,
-                location=merchant_details.get('location', ''),
-                lga=merchant_details.get('lga', ''),
-                cac_number=merchant_details.get('cac_number', ''),
-                cac_document=merchant_details.get('cac_document'),
-                selfie=merchant_details.get('selfie'),
-                business_address=merchant_details.get('location', ''),
+                location=merchant_details.get("location", ""),
+                lga=merchant_details.get("lga", ""),
+                cac_number=merchant_details.get("cac_number", ""),
+                cac_document=merchant_details.get("cac_document"),
+                selfie=merchant_details.get("selfie"),
+                business_address=merchant_details.get("location", ""),
             )
-        
-        elif role.name == 'mechanic':
+
+        elif role.name == "mechanic":
             # Create mechanic profile
-            mechanic_details = session_data.get('registration_mechanic_details', {})  # noqa
-            
+            mechanic_details = session_data.get(
+                "registration_mechanic_details", {}
+            )  # noqa
+
             mechanic_profile = MechanicProfile.objects.create(
                 user=user,
-                location=mechanic_details.get('location', ''),
-                lga=mechanic_details.get('lga', ''),
-                cac_number=mechanic_details.get('cac_number', ''),
-                cac_document=mechanic_details.get('cac_document'),
-                selfie=mechanic_details.get('selfie'),
-                government_id_front=mechanic_details.get('government_id_front'),
-                government_id_back=mechanic_details.get('government_id_back'),
-                govt_id_type=mechanic_details.get('govt_id_type')
+                location=mechanic_details.get("location", ""),
+                lga=mechanic_details.get("lga", ""),
+                cac_number=mechanic_details.get("cac_number", ""),
+                cac_document=mechanic_details.get("cac_document"),
+                selfie=mechanic_details.get("selfie"),
+                government_id_front=mechanic_details.get("government_id_front"),
+                government_id_back=mechanic_details.get("government_id_back"),
+                govt_id_type=mechanic_details.get("govt_id_type"),
             )
-            
-            # Create vehicle expertise records
-            self.create_mechanic_vehicle_expertise(
-                mechanic_profile, mechanic_details)
 
-    def create_mechanic_vehicle_expertise(self, mechanic_profile, mechanic_details):  # noqa
+            # Create vehicle expertise records
+            self.create_mechanic_vehicle_expertise(mechanic_profile, mechanic_details)
+
+    def create_mechanic_vehicle_expertise(
+        self, mechanic_profile, mechanic_details
+    ):  # noqa
         """Create vehicle expertise records for mechanic.
         No longer uses vehicle_make_ids; only expertise_details.
         """
@@ -6341,46 +6472,52 @@ class StepByStepRegistrationView(APIView):
         import logging
         from rest_framework.exceptions import ValidationError
 
-        expertise_details = mechanic_details.get('expertise_details', [])
+        expertise_details = mechanic_details.get("expertise_details", [])
         logger = logging.getLogger(__name__)
 
         for detail in expertise_details:
-            vehicle_make_id = detail.get('vehicle_make_id')
+            vehicle_make_id = detail.get("vehicle_make_id")
             if not vehicle_make_id:
                 raise ValidationError(
-                    {"vehicle_make_id": "Each expertise detail must contain a vehicle_make_id."}
+                    {
+                        "vehicle_make_id": "Each expertise detail must contain a vehicle_make_id."
+                    }
                 )
             try:
                 vehicle_make = VehicleMake.objects.get(id=vehicle_make_id)
                 MechanicVehicleExpertise.objects.create(
                     mechanic=mechanic_profile,
                     vehicle_make=vehicle_make,
-                    years_of_experience=detail.get('years_of_experience', 0),
-                    certification_level=detail.get('certification_level', 'basic')
+                    years_of_experience=detail.get("years_of_experience", 0),
+                    certification_level=detail.get("certification_level", "basic"),
                 )
             except VehicleMake.DoesNotExist as e:
-                logger.error(f"VehicleMake with id {vehicle_make_id} does not exist: {e}")
+                logger.error(
+                    f"VehicleMake with id {vehicle_make_id} does not exist: {e}"
+                )
                 raise ValidationError(
-                    {"vehicle_make_id": f"Vehicle make with id {vehicle_make_id} does not exist."}
+                    {
+                        "vehicle_make_id": f"Vehicle make with id {vehicle_make_id} does not exist."
+                    }
                 )
 
     def clear_registration_session(self, request):
         """Clear all registration session data"""
         keys_to_clear = [
-            'registration_role_id',
-            'registration_user_info',
-            'registration_car_details',
-            'registration_driver_details',
-            'registration_merchant_details',
-            'registration_mechanic_details',
-            'registration_driver_sub_role',
-            'verification_code',
-            'verification_email',
-            'email_verified',
-            'registration_step',
-            'password'
+            "registration_role_id",
+            "registration_user_info",
+            "registration_car_details",
+            "registration_driver_details",
+            "registration_merchant_details",
+            "registration_mechanic_details",
+            "registration_driver_sub_role",
+            "verification_code",
+            "verification_email",
+            "email_verified",
+            "registration_step",
+            "password",
         ]
-        
+
         for key in keys_to_clear:
             if key in request.session:
                 del request.session[key]
@@ -6389,12 +6526,12 @@ class StepByStepRegistrationView(APIView):
 class PrimaryUserProfileView(APIView):
     """
     API view for managing user profile details.
-    
+
     This view handles:
     - GET: Retrieve user profile details
     - PUT: Update user profile details
     - PATCH: Partial update of user profile details
-    
+
     Updatable fields:
     - first_name, last_name
     - phone_number
@@ -6402,11 +6539,10 @@ class PrimaryUserProfileView(APIView):
     - gender (male, female, other)
     - profile_picture (image file)
     """
+
     permission_classes = [IsAuthenticated]
     throttle_classes = [UserRateThrottle]
-    parser_classes = [
-        parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser
-    ]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
 
     @swagger_auto_schema(
         operation_summary="Get User Profile",
@@ -6417,77 +6553,92 @@ class PrimaryUserProfileView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN),
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(
+                        "status": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                        "data": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'user_id': openapi.Schema(type=openapi.TYPE_STRING),
-                                'first_name': openapi.Schema(type=openapi.TYPE_STRING),
-                                'last_name': openapi.Schema(type=openapi.TYPE_STRING),
-                                'email': openapi.Schema(type=openapi.TYPE_STRING),
-                                'phone_number': openapi.Schema(type=openapi.TYPE_STRING),
-                                'date_of_birth': openapi.Schema(type=openapi.TYPE_STRING, format='date'),
-                                'gender': openapi.Schema(type=openapi.TYPE_STRING),
-                                'profile_picture': openapi.Schema(type=openapi.TYPE_STRING),
-                                'date_joined': openapi.Schema(type=openapi.TYPE_STRING),
-                                'is_verified': openapi.Schema(type=openapi.TYPE_BOOLEAN),
-                                'current_role': openapi.Schema(type=openapi.TYPE_STRING),
-                                'all_roles': openapi.Schema(
+                                "user_id": openapi.Schema(type=openapi.TYPE_STRING),
+                                "first_name": openapi.Schema(type=openapi.TYPE_STRING),
+                                "last_name": openapi.Schema(type=openapi.TYPE_STRING),
+                                "email": openapi.Schema(type=openapi.TYPE_STRING),
+                                "phone_number": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),
+                                "date_of_birth": openapi.Schema(
+                                    type=openapi.TYPE_STRING, format="date"
+                                ),
+                                "gender": openapi.Schema(type=openapi.TYPE_STRING),
+                                "profile_picture": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),
+                                "date_joined": openapi.Schema(type=openapi.TYPE_STRING),
+                                "is_verified": openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN
+                                ),
+                                "current_role": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),
+                                "all_roles": openapi.Schema(
                                     type=openapi.TYPE_ARRAY,
-                                    items=openapi.Schema(type=openapi.TYPE_STRING)
-                                )
-                            }
-                        )
-                    }
-                )
+                                    items=openapi.Schema(type=openapi.TYPE_STRING),
+                                ),
+                            },
+                        ),
+                    },
+                ),
             ),
-            401: 'Unauthorized'
-        }
+            401: "Unauthorized",
+        },
     )
     def get(self, request):
         """Get user profile details"""
         try:
             user = request.user
-            
+
             # Get all user roles
             all_roles = [r.name for r in user.roles.all()]
-            
+
             # Prepare profile data
             profile_data = {
-                'user_id': str(user.id),
-                'first_name': user.first_name or '',
-                'last_name': user.last_name or '',
-                'email': user.email,
-                'phone_number': user.phone_number or '',
-                'date_of_birth': user.date_of_birth.isoformat() if user.date_of_birth else None,
-                'gender': user.gender or '',
-                'profile_picture': request.build_absolute_uri(user.profile_picture.url) if user.profile_picture else None,
-                'date_joined': user.date_joined.isoformat() if user.date_joined else None,
-                'is_verified': user.is_verified,
-                'current_role': user.active_role.name if user.active_role else None,
-                'all_roles': all_roles
+                "user_id": str(user.id),
+                "first_name": user.first_name or "",
+                "last_name": user.last_name or "",
+                "email": user.email,
+                "phone_number": user.phone_number or "",
+                "date_of_birth": (
+                    user.date_of_birth.isoformat() if user.date_of_birth else None
+                ),
+                "gender": user.gender or "",
+                "profile_picture": (
+                    request.build_absolute_uri(user.profile_picture.url)
+                    if user.profile_picture
+                    else None
+                ),
+                "date_joined": (
+                    user.date_joined.isoformat() if user.date_joined else None
+                ),
+                "is_verified": user.is_verified,
+                "current_role": user.active_role.name if user.active_role else None,
+                "all_roles": all_roles,
             }
-            
+
             return Response(
                 api_response(
                     message="Profile retrieved successfully",
                     status=True,
-                    data=profile_data
+                    data=profile_data,
                 ),
-                status=http_status.HTTP_200_OK
+                status=http_status.HTTP_200_OK,
             )
-            
+
         except Exception as e:
-            logger.error(
-                f"Get profile error: {str(e)}\n{traceback.format_exc()}"
-            )
+            logger.error(f"Get profile error: {str(e)}\n{traceback.format_exc()}")
             return Response(
                 api_response(
-                    message=f"Error retrieving profile: {str(e)}",
-                    status=False
+                    message=f"Error retrieving profile: {str(e)}", status=False
                 ),
-                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
     @swagger_auto_schema(
@@ -6506,35 +6657,32 @@ class PrimaryUserProfileView(APIView):
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                'first_name': openapi.Schema(
+                "first_name": openapi.Schema(
+                    type=openapi.TYPE_STRING, description="First name"
+                ),
+                "last_name": openapi.Schema(
+                    type=openapi.TYPE_STRING, description="Last name"
+                ),
+                "phone_number": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description='First name'
+                    description="Phone number (Nigerian format)",
+                    example="08012345678",
                 ),
-                'last_name': openapi.Schema(
+                "date_of_birth": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description='Last name'
+                    format="date",
+                    description="Date of birth (YYYY-MM-DD)",
+                    example="1990-01-15",
                 ),
-                'phone_number': openapi.Schema(
+                "gender": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description='Phone number (Nigerian format)',
-                    example='08012345678'
+                    description="Gender",
+                    enum=["male", "female", "other"],
                 ),
-                'date_of_birth': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    format='date',
-                    description='Date of birth (YYYY-MM-DD)',
-                    example='1990-01-15'
+                "profile_picture": openapi.Schema(
+                    type=openapi.TYPE_FILE, description="Profile picture (image file)"
                 ),
-                'gender': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description='Gender',
-                    enum=['male', 'female', 'other']
-                ),
-                'profile_picture': openapi.Schema(
-                    type=openapi.TYPE_FILE,
-                    description='Profile picture (image file)'
-                ),
-            }
+            },
         ),
         responses={
             200: openapi.Response(
@@ -6542,182 +6690,184 @@ class PrimaryUserProfileView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN),
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(
+                        "status": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                        "data": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'user_id': openapi.Schema(type=openapi.TYPE_STRING),
-                                'first_name': openapi.Schema(type=openapi.TYPE_STRING),
-                                'last_name': openapi.Schema(type=openapi.TYPE_STRING),
-                                'phone_number': openapi.Schema(type=openapi.TYPE_STRING),
-                                'date_of_birth': openapi.Schema(type=openapi.TYPE_STRING),
-                                'gender': openapi.Schema(type=openapi.TYPE_STRING),
-                            }
-                        )
-                    }
-                )
+                                "user_id": openapi.Schema(type=openapi.TYPE_STRING),
+                                "first_name": openapi.Schema(type=openapi.TYPE_STRING),
+                                "last_name": openapi.Schema(type=openapi.TYPE_STRING),
+                                "phone_number": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),
+                                "date_of_birth": openapi.Schema(
+                                    type=openapi.TYPE_STRING
+                                ),
+                                "gender": openapi.Schema(type=openapi.TYPE_STRING),
+                            },
+                        ),
+                    },
+                ),
             ),
-            400: 'Bad Request - Validation Error',
-            401: 'Unauthorized'
-        }
+            400: "Bad Request - Validation Error",
+            401: "Unauthorized",
+        },
     )
     def put(self, request):
         """Update user profile details"""
         try:
             user = request.user
             data = request.data
-            
+
             # Track what was updated
             updated_fields = []
-            
+
             # Update first_name
-            if 'first_name' in data:
-                first_name = data.get('first_name', '').strip()
+            if "first_name" in data:
+                first_name = data.get("first_name", "").strip()
                 if first_name:
                     user.first_name = first_name
-                    updated_fields.append('first_name')
-            
+                    updated_fields.append("first_name")
+
             # Update last_name
-            if 'last_name' in data:
-                last_name = data.get('last_name', '').strip()
+            if "last_name" in data:
+                last_name = data.get("last_name", "").strip()
                 if last_name:
                     user.last_name = last_name
-                    updated_fields.append('last_name')
-            
+                    updated_fields.append("last_name")
+
             # Update phone_number with validation
-            if 'phone_number' in data:
-                phone_number = data.get('phone_number', '').strip()
+            if "phone_number" in data:
+                phone_number = data.get("phone_number", "").strip()
                 if phone_number:
                     try:
                         from ogamechanic.modules.utils import format_phone_number
+
                         formatted_phone = format_phone_number(phone_number)
                         user.phone_number = formatted_phone
-                        updated_fields.append('phone_number')
+                        updated_fields.append("phone_number")
                     except Exception as e:
                         return Response(
                             api_response(
                                 message="Invalid phone number format",
                                 status=False,
-                                errors={'phone_number': [str(e)]}
+                                errors={"phone_number": [str(e)]},
                             ),
-                            status=http_status.HTTP_400_BAD_REQUEST
+                            status=http_status.HTTP_400_BAD_REQUEST,
                         )
-            
+
             # Update date_of_birth
-            if 'date_of_birth' in data:
-                dob = data.get('date_of_birth')
+            if "date_of_birth" in data:
+                dob = data.get("date_of_birth")
                 if dob:
                     try:
                         from datetime import datetime
+
                         if isinstance(dob, str):
-                            parsed_date = datetime.strptime(dob, '%Y-%m-%d').date()
+                            parsed_date = datetime.strptime(dob, "%Y-%m-%d").date()
                             user.date_of_birth = parsed_date
-                            updated_fields.append('date_of_birth')
+                            updated_fields.append("date_of_birth")
                     except ValueError:
                         return Response(
                             api_response(
                                 message="Invalid date format. Use YYYY-MM-DD",
                                 status=False,
-                                errors={'date_of_birth': ['Format must be YYYY-MM-DD']}
+                                errors={"date_of_birth": ["Format must be YYYY-MM-DD"]},
                             ),
-                            status=http_status.HTTP_400_BAD_REQUEST
+                            status=http_status.HTTP_400_BAD_REQUEST,
                         )
-            
+
             # Update gender
-            if 'gender' in data:
-                gender = data.get('gender', '').lower().strip()
+            if "gender" in data:
+                gender = data.get("gender", "").lower().strip()
                 if gender:
-                    valid_genders = ['male', 'female', 'other']
+                    valid_genders = ["male", "female", "other"]
                     if gender not in valid_genders:
                         return Response(
                             api_response(
                                 message="Invalid gender value",
                                 status=False,
                                 errors={
-                                    'gender': [
+                                    "gender": [
                                         f"Must be one of: {', '.join(valid_genders)}"
                                     ]
-                                }
+                                },
                             ),
-                            status=http_status.HTTP_400_BAD_REQUEST
+                            status=http_status.HTTP_400_BAD_REQUEST,
                         )
                     user.gender = gender
-                    updated_fields.append('gender')
-            
+                    updated_fields.append("gender")
+
             # Update profile_picture
-            if 'profile_picture' in request.FILES:
-                profile_picture = request.FILES['profile_picture']
-                allowed_extensions = ['jpg', 'jpeg', 'png']
-                file_ext = profile_picture.name.split('.')[-1].lower()
+            if "profile_picture" in request.FILES:
+                profile_picture = request.FILES["profile_picture"]
+                allowed_extensions = ["jpg", "jpeg", "png"]
+                file_ext = profile_picture.name.split(".")[-1].lower()
                 if file_ext not in allowed_extensions:
                     return Response(
                         api_response(
                             message="Invalid file type",
                             status=False,
                             errors={
-                                'profile_picture': [
+                                "profile_picture": [
                                     f"Only {', '.join(allowed_extensions)} files allowed"
                                 ]
-                            }
+                            },
                         ),
-                        status=http_status.HTTP_400_BAD_REQUEST
+                        status=http_status.HTTP_400_BAD_REQUEST,
                     )
                 user.profile_picture = profile_picture
-                updated_fields.append('profile_picture')
-            
+                updated_fields.append("profile_picture")
+
             # Check if any fields were updated
             if not updated_fields:
                 return Response(
                     api_response(
-                        message="No valid fields provided for update",
-                        status=False
+                        message="No valid fields provided for update", status=False
                     ),
-                    status=http_status.HTTP_400_BAD_REQUEST
+                    status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Save user
             user.save()
-            
+
             # Log activity
             try:
                 UserActivityLog.objects.create(
                     user=user,
-                    action='profile_updated',
-                    details=f"Updated fields: {', '.join(updated_fields)}"
+                    action="profile_updated",
+                    details=f"Updated fields: {', '.join(updated_fields)}",
                 )
             except Exception as e:
                 logger.error(f"Failed to log profile update: {e}")
-            
+
             # Prepare updated profile data
             profile_data = {
-                'user_id': str(user.id),
-                'first_name': user.first_name or '',
-                'last_name': user.last_name or '',
-                'phone_number': user.phone_number or '',
-                'date_of_birth': user.date_of_birth.isoformat() if user.date_of_birth else None,
-                'gender': user.gender or '',
+                "user_id": str(user.id),
+                "first_name": user.first_name or "",
+                "last_name": user.last_name or "",
+                "phone_number": user.phone_number or "",
+                "date_of_birth": (
+                    user.date_of_birth.isoformat() if user.date_of_birth else None
+                ),
+                "gender": user.gender or "",
             }
-            
+
             return Response(
                 api_response(
                     message=f"Profile updated successfully. Updated: {', '.join(updated_fields)}",
                     status=True,
-                    data=profile_data
+                    data=profile_data,
                 ),
-                status=http_status.HTTP_200_OK
+                status=http_status.HTTP_200_OK,
             )
-            
+
         except Exception as e:
-            logger.error(
-                f"Profile update error: {str(e)}\n{traceback.format_exc()}"
-            )
+            logger.error(f"Profile update error: {str(e)}\n{traceback.format_exc()}")
             return Response(
-                api_response(
-                    message=f"Error updating profile: {str(e)}",
-                    status=False
-                ),
-                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+                api_response(message=f"Error updating profile: {str(e)}", status=False),
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
     @swagger_auto_schema(
@@ -6726,25 +6876,23 @@ class PrimaryUserProfileView(APIView):
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                'first_name': openapi.Schema(type=openapi.TYPE_STRING),
-                'last_name': openapi.Schema(type=openapi.TYPE_STRING),
-                'phone_number': openapi.Schema(type=openapi.TYPE_STRING),
-                'date_of_birth': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    format='date'
+                "first_name": openapi.Schema(type=openapi.TYPE_STRING),
+                "last_name": openapi.Schema(type=openapi.TYPE_STRING),
+                "phone_number": openapi.Schema(type=openapi.TYPE_STRING),
+                "date_of_birth": openapi.Schema(
+                    type=openapi.TYPE_STRING, format="date"
                 ),
-                'gender': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    enum=['male', 'female', 'other']
+                "gender": openapi.Schema(
+                    type=openapi.TYPE_STRING, enum=["male", "female", "other"]
                 ),
-                'profile_picture': openapi.Schema(type=openapi.TYPE_FILE),
-            }
+                "profile_picture": openapi.Schema(type=openapi.TYPE_FILE),
+            },
         ),
         responses={
-            200: 'Profile updated successfully',
-            400: 'Bad Request - Validation Error',
-            401: 'Unauthorized'
-        }
+            200: "Profile updated successfully",
+            400: "Bad Request - Validation Error",
+            401: "Unauthorized",
+        },
     )
     def patch(self, request):
         """Partial update of user profile details"""

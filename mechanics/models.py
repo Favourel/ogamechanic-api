@@ -72,9 +72,13 @@ class RepairRequest(models.Model):
 
     # Location and scheduling
     service_address = models.TextField()
-    service_latitude = models.DecimalField(max_digits=9, decimal_places=6)
-    service_longitude = models.DecimalField(max_digits=9, decimal_places=6)
-    preferred_date = models.DateField()
+    service_latitude = models.DecimalField(max_digits=15, decimal_places=10)
+    service_longitude = models.DecimalField(max_digits=15, decimal_places=10)
+    schedule = models.BooleanField(
+        default=False,
+        help_text="Whether customer wants to schedule the service for a specific date/time"
+    )
+    preferred_date = models.DateField(null=True, blank=True)
     preferred_time_slot = models.CharField(
         max_length=20,
         choices=[
@@ -82,6 +86,8 @@ class RepairRequest(models.Model):
             ("afternoon", "Afternoon (12PM-4PM)"),
             ("evening", "Evening (4PM-8PM)"),
         ],
+        null=True,
+        blank=True,
     )
 
     # Status and priority

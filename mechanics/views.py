@@ -138,8 +138,6 @@ class RepairRequestListView(APIView):
                         'service_address',
                         'service_latitude',
                         'service_longitude',
-                        'preferred_date',
-                        'preferred_time_slot',
                     ],
                     properties={
                         'mechanic_id': openapi.Schema(
@@ -193,6 +191,10 @@ class RepairRequestListView(APIView):
                             type=openapi.TYPE_NUMBER,
                             format='decimal',
                             description="Longitude"
+                        ),
+                        'schedule': openapi.Schema(
+                            type=openapi.TYPE_BOOLEAN,
+                            description="Whether customer wants to schedule the service"
                         ),
                         'preferred_date': openapi.Schema(
                             type=openapi.TYPE_STRING,

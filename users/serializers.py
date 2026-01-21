@@ -362,6 +362,11 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             return self._get_absolute_url(obj.profile_picture.url, request)
         return None
 
+    def create(self, validated_data):
+        user = self.context['request'].user
+        validated_data['user'] = user
+        return MerchantProfile.objects.create(**validated_data)
+
 
 class MechanicProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
@@ -475,6 +480,11 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             mechanic=obj.user,
             status__in=['accepted', 'in_progress']
         ).exists()
+
+    def create(self, validated_data):
+        user = self.context['request'].user
+        validated_data['user'] = user
+        return MechanicProfile.objects.create(**validated_data)
 
 
 class DriverProfileSerializer(serializers.ModelSerializer):
@@ -627,6 +637,11 @@ class DriverProfileSerializer(serializers.ModelSerializer):
         if avg_rating is not None:
             return round(avg_rating, 1)
         return None
+
+    def create(self, validated_data):
+        user = self.context['request'].user
+        validated_data['user'] = user
+        return DriverProfile.objects.create(**validated_data)
 
 
 class DriverLocationUpdateSerializer(serializers.ModelSerializer):

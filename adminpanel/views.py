@@ -6,7 +6,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.db.models import Sum, Count, F, DecimalField, ExpressionWrapper, Avg, Q
-from django.db.models.functions import TruncMonth, TruncDate
+from django.db.models.functions import TruncDate, TruncMonth, TruncWeek
 from django.utils import timezone
 from django.contrib.auth import authenticate
 from datetime import timedelta
@@ -24,7 +24,7 @@ from users.serializers import (
     CustomTokenObtainPairSerializer,
     PasswordResetSerializer,
 )
-from products.models import Order, OrderItem
+from products.models import Order, OrderItem, ProductReview
 from products.serializers import CategorySerializer
 from users.services import NotificationService
 import logging
@@ -1753,14 +1753,15 @@ class RoleNotificationView(APIView):
 
 class DashboardOverviewView(APIView):
     """
-    Get high-level dashboard overview metrics with comprehensive analytics
+    Get essential dashboard overview metrics (12+ key values)
+    Optimized to avoid redundant data available in other endpoints
     Supports period filtering: 7d, 30d, 90d, 1y, or all data (no filter)
     """
 
     permission_classes = [IsAdminUser]
 
     @swagger_auto_schema(
-        operation_description="Get comprehensive dashboard overview with key metrics and analytics",
+        operation_description="Get essential dashboard overview metrics",
         manual_parameters=[
             openapi.Parameter(
                 "period",
@@ -1772,21 +1773,24 @@ class DashboardOverviewView(APIView):
         ],
         responses={
             200: openapi.Response(
-                description="Comprehensive dashboard overview metrics",
+                description="Essential dashboard overview metrics",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
                         "period": openapi.Schema(type=openapi.TYPE_STRING),
-                        "revenue": openapi.Schema(type=openapi.TYPE_OBJECT),
-                        "users": openapi.Schema(type=openapi.TYPE_OBJECT),
-                        "orders_rides_requests": openapi.Schema(
-                            type=openapi.TYPE_OBJECT
-                        ),
-                        "pending_tasks": openapi.Schema(type=openapi.TYPE_OBJECT),
-                        "conversion_rates": openapi.Schema(type=openapi.TYPE_OBJECT),
-                        "ratings": openapi.Schema(type=openapi.TYPE_OBJECT),
-                        "commission_fees": openapi.Schema(type=openapi.TYPE_OBJECT),
-                        "performance_metrics": openapi.Schema(type=openapi.TYPE_OBJECT),
+                        "total_revenue": openapi.Schema(type=openapi.TYPE_NUMBER),
+                        "total_users": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "active_users": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "total_orders": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "pending_tasks": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "conversion_rate": openapi.Schema(type=openapi.TYPE_NUMBER),
+                        "avg_rating": openapi.Schema(type=openapi.TYPE_NUMBER),
+                        "total_merchants": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "total_drivers": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "total_mechanics": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "commission_earned": openapi.Schema(type=openapi.TYPE_NUMBER),
+                        "cancellation_rate": openapi.Schema(type=openapi.TYPE_NUMBER),
+                        "revenue_breakdown": openapi.Schema(type=openapi.TYPE_OBJECT),
                     },
                 ),
             )
@@ -1815,733 +1819,277 @@ class DashboardOverviewView(APIView):
             return queryset
 
         # ====================================================================
-        # REVENUE METRICS - Total and breakdown by service
+        # 1. TOTAL REVENUE - All services combined
         # ====================================================================
+        total_revenue = 0
+        revenue_breakdown = {}
 
         # E-commerce revenue
-        ecommerce_orders = apply_date_filter(
-            Order.objects.filter(status__in=["paid", "shipped", "completed"])
-        )
         ecommerce_revenue = (
-            ecommerce_orders.aggregate(total=Sum("total_amount"))["total"] or 0
+            apply_date_filter(
+                Order.objects.filter(status__in=["paid", "shipped", "completed"])
+            ).aggregate(total=Sum("total_amount"))["total"] or 0
         )
-        ecommerce_count = ecommerce_orders.count()
+        revenue_breakdown["ecommerce"] = float(ecommerce_revenue)
 
         # Rides revenue
         rides_revenue = 0
-        rides_count = 0
-        rides_completed = 0
-        rides_pending = 0
-        rides_cancelled = 0
         try:
             from rides.models import Ride
-
-            rides_qs = apply_date_filter(Ride.objects, "requested_at")
-            rides_completed_qs = rides_qs.filter(status="completed")
             rides_revenue = (
-                rides_completed_qs.aggregate(total=Sum("fare"))["total"] or 0
+                apply_date_filter(Ride.objects.filter(status="completed"), "requested_at")
+                .aggregate(total=Sum("fare"))["total"] or 0
             )
-            rides_count = rides_qs.count()
-            rides_completed = rides_completed_qs.count()
-            rides_pending = rides_qs.filter(
-                status__in=["initiated", "requested", "accepted"]
-            ).count()
-            rides_cancelled = rides_qs.filter(status="cancelled").count()
+            revenue_breakdown["rides"] = float(rides_revenue)
         except ImportError:
-            pass
+            revenue_breakdown["rides"] = 0.0
 
-        # Courier/Delivery revenue
+        # Courier revenue
         courier_revenue = 0
-        courier_count = 0
-        courier_completed = 0
-        courier_pending = 0
-        courier_cancelled = 0
         try:
             from couriers.models import DeliveryRequest
-
-            courier_qs = apply_date_filter(
-                DeliveryRequest.objects, "requested_at")
-            courier_completed_qs = courier_qs.filter(status="delivered")
             courier_revenue = (
-                courier_completed_qs.aggregate(
-                    total=Sum("total_fare"))["total"] or 0
+                apply_date_filter(DeliveryRequest.objects.filter(status="delivered"), "requested_at")
+                .aggregate(total=Sum("total_fare"))["total"] or 0
             )
-            courier_count = courier_qs.count()
-            courier_completed = courier_completed_qs.count()
-            courier_pending = courier_qs.filter(
-                status__in=["pending", "assigned", "picked_up", "in_transit"]
-            ).count()
-            courier_cancelled = courier_qs.filter(status="cancelled").count()
+            revenue_breakdown["couriers"] = float(courier_revenue)
         except ImportError:
-            pass
+            revenue_breakdown["couriers"] = 0.0
 
-        # Mechanic bookings revenue
+        # Mechanic revenue
         mechanic_revenue = 0
-        mechanic_count = 0
-        mechanic_completed = 0
-        mechanic_pending = 0
-        mechanic_cancelled = 0
         try:
             from mechanics.models import RepairRequest
-
-            mechanic_qs = apply_date_filter(
-                RepairRequest.objects, "requested_at")
-            mechanic_completed_qs = mechanic_qs.filter(status="completed")
             mechanic_revenue = (
-                mechanic_completed_qs.aggregate(
-                    total=Sum("actual_cost"))["total"] or 0
+                apply_date_filter(RepairRequest.objects.filter(status="completed"), "requested_at")
+                .aggregate(total=Sum("actual_cost"))["total"] or 0
             )
-            mechanic_count = mechanic_qs.count()
-            mechanic_completed = mechanic_completed_qs.count()
-            mechanic_pending = mechanic_qs.filter(status="pending").count()
-            mechanic_cancelled = mechanic_qs.filter(status="cancelled").count()
+            revenue_breakdown["mechanics"] = float(mechanic_revenue)
         except ImportError:
-            pass
+            revenue_breakdown["mechanics"] = 0.0
 
-        # Car rental revenue
+        # Rental revenue
         rental_revenue = 0
-        rental_count = 0
-        rental_completed = 0
-        rental_active = 0
-        rental_pending = 0
-        rental_cancelled = 0
         try:
             from rentals.models import RentalBooking
-
-            rental_qs = apply_date_filter(RentalBooking.objects, "booked_at")
-            rental_completed_qs = rental_qs.filter(status="completed")
             rental_revenue = (
-                rental_qs.filter(status__in=["completed", "active"]).aggregate(
-                    total=Sum("total_amount")
-                )["total"]
-                or 0
+                apply_date_filter(
+                    RentalBooking.objects.filter(status__in=["completed", "active"]), "booked_at"
+                ).aggregate(total=Sum("total_amount"))["total"] or 0
             )
-            rental_count = rental_qs.count()
-            rental_completed = rental_completed_qs.count()
-            rental_active = rental_qs.filter(status="active").count()
-            rental_pending = rental_qs.filter(status="pending").count()
-            rental_cancelled = rental_qs.filter(status="cancelled").count()
+            revenue_breakdown["rentals"] = float(rental_revenue)
         except ImportError:
-            pass
+            revenue_breakdown["rentals"] = 0.0
 
-        # Total revenue
-        total_revenue = (
-            float(ecommerce_revenue)
-            + float(rides_revenue)
-            + float(courier_revenue)
-            + float(mechanic_revenue)
-            + float(rental_revenue)
-        )
+        total_revenue = sum(revenue_breakdown.values())
 
         # ====================================================================
-        # USER METRICS - Active users by role
+        # 2. USER METRICS
         # ====================================================================
-
-        # Total users
-        total_users_qs = apply_date_filter(User.objects, "date_joined")
         total_users = User.objects.count()
-        new_users = total_users_qs.count() if start_date else 0
-
+        new_users = apply_date_filter(User.objects, "date_joined").count() if start_date else 0
+        
         # Active users (logged in recently - last 30 days)
         thirty_days_ago = timezone.now() - timedelta(days=30)
-        active_users = User.objects.filter(
-            last_login__gte=thirty_days_ago).count()
-
-        # Users by role
-        customers_count = (
-            User.objects.filter(roles__name="primary_user").distinct().count()
-        )
-
-        # Vendors/Merchants
-        merchants_total = MerchantProfile.objects.count()
-        merchants_active = MerchantProfile.objects.filter(
-            user__is_active=True, is_approved=True
-        ).count()
-        merchants_unverified = MerchantProfile.objects.filter(
-            Q(is_approved=False) | Q(user__is_active=False)
-        ).count()
-
-        # Drivers
-        drivers_total = DriverProfile.objects.count()
-        drivers_approved = DriverProfile.objects.filter(
-            is_approved=True).count()
-        drivers_online = DriverProfile.objects.filter(
-            is_approved=True, is_online=True
-        ).count()
-        drivers_offline = DriverProfile.objects.filter(
-            is_approved=True, is_online=False
-        ).count()
-        drivers_unverified = DriverProfile.objects.filter(
-            is_approved=False).count()
-
-        # Mechanics
-        mechanics_total = MechanicProfile.objects.count()
-        mechanics_approved = MechanicProfile.objects.filter(
-            is_approved=True).count()
-        mechanics_unverified = MechanicProfile.objects.filter(
-            is_approved=False).count()
+        active_users = User.objects.filter(last_login__gte=thirty_days_ago).count()
 
         # ====================================================================
-        # ORDERS/RIDES/REQUESTS BREAKDOWN
+        # 3. SERVICE PROVIDER COUNTS
         # ====================================================================
+        total_merchants = MerchantProfile.objects.count()
+        total_mechanics = MechanicProfile.objects.count()
+        total_drivers = DriverProfile.objects.count()
 
-        total_transactions = (
-            ecommerce_count
-            + rides_count
-            + courier_count
-            + mechanic_count
-            + rental_count
-        )
-        total_completed = (
-            ecommerce_orders.filter(status="completed").count()
-            + rides_completed
-            + courier_completed
-            + mechanic_completed
-            + rental_completed
-        )
-        total_pending = (
-            ecommerce_orders.filter(status="pending").count()
-            + rides_pending
-            + courier_pending
-            + mechanic_pending
-            + rental_pending
-        )
-        total_cancelled = (
-            ecommerce_orders.filter(status="cancelled").count()
-            + rides_cancelled
-            + courier_cancelled
-            + mechanic_cancelled
-            + rental_cancelled
-        )
+        # ====================================================================
+        # 4. ORDERS/REQUESTS COUNT
+        # ====================================================================
+        total_orders = apply_date_filter(
+            Order.objects.filter(status__in=["paid", "shipped", "completed"])
+        ).count()
 
-        # Today's counts
-        today = timezone.now().date()
-        today_orders = Order.objects.filter(created_at__date=today).count()
-        today_rides = 0
-        today_couriers = 0
-        today_mechanics = 0
-        today_rentals = 0
-
+        # Add rides, deliveries, mechanics to total orders
         try:
             from rides.models import Ride
-
-            today_rides = Ride.objects.filter(requested_at__date=today).count()
+            total_orders += apply_date_filter(Ride.objects, "requested_at").count()
         except ImportError:
             pass
 
         try:
             from couriers.models import DeliveryRequest
+            total_orders += apply_date_filter(DeliveryRequest.objects, "requested_at").count()
+        except ImportError:
+            pass
 
-            today_couriers = DeliveryRequest.objects.filter(
-                requested_at__date=today
+        try:
+            from mechanics.models import RepairRequest
+            total_orders += apply_date_filter(RepairRequest.objects, "requested_at").count()
+        except ImportError:
+            pass
+
+        # ====================================================================
+        # 5. PENDING TASKS
+        # ====================================================================
+        pending_tasks = 0
+
+        # Pending orders
+        pending_tasks += apply_date_filter(
+            Order.objects.filter(status__in=["pending", "processing"])
+        ).count()
+
+        # Pending service requests
+        try:
+            from rides.models import Ride
+            pending_tasks += apply_date_filter(
+                Ride.objects.filter(status__in=["initiated", "requested", "accepted"]), "requested_at"
+            ).count()
+        except ImportError:
+            pass
+
+        try:
+            from couriers.models import DeliveryRequest
+            pending_tasks += apply_date_filter(
+                DeliveryRequest.objects.filter(status__in=["pending", "assigned", "picked_up", "in_transit"]), "requested_at"
             ).count()
         except ImportError:
             pass
 
         try:
             from mechanics.models import RepairRequest
-
-            today_mechanics = RepairRequest.objects.filter(
-                requested_at__date=today
+            pending_tasks += apply_date_filter(
+                RepairRequest.objects.filter(status="pending"), "requested_at"
             ).count()
         except ImportError:
             pass
 
-        try:
-            from rentals.models import RentalBooking
+        # Pending approvals
+        pending_tasks += MerchantProfile.objects.filter(is_approved=False).count()
+        pending_tasks += DriverProfile.objects.filter(is_approved=False).count()
+        pending_tasks += MechanicProfile.objects.filter(is_approved=False).count()
 
-            today_rentals = RentalBooking.objects.filter(
-                booked_at__date=today).count()
+        # ====================================================================
+        # 6. CONVERSION RATE
+        # ====================================================================
+        total_requests = 0
+        completed_requests = 0
+
+        # E-commerce conversion
+        total_orders_all = apply_date_filter(Order.objects).count()
+        completed_orders = apply_date_filter(
+            Order.objects.filter(status__in=["paid", "shipped", "completed"])
+        ).count()
+        total_requests += total_orders_all
+        completed_requests += completed_orders
+
+        # Service conversions
+        try:
+            from rides.models import Ride
+            rides_total = apply_date_filter(Ride.objects, "requested_at").count()
+            rides_completed = apply_date_filter(Ride.objects.filter(status="completed"), "requested_at").count()
+            total_requests += rides_total
+            completed_requests += rides_completed
         except ImportError:
             pass
 
-        # ====================================================================
-        # PENDING TASKS
-        # ====================================================================
-
-        pending_tasks = {
-            "mechanic_requests_awaiting_assignment": mechanic_pending,
-            "couriers_in_queue": courier_pending,
-            "rides_waiting_for_drivers": rides_pending,
-            "rental_bookings_pending_approval": rental_pending,
-            "total_pending_tasks": (
-                mechanic_pending + courier_pending + rides_pending + rental_pending
-            ),
-        }
-
-        # ====================================================================
-        # CONVERSION RATES
-        # ====================================================================
-
-        # Ride request to completion rate
-        ride_conversion_rate = 0
-        if rides_count > 0:
-            ride_conversion_rate = round(
-                (rides_completed / rides_count) * 100, 2)
-
-        # Cart to purchase conversion (using orders as proxy)
-        cart_conversion_rate = 0
         try:
-            from products.models import Cart
-
-            total_carts = Cart.objects.count()
-            if total_carts > 0:
-                cart_conversion_rate = round(
-                    (ecommerce_count / total_carts) * 100, 2)
+            from couriers.models import DeliveryRequest
+            courier_total = apply_date_filter(DeliveryRequest.objects, "requested_at").count()
+            courier_completed = apply_date_filter(DeliveryRequest.objects.filter(status="delivered"), "requested_at").count()
+            total_requests += courier_total
+            completed_requests += courier_completed
         except ImportError:
             pass
 
-        # Courier completion rate
-        courier_conversion_rate = 0
-        if courier_count > 0:
-            courier_conversion_rate = round(
-                (courier_completed / courier_count) * 100, 2
-            )
-
-        # Mechanic completion rate
-        mechanic_conversion_rate = 0
-        if mechanic_count > 0:
-            mechanic_conversion_rate = round(
-                (mechanic_completed / mechanic_count) * 100, 2
-            )
-
-        # Rental completion rate
-        rental_conversion_rate = 0
-        if rental_count > 0:
-            rental_conversion_rate = round(
-                (rental_completed / rental_count) * 100, 2)
+        conversion_rate = (completed_requests / total_requests * 100) if total_requests > 0 else 0
 
         # ====================================================================
-        # RATINGS - Platform-wide and per service
+        # 7. AVERAGE RATING
         # ====================================================================
+        avg_rating = 0.0
+        rating_count = 0
 
         # Product ratings
-        product_avg_rating = 0
-        product_total_reviews = 0
-        try:
-            from products.models import ProductReview
-
-            product_reviews = ProductReview.objects.all()
-            if start_date:
-                product_reviews = product_reviews.filter(
-                    created_at__gte=start_date)
-            product_total_reviews = product_reviews.count()
-            product_avg_rating = (
-                product_reviews.aggregate(avg=Avg("rating"))["avg"] or 0
-            )
-            if product_avg_rating:
-                product_avg_rating = round(float(product_avg_rating), 2)
-        except ImportError:
-            pass
-
-        # Driver ratings
-        driver_avg_rating = 0
-        driver_total_reviews = 0
-        try:
-            from users.models import DriverReview
-
-            driver_reviews = DriverReview.objects.all()
-            if start_date:
-                driver_reviews = driver_reviews.filter(
-                    created_at__gte=start_date)
-            driver_total_reviews = driver_reviews.count()
-            driver_avg_rating = driver_reviews.aggregate(avg=Avg("rating"))[
-                "avg"] or 0
-            if driver_avg_rating:
-                driver_avg_rating = round(float(driver_avg_rating), 2)
-        except ImportError:
-            pass
-
-        # Mechanic ratings
-        mechanic_avg_rating = 0
-        mechanic_total_reviews = 0
-        try:
-            from users.models import MechanicReview
-
-            mechanic_reviews = MechanicReview.objects.all()
-            if start_date:
-                mechanic_reviews = mechanic_reviews.filter(
-                    created_at__gte=start_date)
-            mechanic_total_reviews = mechanic_reviews.count()
-            mechanic_avg_rating = (
-                mechanic_reviews.aggregate(avg=Avg("rating"))["avg"] or 0
-            )
-            if mechanic_avg_rating:
-                mechanic_avg_rating = round(float(mechanic_avg_rating), 2)
-        except ImportError:
-            pass
-
-        # Courier ratings
-        courier_avg_rating = 0
-        courier_total_reviews = 0
-        try:
-            from couriers.models import CourierRating
-
-            courier_reviews = CourierRating.objects.all()
-            if start_date:
-                courier_reviews = courier_reviews.filter(
-                    created_at__gte=start_date)
-            courier_total_reviews = courier_reviews.count()
-            courier_avg_rating = (
-                courier_reviews.aggregate(
-                    avg=Avg("overall_rating"))["avg"] or 0
-            )
-            if courier_avg_rating:
-                courier_avg_rating = round(float(courier_avg_rating), 2)
-        except ImportError:
-            pass
-
-        # Rental ratings
-        rental_avg_rating = 0
-        rental_total_reviews = 0
-        try:
-            from rentals.models import RentalReview
-
-            rental_reviews = RentalReview.objects.all()
-            if start_date:
-                rental_reviews = rental_reviews.filter(
-                    created_at__gte=start_date)
-            rental_total_reviews = rental_reviews.count()
-            rental_avg_rating = rental_reviews.aggregate(avg=Avg("rating"))[
-                "avg"] or 0
-            if rental_avg_rating:
-                rental_avg_rating = round(float(rental_avg_rating), 2)
-        except ImportError:
-            pass
-
-        # Platform-wide average rating
-        total_reviews = (
-            product_total_reviews
-            + driver_total_reviews
-            + mechanic_total_reviews
-            + courier_total_reviews
-            + rental_total_reviews
+        product_ratings = (
+            apply_date_filter(ProductReview.objects, "created_at")
+            .aggregate(avg=Avg("rating"), count=Count("id"))
         )
-        platform_avg_rating = 0
-        if total_reviews > 0:
-            weighted_sum = (
-                (product_avg_rating * product_total_reviews)
-                + (driver_avg_rating * driver_total_reviews)
-                + (mechanic_avg_rating * mechanic_total_reviews)
-                + (courier_avg_rating * courier_total_reviews)
-                + (rental_avg_rating * rental_total_reviews)
+        if product_ratings["count"]:
+            avg_rating += float(product_ratings["avg"] or 0)
+            rating_count += 1
+
+        # Service ratings (ride ratings)
+        try:
+            from rides.models import RideRating
+            ride_ratings = (
+                apply_date_filter(RideRating.objects, "rated_at")
+                .aggregate(avg=Avg("overall_rating"), count=Count("id"))
             )
-            platform_avg_rating = round(weighted_sum / total_reviews, 2)
+            if ride_ratings["count"]:
+                avg_rating += float(ride_ratings["avg"] or 0)
+                rating_count += 1
+        except (ImportError, AttributeError):
+            pass
+
+        avg_rating = avg_rating / rating_count if rating_count > 0 else 0
 
         # ====================================================================
-        # COMMISSION/FEES EARNED
+        # 8. COMMISSION EARNED
         # ====================================================================
-
-        # Calculate commission (assuming 10% commission rate as example)
-        COMMISSION_RATE = Decimal("0.10")  # 10%
-
-        ecommerce_commission = float(
-            ecommerce_revenue) * float(COMMISSION_RATE)
-        rides_commission = float(rides_revenue) * float(COMMISSION_RATE)
-        courier_commission = float(courier_revenue) * float(COMMISSION_RATE)
-        mechanic_commission = float(mechanic_revenue) * float(COMMISSION_RATE)
-        rental_commission = float(rental_revenue) * float(COMMISSION_RATE)
-
-        total_commission = (
-            ecommerce_commission
-            + rides_commission
-            + courier_commission
-            + mechanic_commission
-            + rental_commission
-        )
+        COMMISSION_RATE = 0.1  # 10% commission
+        commission_earned = round(total_revenue * COMMISSION_RATE, 2)
 
         # ====================================================================
-        # PERFORMANCE METRICS
+        # 9. CANCELLATION RATE
         # ====================================================================
+        total_cancelled = 0
+        total_all_requests = 0
 
-        # Response time for requests/deliveries (average time to accept)
-        avg_ride_response_time = 0
+        # Order cancellations
+        total_all_requests += apply_date_filter(Order.objects).count()
+        total_cancelled += apply_date_filter(Order.objects.filter(status="cancelled")).count()
+
+        # Service cancellations
         try:
             from rides.models import Ride
-
-            rides_with_response = Ride.objects.filter(
-                accepted_at__isnull=False)
-            if start_date:
-                rides_with_response = rides_with_response.filter(
-                    requested_at__gte=start_date
-                )
-            if rides_with_response.exists():
-                response_times = []
-                for ride in rides_with_response:
-                    if ride.accepted_at and ride.requested_at:
-                        delta = (
-                            ride.accepted_at - ride.requested_at
-                        ).total_seconds() / 60
-                        response_times.append(delta)
-                if response_times:
-                    avg_ride_response_time = round(
-                        sum(response_times) / len(response_times), 2
-                    )
+            rides_all = apply_date_filter(Ride.objects, "requested_at").count()
+            rides_cancelled = apply_date_filter(Ride.objects.filter(status="cancelled"), "requested_at").count()
+            total_all_requests += rides_all
+            total_cancelled += rides_cancelled
         except ImportError:
             pass
 
-        avg_courier_response_time = 0
         try:
             from couriers.models import DeliveryRequest
-
-            couriers_with_response = DeliveryRequest.objects.filter(
-                assigned_at__isnull=False
-            )
-            if start_date:
-                couriers_with_response = couriers_with_response.filter(
-                    requested_at__gte=start_date
-                )
-            if couriers_with_response.exists():
-                response_times = []
-                for courier in couriers_with_response:
-                    if courier.assigned_at and courier.requested_at:
-                        delta = (
-                            courier.assigned_at - courier.requested_at
-                        ).total_seconds() / 60
-                        response_times.append(delta)
-                if response_times:
-                    avg_courier_response_time = round(
-                        sum(response_times) / len(response_times), 2
-                    )
+            courier_all = apply_date_filter(DeliveryRequest.objects, "requested_at").count()
+            courier_cancelled = apply_date_filter(DeliveryRequest.objects.filter(status="cancelled"), "requested_at").count()
+            total_all_requests += courier_all
+            total_cancelled += courier_cancelled
         except ImportError:
             pass
 
-        avg_mechanic_response_time = 0
-        try:
-            from mechanics.models import RepairRequest
-
-            mechanics_with_response = RepairRequest.objects.filter(
-                accepted_at__isnull=False
-            )
-            if start_date:
-                mechanics_with_response = mechanics_with_response.filter(
-                    requested_at__gte=start_date
-                )
-            if mechanics_with_response.exists():
-                response_times = []
-                for mechanic in mechanics_with_response:
-                    if mechanic.accepted_at and mechanic.requested_at:
-                        delta = (
-                            mechanic.accepted_at - mechanic.requested_at
-                        ).total_seconds() / 60
-                        response_times.append(delta)
-                if response_times:
-                    avg_mechanic_response_time = round(
-                        sum(response_times) / len(response_times), 2
-                    )
-        except ImportError:
-            pass
-
-        # GMV (Gross Merchandise Value) for e-commerce
-        gmv = float(ecommerce_revenue)
-
-        # On-time delivery rate (%)
-        on_time_delivery_rate = 0
-        try:
-            from couriers.models import DeliveryRequest
-
-            completed_deliveries = DeliveryRequest.objects.filter(
-                status="delivered")
-            if start_date:
-                completed_deliveries = completed_deliveries.filter(
-                    requested_at__gte=start_date
-                )
-            total_delivered = completed_deliveries.count()
-            if total_delivered > 0:
-                # Consider on-time if delivered within estimated duration + 30 min buffer
-                on_time_count = 0
-                for delivery in completed_deliveries:
-                    if (
-                        delivery.delivered_at
-                        and delivery.requested_at
-                        and delivery.estimated_duration
-                    ):
-                        actual_duration = (
-                            delivery.delivered_at - delivery.requested_at
-                        ).total_seconds() / 60
-                        expected_duration = (
-                            delivery.estimated_duration + 30
-                        )  # 30 min buffer
-                        if actual_duration <= expected_duration:
-                            on_time_count += 1
-                on_time_delivery_rate = round(
-                    (on_time_count / total_delivered) * 100, 2
-                )
-        except ImportError:
-            pass
-
-        # Cancellation rate (%)
-        cancellation_rate = 0
-        if total_transactions > 0:
-            cancellation_rate = round(
-                (total_cancelled / total_transactions) * 100, 2)
-
-        # ====================================================================
-        # RESPONSE DATA
-        # ====================================================================
+        cancellation_rate = (total_cancelled / total_all_requests * 100) if total_all_requests > 0 else 0
 
         return Response(
             api_response(
                 message="Dashboard overview retrieved successfully.",
                 status=True,
                 data={
-                    "period": period if period else "all_time",
-                    "period_description": (
-                        f"Last {period}" if period else "All time data"
-                    ),
-                    # Revenue breakdown
-                    "revenue": {
-                        "total_revenue": round(total_revenue, 2),
-                        "breakdown": {
-                            "ecommerce_sales": round(float(ecommerce_revenue), 2),
-                            "ride_fares": round(float(rides_revenue), 2),
-                            "courier_fees": round(float(courier_revenue), 2),
-                            "mechanic_bookings": round(float(mechanic_revenue), 2),
-                            "car_rental_income": round(float(rental_revenue), 2),
-                        },
-                    },
-                    # User metrics
-                    "users": {
-                        "total_users": total_users,
-                        "new_users": new_users,
-                        "active_users": active_users,
-                        "customers": customers_count,
-                        "vendors_merchants": {
-                            "total": merchants_total,
-                            "active": merchants_active,
-                            "unverified": merchants_unverified,
-                        },
-                        "drivers": {
-                            "total": drivers_total,
-                            "approved": drivers_approved,
-                            "online": drivers_online,
-                            "offline": drivers_offline,
-                            "unverified": drivers_unverified,
-                        },
-                        "mechanics": {
-                            "total": mechanics_total,
-                            "approved": mechanics_approved,
-                            "unverified": mechanics_unverified,
-                        },
-                    },
-                    # Orders/Rides/Requests breakdown
-                    "orders_rides_requests": {
-                        "total_transactions": total_transactions,
-                        "today_count": today_orders
-                        + today_rides
-                        + today_couriers
-                        + today_mechanics
-                        + today_rentals,
-                        "breakdown": {
-                            "completed": total_completed,
-                            "pending": total_pending,
-                            "cancelled": total_cancelled,
-                        },
-                        "by_service": {
-                            "ecommerce_orders": {
-                                "total": ecommerce_count,
-                                "completed": ecommerce_orders.filter(
-                                    status="completed"
-                                ).count(),
-                                "pending": ecommerce_orders.filter(
-                                    status="pending"
-                                ).count(),
-                                "cancelled": ecommerce_orders.filter(
-                                    status="cancelled"
-                                ).count(),
-                                "today": today_orders,
-                            },
-                            "rides": {
-                                "total": rides_count,
-                                "completed": rides_completed,
-                                "pending": rides_pending,
-                                "cancelled": rides_cancelled,
-                                "today": today_rides,
-                            },
-                            "courier_deliveries": {
-                                "total": courier_count,
-                                "completed": courier_completed,
-                                "pending": courier_pending,
-                                "cancelled": courier_cancelled,
-                                "today": today_couriers,
-                            },
-                            "mechanic_requests": {
-                                "total": mechanic_count,
-                                "completed": mechanic_completed,
-                                "pending": mechanic_pending,
-                                "cancelled": mechanic_cancelled,
-                                "today": today_mechanics,
-                            },
-                            "car_rentals": {
-                                "total": rental_count,
-                                "completed": rental_completed,
-                                "active": rental_active,
-                                "pending": rental_pending,
-                                "cancelled": rental_cancelled,
-                                "today": today_rentals,
-                            },
-                        },
-                    },
-                    # Pending tasks
+                    "period": period or "all",
+                    # Key Metrics (12+ essential values)
+                    "total_revenue": round(total_revenue, 2),
+                    "total_users": total_users,
+                    "active_users": active_users,
+                    "new_users": new_users,
+                    "total_orders": total_orders,
                     "pending_tasks": pending_tasks,
-                    # Conversion rates
-                    "conversion_rates": {
-                        "ride_requests_to_completions": f"{ride_conversion_rate}%",
-                        "cart_adds_to_purchases": f"{cart_conversion_rate}%",
-                        "courier_completion_rate": f"{courier_conversion_rate}%",
-                        "mechanic_completion_rate": f"{mechanic_conversion_rate}%",
-                        "rental_completion_rate": f"{rental_conversion_rate}%",
-                    },
-                    # Ratings
-                    "ratings": {
-                        "platform_wide_average": platform_avg_rating,
-                        "total_reviews": total_reviews,
-                        "by_service": {
-                            "products": {
-                                "average_rating": product_avg_rating,
-                                "total_reviews": product_total_reviews,
-                            },
-                            "drivers": {
-                                "average_rating": driver_avg_rating,
-                                "total_reviews": driver_total_reviews,
-                            },
-                            "mechanics": {
-                                "average_rating": mechanic_avg_rating,
-                                "total_reviews": mechanic_total_reviews,
-                            },
-                            "couriers": {
-                                "average_rating": courier_avg_rating,
-                                "total_reviews": courier_total_reviews,
-                            },
-                            "rentals": {
-                                "average_rating": rental_avg_rating,
-                                "total_reviews": rental_total_reviews,
-                            },
-                        },
-                    },
-                    # Commission/Fees
-                    "commission_fees": {
-                        "total_commission_earned": round(total_commission, 2),
-                        "commission_rate": f"{float(COMMISSION_RATE) * 100}%",
-                        "breakdown": {
-                            "ecommerce": round(ecommerce_commission, 2),
-                            "rides": round(rides_commission, 2),
-                            "couriers": round(courier_commission, 2),
-                            "mechanics": round(mechanic_commission, 2),
-                            "rentals": round(rental_commission, 2),
-                        },
-                    },
-                    # Performance metrics
-                    "performance_metrics": {
-                        "response_time_minutes": {
-                            "rides": avg_ride_response_time,
-                            "couriers": avg_courier_response_time,
-                            "mechanics": avg_mechanic_response_time,
-                        },
-                        "gmv_gross_merchandise_value": round(gmv, 2),
-                        "on_time_delivery_rate": f"{on_time_delivery_rate}%",
-                        "cancellation_rate": f"{cancellation_rate}%",
-                    },
+                    "conversion_rate": round(conversion_rate, 2),
+                    "avg_rating": round(avg_rating, 2),
+                    "total_merchants": total_merchants,
+                    "total_drivers": total_drivers,
+                    "total_mechanics": total_mechanics,
+                    "commission_earned": commission_earned,
+                    "cancellation_rate": round(cancellation_rate, 2),
+                    # Essential breakdown
+                    "revenue_breakdown": revenue_breakdown,
                 },
             )
         )
@@ -3249,26 +2797,31 @@ class ServiceAnalyticsView(APIView):
 
 
 class RevenueAnalyticsView(APIView):
-    """Comprehensive revenue analytics across all services"""
+    """Comprehensive revenue analytics across all services with individual breakdowns"""
 
     permission_classes = [IsAdminUser]
 
     @swagger_auto_schema(
-        operation_description="Get comprehensive revenue analytics",
+        operation_description="Get comprehensive revenue analytics with individual service breakdowns",
         manual_parameters=[
+            openapi.Parameter(
+                "start_date",
+                openapi.IN_QUERY,
+                description="Start date (YYYY-MM-DD format)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "end_date",
+                openapi.IN_QUERY,
+                description="End date (YYYY-MM-DD format)",
+                type=openapi.TYPE_STRING,
+            ),
             openapi.Parameter(
                 "period",
                 openapi.IN_QUERY,
-                description="Time period (7d, 30d, 90d, 1y)",
+                description="Time period (7d, 30d, 90d, 1y) - ignored if start_date provided",
                 type=openapi.TYPE_STRING,
                 default="30d",
-            ),
-            openapi.Parameter(
-                "group_by",
-                openapi.IN_QUERY,
-                description="Group by (day, week, month)",
-                type=openapi.TYPE_STRING,
-                default="day",
             ),
         ],
         responses={200: openapi.Response("Revenue analytics data")},
@@ -3281,110 +2834,230 @@ class RevenueAnalyticsView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
 
+        # Parse date range
+        start_date, end_date = self._parse_date_range(request)
+        
+        # Validate date range
+        if start_date and end_date and start_date > end_date:
+            return Response(
+                api_response(message="Start date cannot be after end date", status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Get individual revenue sources
+        revenue_sources = self._get_revenue_by_source(start_date, end_date)
+        
+        # Get individual timelines for each service
         period = request.query_params.get("period", "30d")
-        group_by = request.query_params.get("group_by", "day")
-        days = self._parse_period(period)
-        start_date = timezone.now() - timedelta(days=days)
-
-        # Product sales revenue
-        product_revenue = (
-            Order.objects.filter(
-                created_at__gte=start_date, status__in=[
-                    "paid", "shipped", "completed"]
-            ).aggregate(total=Sum("total_amount"))["total"]
-            or 0
-        )
-
-        # Revenue breakdown by source
-        revenue_sources = {
-            "products": float(product_revenue),
-        }
-
-        # Add rides revenue if available
-        try:
-            from rides.models import Ride
-
-            rides_revenue = (
-                Ride.objects.filter(
-                    requested_at__gte=start_date, status="completed"
-                ).aggregate(total=Sum("fare"))["total"]
-                or 0
-            )
-            revenue_sources["rides"] = float(rides_revenue)
-        except ImportError:
-            pass
-
-        # Add courier revenue if available
-        try:
-            from couriers.models import DeliveryRequest
-
-            courier_revenue = (
-                DeliveryRequest.objects.filter(
-                    requested_at__gte=start_date, status="delivered"
-                ).aggregate(total=Sum("total_fare"))["total"]
-                or 0
-            )
-            revenue_sources["couriers"] = float(courier_revenue)
-        except ImportError:
-            pass
-
-        # Add rental revenue if available
-        try:
-            from rentals.models import RentalBooking
-
-            rental_revenue = (
-                RentalBooking.objects.filter(
-                    booked_at__gte=start_date, status__in=[
-                        "completed", "active"]
-                ).aggregate(total=Sum("total_amount"))["total"]
-                or 0
-            )
-            revenue_sources["rentals"] = float(rental_revenue)
-        except ImportError:
-            pass
-
-        # Total revenue
+        revenue_timelines = self._get_revenue_timelines(start_date, end_date, period)
+        
+        # Calculate total revenue
         total_revenue = sum(revenue_sources.values())
-
-        # Revenue over time (grouped)
-        revenue_timeline = self._get_revenue_timeline(start_date, group_by)
 
         return Response(
             api_response(
                 message="Revenue analytics retrieved successfully.",
                 status=True,
                 data={
-                    "period": period,
+                    "date_range": {
+                        "start_date": start_date.isoformat() if start_date else None,
+                        "end_date": end_date.isoformat() if end_date else None,
+                    },
                     "total_revenue": round(total_revenue, 2),
                     "revenue_by_source": revenue_sources,
-                    "revenue_timeline": revenue_timeline,
+                    "revenue_timelines": revenue_timelines,
                 },
             )
         )
 
-    def _get_revenue_timeline(self, start_date, group_by):
-        """Get revenue timeline grouped by day/week/month"""
-        orders = Order.objects.filter(
-            created_at__gte=start_date, status__in=[
-                "paid", "shipped", "completed"]
+    def _parse_date_range(self, request):
+        """Parse date range from request parameters"""
+        from datetime import datetime
+        
+        start_date_str = request.query_params.get("start_date")
+        end_date_str = request.query_params.get("end_date")
+        
+        if start_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                start_date = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+            except ValueError:
+                return None, None
+        else:
+            # Use period-based calculation
+            period = request.query_params.get("period", "30d")
+            days = self._parse_period(period)
+            start_date = timezone.now() - timedelta(days=days)
+        
+        if end_date_str:
+            try:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                end_date = timezone.make_aware(datetime.combine(end_date, datetime.max.time()))
+            except ValueError:
+                return None, None
+        else:
+            end_date = timezone.now()
+        
+        return start_date, end_date
+
+    def _get_revenue_by_source(self, start_date, end_date):
+        """Get revenue breakdown by individual service sources"""
+        revenue_sources = {}
+
+        # Product sales revenue
+        product_revenue = (
+            Order.objects.filter(
+                created_at__gte=start_date,
+                created_at__lte=end_date,
+                status__in=["paid", "shipped", "completed"]
+            ).aggregate(total=Sum("total_amount"))["total"]
+            or 0
+        )
+        revenue_sources["products"] = float(product_revenue)
+
+        # Rides revenue if available
+        try:
+            from rides.models import Ride
+            rides_revenue = (
+                Ride.objects.filter(
+                    requested_at__gte=start_date,
+                    requested_at__lte=end_date,
+                    status="completed"
+                ).aggregate(total=Sum("fare"))["total"]
+                or 0
+            )
+            revenue_sources["rides"] = float(rides_revenue)
+        except ImportError:
+            revenue_sources["rides"] = 0.0
+
+        # Courier revenue if available
+        try:
+            from couriers.models import DeliveryRequest
+            courier_revenue = (
+                DeliveryRequest.objects.filter(
+                    requested_at__gte=start_date,
+                    requested_at__lte=end_date,
+                    status="delivered"
+                ).aggregate(total=Sum("total_fare"))["total"]
+                or 0
+            )
+            revenue_sources["couriers"] = float(courier_revenue)
+        except ImportError:
+            revenue_sources["couriers"] = 0.0
+
+        # Rental revenue if available
+        try:
+            from rentals.models import RentalBooking
+            rental_revenue = (
+                RentalBooking.objects.filter(
+                    booked_at__gte=start_date,
+                    booked_at__lte=end_date,
+                    status__in=["completed", "active"]
+                ).aggregate(total=Sum("total_amount"))["total"]
+                or 0
+            )
+            revenue_sources["rentals"] = float(rental_revenue)
+        except ImportError:
+            revenue_sources["rentals"] = 0.0
+
+        return revenue_sources
+
+    def _get_revenue_timelines(self, start_date, end_date, period):
+        """Get individual revenue timelines for each service"""
+        timelines = {}
+
+        # Products timeline
+        timelines["products"] = self._get_service_timeline(
+            Order.objects.filter(status__in=["paid", "shipped", "completed"]),
+            "created_at",
+            "total_amount",
+            start_date,
+            end_date,
+            period,
         )
 
-        if group_by == "month":
+        # Rides timeline if available
+        try:
+            from rides.models import Ride
+            timelines["rides"] = self._get_service_timeline(
+                Ride.objects.filter(status="completed"),
+                "requested_at",
+                "fare",
+                start_date,
+                end_date,
+                period,
+            )
+        except ImportError:
+            timelines["rides"] = []
+
+        # Couriers timeline if available
+        try:
+            from couriers.models import DeliveryRequest
+            timelines["couriers"] = self._get_service_timeline(
+                DeliveryRequest.objects.filter(status="delivered"),
+                "requested_at",
+                "total_fare",
+                start_date,
+                end_date,
+                period,
+            )
+        except ImportError:
+            timelines["couriers"] = []
+
+        # Rentals timeline if available
+        try:
+            from rentals.models import RentalBooking
+            timelines["rentals"] = self._get_service_timeline(
+                RentalBooking.objects.filter(status__in=["completed", "active"]),
+                "booked_at",
+                "total_amount",
+                start_date,
+                end_date,
+                period,
+            )
+        except ImportError:
+            timelines["rentals"] = []
+
+        return timelines
+
+    def _get_service_timeline(self, queryset, date_field, amount_field, start_date, end_date, period):
+        """Generic method to get revenue timeline for any service"""
+        filtered_queryset = queryset.filter(
+            **{f'{date_field}__gte': start_date, f'{date_field}__lte': end_date}
+        )
+
+        # Determine granularity based on period
+        if period in ['90d', '1y']:
+            # Monthly granularity for longer periods
             timeline = (
-                orders.annotate(period=TruncMonth("created_at"))
+                filtered_queryset.annotate(period=TruncMonth(date_field))
                 .values("period")
-                .annotate(revenue=Sum("total_amount"))
+                .annotate(revenue=Sum(amount_field))
                 .order_by("period")
             )
-        else:  # day
+        elif period == '7d':
+            # Daily granularity for short period
             timeline = (
-                orders.annotate(period=TruncDate("created_at"))
+                filtered_queryset.annotate(period=TruncDate(date_field))
                 .values("period")
-                .annotate(revenue=Sum("total_amount"))
+                .annotate(revenue=Sum(amount_field))
+                .order_by("period")
+            )
+        else:  # 30d default - daily granularity
+            timeline = (
+                filtered_queryset.annotate(period=TruncDate(date_field))
+                .values("period")
+                .annotate(revenue=Sum(amount_field))
                 .order_by("period")
             )
 
-        return list(timeline)
+        return [
+            {
+                "period": item["period"].isoformat(),
+                "revenue": float(item["revenue"] or 0)
+            }
+            for item in timeline
+        ]
 
     def _parse_period(self, period):
         period_map = {"7d": 7, "30d": 30, "90d": 90, "1y": 365}
@@ -3522,38 +3195,73 @@ class TopPerformersView(APIView):
 
 class GeographicHeatMapView(APIView):
     """
-    Real-time geographic heat map showing current positions of:
+    Geographic heat map showing locations of all user roles:
+    - Merchants
+    - Mechanics  
+    - Drivers
     - Active rides
-    - Mechanic locations
-    - Courier routes
-    - Delivery progress
+    - Active deliveries
     """
 
     permission_classes = [IsAdminUser]
 
     @swagger_auto_schema(
-        operation_description="Get real-time geographic data for heat map visualization",
+        operation_description="Get geographic data for map visualization with pagination",
+        manual_parameters=[
+            openapi.Parameter(
+                "limit",
+                openapi.IN_QUERY,
+                description="Number of items per role (10, 20, 30, 50, 100)",
+                type=openapi.TYPE_INTEGER,
+                default=20,
+            ),
+            openapi.Parameter(
+                "role",
+                openapi.IN_QUERY,
+                description="Filter by role (merchant, mechanic, driver, rides, deliveries, all)",
+                type=openapi.TYPE_STRING,
+                default="all",
+            ),
+            openapi.Parameter(
+                "active_only",
+                openapi.IN_QUERY,
+                description="Show only active items (true/false)",
+                type=openapi.TYPE_BOOLEAN,
+                default="false",
+            ),
+        ],
         responses={
             200: openapi.Response(
-                description="Geographic heat map data",
+                description="Geographic map data",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
+                        "merchants": openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(type=openapi.TYPE_OBJECT),
+                        ),
+                        "mechanics": openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(type=openapi.TYPE_OBJECT),
+                        ),
+                        "drivers": openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(type=openapi.TYPE_OBJECT),
+                        ),
                         "active_rides": openapi.Schema(
                             type=openapi.TYPE_ARRAY,
                             items=openapi.Items(type=openapi.TYPE_OBJECT),
                         ),
-                        "mechanic_locations": openapi.Schema(
+                        "active_deliveries": openapi.Schema(
                             type=openapi.TYPE_ARRAY,
                             items=openapi.Items(type=openapi.TYPE_OBJECT),
                         ),
-                        "courier_routes": openapi.Schema(
-                            type=openapi.TYPE_ARRAY,
-                            items=openapi.Items(type=openapi.TYPE_OBJECT),
-                        ),
-                        "delivery_progress": openapi.Schema(
-                            type=openapi.TYPE_ARRAY,
-                            items=openapi.Items(type=openapi.TYPE_OBJECT),
+                        "summary": openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                "total_locations": openapi.Schema(type=openapi.TYPE_INTEGER),
+                                "role_counts": openapi.Schema(type=openapi.TYPE_OBJECT),
+                            },
                         ),
                     },
                 ),
@@ -3568,318 +3276,280 @@ class GeographicHeatMapView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
 
-        # ====================================================================
-        # ACTIVE RIDES - Current ride positions
-        # ====================================================================
-        active_rides = []
-        try:
-            from rides.models import Ride
+        # Parse parameters
+        limit = self._parse_limit(request.query_params.get("limit", "20"))
+        role_filter = request.query_params.get("role", "all").lower()
+        active_only = request.query_params.get("active_only", "false").lower() == "true"
 
-            rides = Ride.objects.filter(
-                status__in=["accepted", "in_progress"]
-            ).select_related("driver", "customer")
+        result = {}
+        role_counts = {}
 
-            for ride in rides:
-                ride_data = {
-                    "ride_id": str(ride.id),
-                    "status": ride.status,
-                    "driver": {
-                        "id": str(ride.driver.id) if ride.driver else None,
-                        "name": (
-                            f"{ride.driver.first_name} {ride.driver.last_name}"
-                            if ride.driver
-                            else None
-                        ),
-                        "phone": ride.driver.phone_number if ride.driver else None,
-                    },
-                    "customer": {
-                        "id": str(ride.customer.id) if ride.customer else None,
-                        "name": (
-                            f"{ride.customer.first_name} {ride.customer.last_name}"
-                            if ride.customer
-                            else None
-                        ),
-                    },
-                    "pickup_location": {
-                        "latitude": (
-                            float(ride.pickup_latitude)
-                            if ride.pickup_latitude
-                            else None
-                        ),
-                        "longitude": (
-                            float(ride.pickup_longitude)
-                            if ride.pickup_longitude
-                            else None
-                        ),
-                        "address": ride.pickup_address,
-                    },
-                    "dropoff_location": {
-                        "latitude": (
-                            float(ride.dropoff_latitude)
-                            if ride.dropoff_latitude
-                            else None
-                        ),
-                        "longitude": (
-                            float(ride.dropoff_longitude)
-                            if ride.dropoff_longitude
-                            else None
-                        ),
-                        "address": ride.dropoff_address,
-                    },
-                    "current_location": {
-                        "latitude": (
-                            float(ride.current_latitude)
-                            if hasattr(ride, "current_latitude")
-                            and ride.current_latitude
-                            else (
-                                float(ride.pickup_latitude)
-                                if ride.pickup_latitude
-                                else None
-                            )
-                        ),
-                        "longitude": (
-                            float(ride.current_longitude)
-                            if hasattr(ride, "current_longitude")
-                            and ride.current_longitude
-                            else (
-                                float(ride.pickup_longitude)
-                                if ride.pickup_longitude
-                                else None
-                            )
-                        ),
-                    },
-                    "fare": float(ride.fare) if ride.fare else 0,
-                    "requested_at": (
-                        ride.requested_at.isoformat() if ride.requested_at else None
-                    ),
-                    "accepted_at": (
-                        ride.accepted_at.isoformat() if ride.accepted_at else None
-                    ),
-                }
-                active_rides.append(ride_data)
-        except ImportError:
-            pass
+        # Get data based on role filter
+        if role_filter in ["all", "merchant"]:
+            result["merchants"], merchant_count = self._get_merchants(limit, active_only)
+            role_counts["merchants"] = merchant_count
 
-        # ====================================================================
-        # MECHANIC LOCATIONS - Active mechanics
-        # ====================================================================
-        mechanic_locations = []
-        try:
-            from mechanics.models import RepairRequest
+        if role_filter in ["all", "mechanic"]:
+            result["mechanics"], mechanic_count = self._get_mechanics(limit, active_only)
+            role_counts["mechanics"] = mechanic_count
 
-            # Get active mechanics with ongoing requests
-            active_requests = RepairRequest.objects.filter(
-                status__in=["accepted", "in_transit", "in_progress"]
-            ).select_related("mechanic", "customer")
+        if role_filter in ["all", "driver"]:
+            result["drivers"], driver_count = self._get_drivers(limit, active_only)
+            role_counts["drivers"] = driver_count
 
-            for repair_request in active_requests:
-                # Get mechanic profile if available
-                mechanic_profile = None
-                if repair_request.mechanic:
-                    try:
-                        mechanic_profile = repair_request.mechanic.mechanic_profile
-                    except:
-                        pass
+        if role_filter in ["all", "rides"]:
+            result["active_rides"], ride_count = self._get_active_rides(limit)
+            role_counts["active_rides"] = ride_count
 
-                mechanic_data = {
-                    "request_id": str(repair_request.id),
-                    "status": repair_request.status,
-                    "mechanic": {
-                        "id": (
-                            str(repair_request.mechanic.id)
-                            if repair_request.mechanic
-                            else None
-                        ),
-                        "name": (
-                            f"{repair_request.mechanic.first_name} {repair_request.mechanic.last_name}"
-                            if repair_request.mechanic
-                            else None
-                        ),
-                        "phone": (
-                            repair_request.mechanic.phone_number
-                            if repair_request.mechanic
-                            else None
-                        ),
-                        "specialization": (
-                            mechanic_profile.specialization
-                            if mechanic_profile
-                            and hasattr(mechanic_profile, "specialization")
-                            else None
-                        ),
-                    },
-                    "customer": {
-                        "id": (
-                            str(repair_request.customer.id)
-                            if repair_request.customer
-                            else None
-                        ),
-                        "name": (
-                            f"{repair_request.customer.first_name} {repair_request.customer.last_name}"
-                            if repair_request.customer
-                            else None
-                        ),
-                    },
-                    "location": {
-                        "latitude": (
-                            float(repair_request.service_latitude)
-                            if repair_request.service_latitude
-                            else None
-                        ),
-                        "longitude": (
-                            float(repair_request.service_longitude)
-                            if repair_request.service_longitude
-                            else None
-                        ),
-                        "address": repair_request.service_address,
-                    },
-                    "service_type": repair_request.service_type,
-                    "estimated_cost": (
-                        float(repair_request.estimated_cost)
-                        if repair_request.estimated_cost
-                        else 0
-                    ),
-                    "requested_at": (
-                        repair_request.requested_at.isoformat()
-                        if repair_request.requested_at
-                        else None
-                    ),
-                    "accepted_at": (
-                        repair_request.accepted_at.isoformat()
-                        if repair_request.accepted_at
-                        else None
-                    ),
-                }
-                mechanic_locations.append(mechanic_data)
-        except ImportError:
-            pass
+        if role_filter in ["all", "deliveries"]:
+            result["active_deliveries"], delivery_count = self._get_active_deliveries(limit)
+            role_counts["active_deliveries"] = delivery_count
 
-        # ====================================================================
-        # COURIER ROUTES - Active deliveries
-        # ====================================================================
-        courier_routes = []
-        try:
-            from couriers.models import DeliveryRequest
-
-            active_deliveries = DeliveryRequest.objects.filter(
-                status__in=["assigned", "picked_up", "in_transit"]
-            ).select_related("driver", "customer")
-
-            for delivery in active_deliveries:
-                courier_data = {
-                    "delivery_id": str(delivery.id),
-                    "status": delivery.status,
-                    "driver": {
-                        "id": str(delivery.driver.id) if delivery.driver else None,
-                        "name": (
-                            f"{delivery.driver.first_name} {delivery.driver.last_name}"
-                            if delivery.driver
-                            else None
-                        ),
-                        "phone": (
-                            delivery.driver.phone_number if delivery.driver else None
-                        ),
-                    },
-                    "customer": {
-                        "id": str(delivery.customer.id) if delivery.customer else None,
-                        "name": (
-                            f"{delivery.customer.first_name} {delivery.customer.last_name}"
-                            if delivery.customer
-                            else None
-                        ),
-                    },
-                    "pickup_location": {
-                        "latitude": (
-                            float(delivery.pickup_latitude)
-                            if delivery.pickup_latitude
-                            else None
-                        ),
-                        "longitude": (
-                            float(delivery.pickup_longitude)
-                            if delivery.pickup_longitude
-                            else None
-                        ),
-                        "address": delivery.pickup_address,
-                    },
-                    "dropoff_location": {
-                        "latitude": (
-                            float(delivery.dropoff_latitude)
-                            if delivery.dropoff_latitude
-                            else None
-                        ),
-                        "longitude": (
-                            float(delivery.dropoff_longitude)
-                            if delivery.dropoff_longitude
-                            else None
-                        ),
-                        "address": delivery.dropoff_address,
-                    },
-                    "current_location": {
-                        "latitude": (
-                            float(delivery.current_latitude)
-                            if hasattr(delivery, "current_latitude")
-                            and delivery.current_latitude
-                            else None
-                        ),
-                        "longitude": (
-                            float(delivery.current_longitude)
-                            if hasattr(delivery, "current_longitude")
-                            and delivery.current_longitude
-                            else None
-                        ),
-                    },
-                    "package_type": (
-                        delivery.package_type
-                        if hasattr(delivery, "package_type")
-                        else None
-                    ),
-                    "total_fare": (
-                        float(delivery.total_fare) if delivery.total_fare else 0
-                    ),
-                    "requested_at": (
-                        delivery.requested_at.isoformat()
-                        if delivery.requested_at
-                        else None
-                    ),
-                    "assigned_at": (
-                        delivery.assigned_at.isoformat()
-                        if delivery.assigned_at
-                        else None
-                    ),
-                    "picked_up_at": (
-                        delivery.picked_up_at.isoformat()
-                        if hasattr(delivery, "picked_up_at") and delivery.picked_up_at
-                        else None
-                    ),
-                }
-                courier_routes.append(courier_data)
-        except ImportError:
-            pass
-
-        # ====================================================================
-        # DELIVERY PROGRESS - Summary statistics
-        # ====================================================================
-        delivery_progress = {
-            "total_active_rides": len(active_rides),
-            "total_active_mechanics": len(mechanic_locations),
-            "total_active_couriers": len(courier_routes),
-            "total_active_services": len(active_rides)
-            + len(mechanic_locations)
-            + len(courier_routes),
-        }
+        # Calculate summary
+        total_locations = sum(role_counts.values())
 
         return Response(
             api_response(
-                message="Geographic heat map data retrieved successfully.",
+                message="Geographic map data retrieved successfully.",
                 status=True,
                 data={
-                    "active_rides": active_rides,
-                    "mechanic_locations": mechanic_locations,
-                    "courier_routes": courier_routes,
-                    "delivery_progress": delivery_progress,
-                    "timestamp": timezone.now().isoformat(),
+                    **result,
+                    "summary": {
+                        "total_locations": total_locations,
+                        "role_counts": role_counts,
+                    },
                 },
             )
         )
+
+    def _parse_limit(self, limit_str):
+        """Parse and validate limit parameter"""
+        try:
+            limit = int(limit_str)
+            # Allowed limits: 10, 20, 30, 50, 100
+            allowed_limits = [10, 20, 30, 50, 100]
+            return limit if limit in allowed_limits else 20
+        except (ValueError, TypeError):
+            return 20
+
+    def _get_merchants(self, limit, active_only=False):
+        """Get merchant locations"""
+        try:
+            from users.models import MerchantProfile
+            
+            queryset = MerchantProfile.objects.all()
+            
+            if active_only:
+                # Filter for merchants with recent activity
+                queryset = queryset.filter(
+                    user__is_active=True,
+                    updated_at__gte=timezone.now() - timedelta(days=7)
+                )
+            
+            merchants = queryset.select_related("user")[:limit]
+            
+            merchant_data = []
+            for merchant in merchants:
+                # MerchantProfile has location (text) but no latitude/longitude
+                if merchant.location or merchant.business_address:
+                    merchant_data.append({
+                        "id": str(merchant.id),
+                        "user_id": str(merchant.user.id),
+                        "name": f"{merchant.user.first_name} {merchant.user.last_name}",
+                        "email": merchant.user.email,
+                        "business_name": getattr(merchant, 'business_name', 'N/A'),
+                        "location": {
+                            "address": merchant.location or merchant.business_address,
+                            "latitude": None,
+                            "longitude": None,
+                        },
+                        "is_active": merchant.user.is_active,
+                        "last_updated": merchant.updated_at.isoformat(),
+                    })
+            
+            return merchant_data, len(merchant_data)
+        except ImportError:
+            return [], 0
+
+    def _get_mechanics(self, limit, active_only=False):
+        """Get mechanic locations"""
+        try:
+            from users.models import MechanicProfile
+            
+            queryset = MechanicProfile.objects.all()
+            
+            if active_only:
+                # Filter for approved and recently active mechanics
+                queryset = queryset.filter(
+                    is_approved=True,
+                    user__is_active=True,
+                    updated_at__gte=timezone.now() - timedelta(days=7)
+                )
+            
+            mechanics = queryset.select_related("user")[:limit]
+            
+            mechanic_data = []
+            for mechanic in mechanics:
+                if mechanic.latitude and mechanic.longitude:
+                    mechanic_data.append({
+                        "id": str(mechanic.id),
+                        "user_id": str(mechanic.user.id),
+                        "name": f"{mechanic.user.first_name} {mechanic.user.last_name}",
+                        "email": mechanic.user.email,
+                        "location": {
+                            "latitude": float(mechanic.latitude),
+                            "longitude": float(mechanic.longitude),
+                            "address": mechanic.location,
+                        },
+                        "is_approved": mechanic.is_approved,
+                        "is_active": mechanic.user.is_active,
+                        "specialization": getattr(mechanic, 'specialization', None),
+                        "last_updated": mechanic.updated_at.isoformat(),
+                    })
+            
+            return mechanic_data, len(mechanic_data)
+        except ImportError:
+            return [], 0
+
+    def _get_drivers(self, limit, active_only=False):
+        """Get driver locations"""
+        try:
+            from users.models import DriverProfile
+            
+            queryset = DriverProfile.objects.all()
+            
+            if active_only:
+                # Filter for approved and recently active drivers
+                queryset = queryset.filter(
+                    is_approved=True,
+                    user__is_active=True,
+                    updated_at__gte=timezone.now() - timedelta(days=7)
+                )
+            
+            drivers = queryset.select_related("user")[:limit]
+            
+            driver_data = []
+            for driver in drivers:
+                if driver.latitude and driver.longitude:
+                    driver_data.append({
+                        "id": str(driver.id),
+                        "user_id": str(driver.user.id),
+                        "name": f"{driver.user.first_name} {driver.user.last_name}",
+                        "email": driver.user.email,
+                        "location": {
+                            "latitude": float(driver.latitude),
+                            "longitude": float(driver.longitude),
+                            "address": driver.location,
+                        },
+                        "is_approved": driver.is_approved,
+                        "is_active": driver.user.is_active,
+                        "vehicle_type": getattr(driver, 'vehicle_type', None),
+                        "last_updated": driver.updated_at.isoformat(),
+                    })
+            
+            return driver_data, len(driver_data)
+        except ImportError:
+            return [], 0
+
+    def _get_active_rides(self, limit):
+        """Get active ride locations"""
+        try:
+            from rides.models import Ride
+            
+            rides = Ride.objects.filter(
+                status__in=["accepted", "in_progress"]
+            ).select_related("driver", "customer")[:limit]
+            
+            ride_data = []
+            for ride in rides:
+                # Use current location if available, otherwise pickup location
+                lat = ride.current_latitude if hasattr(ride, 'current_latitude') and ride.current_latitude else ride.pickup_latitude
+                lng = ride.current_longitude if hasattr(ride, 'current_longitude') and ride.current_longitude else ride.pickup_longitude
+                
+                if lat and lng:
+                    ride_data.append({
+                        "id": str(ride.id),
+                        "type": "ride",
+                        "status": ride.status,
+                        "driver": {
+                            "id": str(ride.driver.id) if ride.driver else None,
+                            "name": f"{ride.driver.first_name} {ride.driver.last_name}" if ride.driver else None,
+                        },
+                        "customer": {
+                            "id": str(ride.customer.id) if ride.customer else None,
+                            "name": f"{ride.customer.first_name} {ride.customer.last_name}" if ride.customer else None,
+                        },
+                        "location": {
+                            "latitude": float(lat),
+                            "longitude": float(lng),
+                        },
+                        "pickup_location": {
+                            "latitude": float(ride.pickup_latitude) if ride.pickup_latitude else None,
+                            "longitude": float(ride.pickup_longitude) if ride.pickup_longitude else None,
+                            "address": ride.pickup_address,
+                        },
+                        "dropoff_location": {
+                            "latitude": float(ride.dropoff_latitude) if ride.dropoff_latitude else None,
+                            "longitude": float(ride.dropoff_longitude) if ride.dropoff_longitude else None,
+                            "address": ride.dropoff_address,
+                        },
+                        "fare": float(ride.fare) if ride.fare else 0,
+                        "requested_at": ride.requested_at.isoformat() if ride.requested_at else None,
+                    })
+            
+            return ride_data, len(ride_data)
+        except ImportError:
+            return [], 0
+
+    def _get_active_deliveries(self, limit):
+        """Get active delivery locations"""
+        try:
+            from couriers.models import DeliveryRequest
+            
+            deliveries = DeliveryRequest.objects.filter(
+                status__in=["assigned", "picked_up", "in_transit"]
+            ).select_related("driver", "customer")[:limit]
+            
+            delivery_data = []
+            for delivery in deliveries:
+                # Use current location if available, otherwise pickup location
+                lat = delivery.current_latitude if hasattr(delivery, 'current_latitude') and delivery.current_latitude else delivery.pickup_latitude
+                lng = delivery.current_longitude if hasattr(delivery, 'current_longitude') and delivery.current_longitude else delivery.pickup_longitude
+                
+                if lat and lng:
+                    delivery_data.append({
+                        "id": str(delivery.id),
+                        "type": "delivery",
+                        "status": delivery.status,
+                        "driver": {
+                            "id": str(delivery.driver.id) if delivery.driver else None,
+                            "name": f"{delivery.driver.first_name} {delivery.driver.last_name}" if delivery.driver else None,
+                        },
+                        "customer": {
+                            "id": str(delivery.customer.id) if delivery.customer else None,
+                            "name": f"{delivery.customer.first_name} {delivery.customer.last_name}" if delivery.customer else None,
+                        },
+                        "location": {
+                            "latitude": float(lat),
+                            "longitude": float(lng),
+                        },
+                        "pickup_location": {
+                            "latitude": float(delivery.pickup_latitude) if delivery.pickup_latitude else None,
+                            "longitude": float(delivery.pickup_longitude) if delivery.pickup_longitude else None,
+                            "address": delivery.pickup_address,
+                        },
+                        "dropoff_location": {
+                            "latitude": float(delivery.delivery_latitude) if delivery.delivery_latitude else None,
+                            "longitude": float(delivery.delivery_longitude) if delivery.delivery_longitude else None,
+                            "address": delivery.delivery_address,
+                        },
+                        "total_fare": float(delivery.total_fare) if delivery.total_fare else 0,
+                        "requested_at": delivery.requested_at.isoformat() if delivery.requested_at else None,
+                    })
+            
+            return delivery_data, len(delivery_data)
+        except ImportError:
+            return [], 0
 
 
 class OngoingActivitiesFeedView(APIView):
@@ -4004,12 +3674,12 @@ class OngoingActivitiesFeedView(APIView):
                     "type": "delivery",
                     "status": delivery.status,
                     "title": f"Delivery #{delivery.id}",
-                    "description": f"Delivery {delivery.status.replace('_', ' ')} by {delivery.courier.first_name if delivery.courier else 'Unassigned'}",
-                    "courier": {
-                        "id": str(delivery.courier.id) if delivery.courier else None,
+                    "description": f"Delivery {delivery.status.replace('_', ' ')} by {delivery.driver.first_name if delivery.driver else 'Unassigned'}",
+                    "driver": {
+                        "id": str(delivery.driver.id) if delivery.driver else None,
                         "name": (
-                            f"{delivery.courier.first_name} {delivery.courier.last_name}"
-                            if delivery.courier
+                            f"{delivery.driver.first_name} {delivery.driver.last_name}"
+                            if delivery.driver
                             else "Unassigned"
                         ),
                     },

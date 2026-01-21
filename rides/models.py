@@ -340,5 +340,68 @@ class CourierRequest(models.Model):
 
     def __str__(self):
         return (
-            f"CourierRequest {self.id} by {self.customer.email} ({self.status})" # noqa
+            f"Ride {self.id} by {self.customer.email} ({self.status})" # noqa
         )
+
+
+class RideRating(models.Model):
+    """
+    Model for rating ride service
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    ride = models.OneToOneField(
+        Ride, on_delete=models.CASCADE, related_name="rating"
+    )
+    customer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ride_ratings_given"
+    )
+    driver = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ride_ratings_received"
+    )
+
+    # Rating details
+    overall_rating = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+    driving_skill_rating = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+    punctuality_rating = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+    vehicle_condition_rating = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+    communication_rating = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+
+    # Feedback
+    comment = models.TextField(blank=True)
+    rated_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-rated_at']
+        indexes = [
+            models.Index(fields=['ride']),
+            models.Index(fields=['customer']),
+            models.Index(fields=['driver']),
+            models.Index(fields=['overall_rating']),
+            models.Index(fields=['rated_at']),
+        ]
+
+    def __str__(self):
+        return f"Rating for Ride {self.ride.id[:8]} - {self.overall_rating}/5"
+
+    @property
+    def average_rating(self):
+        """Calculate the average of all rating fields"""
+        ratings = [
+            self.overall_rating,
+            self.driving_skill_rating,
+            self.punctuality_rating,
+            self.vehicle_condition_rating,
+            self.communication_rating,
+        ]
+        return sum(ratings) / len(ratings)
