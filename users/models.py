@@ -1239,3 +1239,107 @@ class FileSecurityAudit(models.Model):
     
     def __str__(self):
         return f"{self.audit_type} - {self.user.email} - {self.file_path}"
+
+
+class ContactMessage(models.Model):
+    """
+    Model to store contact us messages from users
+    """
+    STATUS_CHOICES = (
+        ('pending', _('Pending')),
+        ('in_progress', _('In Progress')),
+        ('resolved', _('Resolved')),
+        ('closed', _('Closed')),
+    )
+
+    first_name = models.CharField(_('first name'), max_length=100)
+    last_name = models.CharField(_('last name'), max_length=100)
+    email = models.EmailField(_('email address'))
+    contact_number = models.CharField(_('contact number'), max_length=20)
+    message = models.TextField(_('message'))
+    company_name = models.CharField(_('company name'), max_length=200, blank=True, null=True)
+    status = models.CharField(
+        _('status'),
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending'
+    )
+    is_read = models.BooleanField(_('is read'), default=False)
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('updated at'), auto_now=True)
+    responded_at = models.DateTimeField(_('responded at'), blank=True, null=True)
+    response_notes = models.TextField(_('response notes'), blank=True)
+
+    class Meta:
+        verbose_name = _('contact message')
+        verbose_name_plural = _('contact messages')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['email']),
+            models.Index(fields=['status']),
+            models.Index(fields=['is_read']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name} - {self.email}"
+
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}"
+
+
+class EmailSubscription(models.Model):
+    """
+    Model to store email subscription requests
+    """
+    STATUS_CHOICES = (
+        ('active', _('Active')),
+        ('unsubscribed', _('Unsubscribed')),
+        ('bounced', _('Bounced')),
+        ('complained', _('Complained')),
+    )
+
+    email = models.EmailField(_('email address'), unique=True)
+    first_name = models.CharField(_('first name'), max_length=100, blank=True)
+    last_name = models.CharField(_('last name'), max_length=100, blank=True)
+    status = models.CharField(
+        _('status'),
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='active'
+    )
+    subscribed_at = models.DateTimeField(_('subscribed at'), auto_now_add=True)
+    unsubscribed_at = models.DateTimeField(_('unsubscribed at'), blank=True, null=True)
+    source = models.CharField(_('subscription source'), max_length=100, default='website')
+    ip_address = models.GenericIPAddressField(_('IP address'), blank=True, null=True)
+    user_agent = models.TextField(_('user agent'), blank=True)
+
+    class Meta:
+        verbose_name = _('email subscription')
+        verbose_name_plural = _('email subscriptions')
+        ordering = ['-subscribed_at']
+        indexes = [
+            models.Index(fields=['email']),
+            models.Index(fields=['status']),
+            models.Index(fields=['subscribed_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.email} ({self.status})"
+
+    @property
+    def full_name(self):
+        if self.first_name or self.last_name:
+            return f"{self.first_name} {self.last_name}".strip()
+        return "Anonymous"
+
+    def unsubscribe(self):
+        """Mark the subscription as unsubscribed"""
+        self.status = 'unsubscribed'
+        self.unsubscribed_at = timezone.now()
+        self.save()
+
+    def is_active(self):
+        """Check if the subscription is active"""
+        return self.status == 'active'

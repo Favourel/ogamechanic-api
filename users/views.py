@@ -35,6 +35,10 @@ from .serializers import (
     StepFourMechanicDetailsSerializer,
     StepFivePasswordSerializer,
     CustomTokenObtainPairSerializer,
+    ContactMessageCreateSerializer,
+    EmailSubscriptionCreateSerializer,
+    ContactMessageSerializer,
+    EmailSubscriptionSerializer,
 )
 from django.core.files.storage import default_storage
 from ogamechanic.modules.utils import (
@@ -6897,3 +6901,111 @@ class PrimaryUserProfileView(APIView):
     def patch(self, request):
         """Partial update of user profile details"""
         return self.put(request)
+
+
+class ContactUsView(APIView):
+    """
+    API endpoint for users to submit contact messages
+    """
+    permission_classes = [AllowAny]  # Allow anyone to contact us
+
+    @swagger_auto_schema(
+        operation_summary="Submit Contact Message",
+        operation_description="""
+        **Submit a contact message**
+
+        This endpoint allows users (authenticated or anonymous) to submit contact messages.
+        All fields except company_name are required.
+        """,
+        request_body=ContactMessageCreateSerializer,
+        responses={
+            201: openapi.Response("Contact message submitted successfully", ContactMessageSerializer),
+            400: "Bad Request - Validation Error",
+        },
+    )
+    def post(self, request):
+        """
+        Create a new contact message
+        """
+        serializer = ContactMessageCreateSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+
+        if serializer.is_valid():
+            contact_message = serializer.save()
+
+            # Log the contact message submission
+            logger.info(f"Contact message submitted by {contact_message.email}")
+
+            return Response(
+                api_response(
+                    message="Thank you for contacting us! We will get back to you soon.",
+                    status=True,
+                    data=ContactMessageSerializer(contact_message).data
+                ),
+                status=http_status.HTTP_201_CREATED
+            )
+
+        return Response(
+            api_response(
+                message="Please correct the errors below.",
+                status=False,
+                errors=serializer.errors
+            ),
+            status=http_status.HTTP_400_BAD_REQUEST
+        )
+
+
+class SubscribeView(APIView):
+    """
+    API endpoint for email subscription
+    """
+    permission_classes = [AllowAny]  # Allow anyone to subscribe
+
+    @swagger_auto_schema(
+        operation_summary="Subscribe to Newsletter",
+        operation_description="""
+        **Subscribe to email newsletter**
+
+        This endpoint allows users to subscribe to the email newsletter.
+        Email is required, names are optional.
+        """,
+        request_body=EmailSubscriptionCreateSerializer,
+        responses={
+            201: openapi.Response("Successfully subscribed to newsletter", EmailSubscriptionSerializer),
+            400: "Bad Request - Validation Error",
+        },
+    )
+    def post(self, request):
+        """
+        Create a new email subscription
+        """
+        serializer = EmailSubscriptionCreateSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+
+        if serializer.is_valid():
+            subscription = serializer.save()
+
+            # Log the subscription
+            logger.info(f"Email subscription created for {subscription.email}")
+
+            return Response(
+                api_response(
+                    message="Successfully subscribed to our newsletter!",
+                    status=True,
+                    data=EmailSubscriptionSerializer(subscription).data
+                ),
+                status=http_status.HTTP_201_CREATED
+            )
+
+        return Response(
+            api_response(
+                message="Please correct the errors below.",
+                status=False,
+                errors=serializer.errors
+            ),
+            status=http_status.HTTP_400_BAD_REQUEST
+        )

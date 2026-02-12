@@ -13,6 +13,8 @@ from .models import (
     SecureDocument,
     DocumentVerificationLog,
     FileSecurityAudit,
+    ContactMessage,
+    EmailSubscription,
 )
 from ogamechanic.modules.utils import api_response
 from ogamechanic.modules.exceptions import InvalidRequestException
@@ -1665,3 +1667,216 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
             'refresh': str(refresh),
             'access': str(refresh.access_token),
         }
+
+
+class ContactMessageSerializer(serializers.ModelSerializer):
+    """
+    Serializer for contact us messages
+    """
+    full_name = serializers.ReadOnlyField()
+
+    class Meta:
+        model = ContactMessage
+        fields = [
+            'id',
+            'first_name',
+            'last_name',
+            'full_name',
+            'email',
+            'contact_number',
+            'message',
+            'company_name',
+            'status',
+            'is_read',
+            'created_at',
+            'updated_at',
+            'responded_at',
+            'response_notes',
+        ]
+        read_only_fields = [
+            'id',
+            'status',
+            'is_read',
+            'created_at',
+            'updated_at',
+            'responded_at',
+            'response_notes',
+            'full_name',
+        ]
+
+    def create(self, validated_data):
+        # Get IP address and user agent from request if available
+        request = self.context.get('request')
+        if request:
+            validated_data['ip_address'] = self.get_client_ip(request)
+            validated_data['user_agent'] = request.META.get('HTTP_USER_AGENT', '')
+
+        return super().create(validated_data)
+
+    def get_client_ip(self, request):
+        """Get the client IP address from the request"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
+
+
+class ContactMessageCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating contact messages (limited fields)
+    """
+    class Meta:
+        model = ContactMessage
+        fields = [
+            'first_name',
+            'last_name',
+            'email',
+            'contact_number',
+            'message',
+            'company_name',
+        ]
+
+    def validate_email(self, value):
+        """Validate email format"""
+        if not value or '@' not in value:
+            raise serializers.ValidationError("Please enter a valid email address.")
+        return value.lower().strip()
+
+    def validate_contact_number(self, value):
+        """Basic phone number validation"""
+        if not value:
+            raise serializers.ValidationError("Contact number is required.")
+        # Remove any non-digit characters for basic validation
+        digits_only = ''.join(filter(str.isdigit, value))
+        if len(digits_only) < 7:
+            raise serializers.ValidationError("Please enter a valid contact number.")
+        return value
+
+    def validate_message(self, value):
+        """Validate message content"""
+        if not value or len(value.strip()) < 10:
+            raise serializers.ValidationError("Message must be at least 10 characters long.")
+        return value.strip()
+
+
+class EmailSubscriptionSerializer(serializers.ModelSerializer):
+    """
+    Serializer for email subscriptions
+    """
+    full_name = serializers.ReadOnlyField()
+
+    class Meta:
+        model = EmailSubscription
+        fields = [
+            'id',
+            'email',
+            'first_name',
+            'last_name',
+            'full_name',
+            'status',
+            'subscribed_at',
+            'unsubscribed_at',
+            'source',
+        ]
+        read_only_fields = [
+            'id',
+            'status',
+            'subscribed_at',
+            'unsubscribed_at',
+            'full_name',
+        ]
+
+
+class EmailSubscriptionCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating email subscriptions
+    """
+    class Meta:
+        model = EmailSubscription
+        fields = [
+            'email',
+            'first_name',
+            'last_name',
+        ]
+
+    def validate_email(self, value):
+        """Validate email format and check for duplicates"""
+        if not value or '@' not in value:
+            raise serializers.ValidationError("Please enter a valid email address.")
+
+        # Check if email is already subscribed and active
+        email = value.lower().strip()
+        existing = EmailSubscription.objects.filter(
+            email=email,
+            status='active'
+        ).first()
+
+        if existing:
+            raise serializers.ValidationError(
+                "This email address is already subscribed to our newsletter."
+            )
+
+        return email
+
+    def create(self, validated_data):
+        # Get additional metadata from request if available
+        request = self.context.get('request')
+        if request:
+            # Try to get IP and user agent
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                ip = x_forwarded_for.split(',')[0]
+            else:
+                ip = request.META.get('REMOTE_ADDR')
+            validated_data['ip_address'] = ip
+            validated_data['user_agent'] = request.META.get('HTTP_USER_AGENT', '')
+
+        return super().create(validated_data)
+
+
+class ContactMessageAdminSerializer(serializers.ModelSerializer):
+    """
+    Serializer for admin contact message management
+    """
+    full_name = serializers.ReadOnlyField()
+
+    class Meta:
+        model = ContactMessage
+        fields = [
+            'id',
+            'first_name',
+            'last_name',
+            'full_name',
+            'email',
+            'contact_number',
+            'message',
+            'company_name',
+            'status',
+            'is_read',
+            'created_at',
+            'updated_at',
+            'responded_at',
+            'response_notes',
+        ]
+        read_only_fields = [
+            'id',
+            'first_name',
+            'last_name',
+            'full_name',
+            'email',
+            'contact_number',
+            'message',
+            'company_name',
+            'created_at',
+            'updated_at',
+        ]
+
+    def update(self, instance, validated_data):
+        # Automatically set responded_at when status changes to resolved or closed
+        new_status = validated_data.get('status')
+        if new_status in ['resolved', 'closed'] and instance.status not in ['resolved', 'closed']:
+            validated_data['responded_at'] = timezone.now()
+
+        return super().update(instance, validated_data)

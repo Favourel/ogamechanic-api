@@ -1,6 +1,6 @@
 from rest_framework import status as http_status
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAdminUser, AllowAny
+from rest_framework.permissions import IsAdminUser, AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 from drf_yasg.utils import swagger_auto_schema
@@ -23,6 +23,8 @@ from users.serializers import (
     DriverProfileSerializer,
     CustomTokenObtainPairSerializer,
     PasswordResetSerializer,
+    ContactMessageSerializer,
+    ContactMessageAdminSerializer,
 )
 from products.models import Order, OrderItem, ProductReview
 from products.serializers import CategorySerializer
@@ -4722,3 +4724,255 @@ class AdminChatMessageView(APIView):
                     message="Original message not found", status=False),
                 status=404,
             )
+
+
+class ContactMessageListView(APIView):
+    """
+    API endpoint for admins to view and manage contact messages
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        """Check if user is admin"""
+        if self.request.method in ['GET', 'PUT', 'PATCH']:
+            return [IsAuthenticated()]  # Allow authenticated users to view
+        return [IsAuthenticated()]
+
+    @swagger_auto_schema(
+        operation_summary="List Contact Messages",
+        operation_description="""
+        **List all contact messages**
+
+        This endpoint allows admins to view contact messages with filtering options.
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                'status',
+                openapi.IN_QUERY,
+                description="Filter by status (pending, in_progress, resolved, closed)",
+                type=openapi.TYPE_STRING,
+                enum=['pending', 'in_progress', 'resolved', 'closed']
+            ),
+            openapi.Parameter(
+                'is_read',
+                openapi.IN_QUERY,
+                description="Filter by read status (true/false)",
+                type=openapi.TYPE_BOOLEAN
+            ),
+            openapi.Parameter(
+                'search',
+                openapi.IN_QUERY,
+                description="Search in name, email, or message content",
+                type=openapi.TYPE_STRING
+            ),
+        ],
+        responses={
+            200: openapi.Response("Contact messages list", ContactMessageSerializer(many=True)),
+            401: "Unauthorized",
+        },
+    )
+    def get(self, request):
+        """
+        List contact messages with filtering
+        """
+        from users.models import ContactMessage
+
+        queryset = ContactMessage.objects.all()
+
+        # Apply filters
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        is_read_filter = request.query_params.get('is_read')
+        if is_read_filter is not None:
+            is_read = is_read_filter.lower() in ('true', '1', 'yes')
+            queryset = queryset.filter(is_read=is_read)
+
+        search_query = request.query_params.get('search')
+        if search_query:
+            queryset = queryset.filter(
+                models.Q(first_name__icontains=search_query) |
+                models.Q(last_name__icontains=search_query) |
+                models.Q(email__icontains=search_query) |
+                models.Q(message__icontains=search_query) |
+                models.Q(company_name__icontains=search_query)
+            )
+
+        # Order by creation date (newest first)
+        queryset = queryset.order_by('-created_at')
+
+        serializer = ContactMessageSerializer(queryset, many=True)
+        return Response(
+            api_response(
+                message="Contact messages retrieved successfully",
+                status=True,
+                data=serializer.data
+            )
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Update Contact Message",
+        operation_description="""
+        **Update contact message status**
+
+        This endpoint allows admins to update contact message status and response notes.
+        """,
+        request_body=ContactMessageAdminSerializer,
+        responses={
+            200: openapi.Response("Contact message updated", ContactMessageSerializer),
+            400: "Bad Request",
+            404: "Not Found",
+            401: "Unauthorized",
+        },
+    )
+    def patch(self, request, message_id=None):
+        """
+        Update a specific contact message (status, notes, etc.)
+        """
+        from users.models import ContactMessage
+
+        if not message_id:
+            return Response(
+                api_response(message="Message ID is required", status=False),
+                status=400
+            )
+
+        try:
+            message = ContactMessage.objects.get(id=message_id)
+        except ContactMessage.DoesNotExist:
+            return Response(
+                api_response(message="Contact message not found", status=False),
+                status=404
+            )
+
+        serializer = ContactMessageAdminSerializer(
+            message,
+            data=request.data,
+            partial=True
+        )
+
+        if serializer.is_valid():
+            updated_message = serializer.save()
+
+            # Log the update
+            logger.info(f"Contact message {message_id} updated by {request.user.email}")
+
+            return Response(
+                api_response(
+                    message="Contact message updated successfully",
+                    status=True,
+                    data=ContactMessageSerializer(updated_message).data
+                )
+            )
+
+        return Response(
+            api_response(
+                message="Validation failed",
+                status=False,
+                errors=serializer.errors
+            ),
+            status=400
+        )
+
+
+class ContactMessageDetailView(APIView):
+    """
+    API endpoint for admins to view and update individual contact messages
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="Get Contact Message Details",
+        operation_description="""
+        **Get detailed contact message information**
+
+        This endpoint allows admins to view detailed information about a specific contact message.
+        """,
+        responses={
+            200: openapi.Response("Contact message details", ContactMessageSerializer),
+            404: "Not Found",
+            401: "Unauthorized",
+        },
+    )
+    def get(self, request, message_id):
+        """
+        Get a specific contact message
+        """
+        from users.models import ContactMessage
+
+        try:
+            message = ContactMessage.objects.get(id=message_id)
+        except ContactMessage.DoesNotExist:
+            return Response(
+                api_response(message="Contact message not found", status=False),
+                status=404
+            )
+
+        # Mark as read if not already read
+        if not message.is_read:
+            message.is_read = True
+            message.save()
+
+        serializer = ContactMessageSerializer(message)
+        return Response(
+            api_response(
+                message="Contact message retrieved successfully",
+                status=True,
+                data=serializer.data
+            )
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Update Contact Message",
+        operation_description="""
+        **Update contact message details**
+
+        This endpoint allows admins to update contact message status, response notes, etc.
+        """,
+        request_body=ContactMessageAdminSerializer,
+        responses={
+            200: openapi.Response("Contact message updated", ContactMessageSerializer),
+            400: "Bad Request",
+            404: "Not Found",
+            401: "Unauthorized",
+        },
+    )
+    def put(self, request, message_id):
+        """
+        Update a contact message
+        """
+        from users.models import ContactMessage
+
+        try:
+            message = ContactMessage.objects.get(id=message_id)
+        except ContactMessage.DoesNotExist:
+            return Response(
+                api_response(message="Contact message not found", status=False),
+                status=404
+            )
+
+        serializer = ContactMessageAdminSerializer(message, data=request.data)
+
+        if serializer.is_valid():
+            updated_message = serializer.save()
+
+            # Log the update
+            logger.info(f"Contact message {message_id} updated by {request.user.email}")
+
+            return Response(
+                api_response(
+                    message="Contact message updated successfully",
+                    status=True,
+                    data=ContactMessageSerializer(updated_message).data
+                )
+            )
+
+        return Response(
+            api_response(
+                message="Validation failed",
+                status=False,
+                errors=serializer.errors
+            ),
+            status=400
+        )

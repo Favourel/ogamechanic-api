@@ -227,4 +227,15 @@ urlpatterns = [
         views.CACUploadView.as_view(),
         name='cac-upload'
     ),
+    # Contact and subscription endpoints
+    path(
+        'contact/',
+        views.ContactUsView.as_view(),
+        name='contact_us'
+    ),
+    path(
+        'subscribe/',
+        views.SubscribeView.as_view(),
+        name='subscribe'
+    ),
 ]

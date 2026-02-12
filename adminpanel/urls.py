@@ -30,6 +30,9 @@ from .views import (
     MechanicReviewManagementView,
     DriverReviewManagementView,
     AdminChatMessageView,
+    # Contact Message Management
+    ContactMessageListView,
+    ContactMessageDetailView,
 )
 
 app_name = 'adminpanel'
@@ -173,5 +176,21 @@ urlpatterns = [
         'feedback/chat/messages/',
         AdminChatMessageView.as_view(),
         name='admin-chat-messages'
+    ),
+    # Contact Message Management endpoints
+    path(
+        'contact/messages/',
+        ContactMessageListView.as_view(),
+        name='contact-messages'
+    ),
+    path(
+        'contact/messages/<uuid:message_id>/',
+        ContactMessageDetailView.as_view(),
+        name='contact-message-detail'
+    ),
+    path(
+        'contact/messages/<uuid:message_id>/update/',
+        ContactMessageListView.as_view(),
+        name='contact-message-update'
     ),
 ]
