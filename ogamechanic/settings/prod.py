@@ -72,6 +72,7 @@ CELERY_RESULT_SERIALIZER = "json"
 # CORS settings
 CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS').split(',') # noqa
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -83,8 +84,28 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
     'x-api-key',
+    'cache-control',
+    'pragma',
+    "ipAddress", "browser", "os", "device"
+]
+# Allow common HTTP methods
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
 ]
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
+# CORS response headers (override/extend base settings if needed)
+CORS_EXPOSE_HEADERS = [
+    'content-type',
+    'x-csrf-token',
+    'x-total-count',
+    'x-page-count',
+    'x-page-size',
+]
 
 # Logging
 LOGGING = {

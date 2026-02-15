@@ -191,42 +191,6 @@ urlpatterns = [
         name='paystack-webhook'
     ),
 
-    # Security and File Storage
-    path(
-        'documents/',
-        views.SecureDocumentListCreateView.as_view(),
-        name='secure-document-list-create'
-    ),
-    path(
-        'documents/<uuid:document_id>/',
-        views.SecureDocumentDetailView.as_view(),
-        name='secure-document-detail'
-    ),
-    path(
-        'documents/<uuid:document_id>/verify/',
-        views.DocumentVerificationView.as_view(),
-        name='document-verification'
-    ),
-    path(
-        'documents/verification-logs/',
-        views.DocumentVerificationLogView.as_view(),
-        name='document-verification-logs'
-    ),
-    path(
-        'documents/security-audits/',
-        views.FileSecurityAuditView.as_view(),
-        name='file-security-audits'
-    ),
-    path(
-        'files/upload/',
-        views.FileUploadView.as_view(),
-        name='file-upload'
-    ),
-    path(
-        'files/cac-upload/',
-        views.CACUploadView.as_view(),
-        name='cac-upload'
-    ),
     # Contact and subscription endpoints
     path(
         'contact/',
