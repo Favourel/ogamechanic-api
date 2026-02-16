@@ -58,17 +58,9 @@ class DocsAccessPermission(BasePermission):
 #         API_SCHEMES = ['http']
 
 
-# API_URL = 'http://127.0.0.1:2340'
-# API_SCHEMES = ['http']
-
-if 'api.ogamechanic.org' in settings.ALLOWED_HOSTS: # noqa
-    # Production configuration
-    API_URL = 'https://api.ogamechanic.org'
-    API_SCHEMES = ['https']
-else:
-    # Development configuration
-    API_URL = 'http://127.0.0.1:2340'
-    API_SCHEMES = ['http']
+# Production configuration
+API_URL = 'https://api.ogamechanic.org'
+API_SCHEMES = ['https']
 
 schema_view = get_schema_view(
     openapi.Info(
