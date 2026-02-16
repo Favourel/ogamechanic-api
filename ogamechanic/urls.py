@@ -22,6 +22,8 @@ from drf_yasg import openapi
 from rest_framework.permissions import BasePermission, AllowAny
 from django.conf.urls.static import static
 import os
+from dotenv import load_dotenv
+load_dotenv()
 # from ogamechanic.health_views import (
 #     health_check, readiness_check)
 
