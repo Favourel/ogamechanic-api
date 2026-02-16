@@ -46,9 +46,9 @@ class DocsAccessPermission(BasePermission):
 
 if os.getenv('env', 'dev') == 'prod':
     # Determine the URL and schemes based on environment
-    if 'untrustingly-vicennial-herlinda.ngrok-free.dev' in settings.ALLOWED_HOSTS: # noqa
+    if 'api.ogamechanic.org' in settings.ALLOWED_HOSTS: # noqa
         # Production configuration
-        API_URL = 'https://untrustingly-vicennial-herlinda.ngrok-free.dev'
+        API_URL = 'https://api.ogamechanic.org'
         API_SCHEMES = ['https']
     else:
         # Development configuration

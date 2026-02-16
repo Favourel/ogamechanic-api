@@ -193,4 +193,9 @@ urlpatterns = [
         ContactMessageListView.as_view(),
         name='contact-message-update'
     ),
+    path(
+        'subscribers/',
+        EmailSubscriptionListView.as_view(),
+        name='email-subscribers'
+    ),
 ]

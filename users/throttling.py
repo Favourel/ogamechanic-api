@@ -13,5 +13,5 @@ class UserRateThrottle(UserRateThrottle):
     """
     Throttle for authenticated users.
     """
-    rate = '20/minute'  # 20 requests per minute
+    rate = '300/minute'  # 300 requests per minute
     scope = 'user'

@@ -25,6 +25,7 @@ from users.serializers import (
     PasswordResetSerializer,
     ContactMessageSerializer,
     ContactMessageAdminSerializer,
+    EmailSubscriptionSerializer,
 )
 from products.models import Order, OrderItem, ProductReview
 from products.serializers import CategorySerializer
@@ -4811,22 +4812,22 @@ class ContactMessageListView(APIView):
             )
         )
 
-    @swagger_auto_schema(
-        operation_summary="Update Contact Message",
-        operation_description="""
-        **Update contact message status**
+    # @swagger_auto_schema(
+    #     operation_summary="Update Contact Message",
+    #     operation_description="""
+    #     **Update contact message status**
 
-        This endpoint allows admins to update contact message status and response notes.
-        """,
-        request_body=ContactMessageAdminSerializer,
-        responses={
-            200: openapi.Response("Contact message updated", ContactMessageSerializer),
-            400: "Bad Request",
-            404: "Not Found",
-            401: "Unauthorized",
-        },
-    )
-    def patch(self, request, message_id=None):
+    #     This endpoint allows admins to update contact message status and response notes.
+    #     """,
+    #     request_body=ContactMessageAdminSerializer,
+    #     responses={
+    #         200: openapi.Response("Contact message updated", ContactMessageSerializer),
+    #         400: "Bad Request",
+    #         404: "Not Found",
+    #         401: "Unauthorized",
+    #     },
+    # )
+    # def patch(self, request, message_id=None):
         """
         Update a specific contact message (status, notes, etc.)
         """
@@ -4923,22 +4924,83 @@ class ContactMessageDetailView(APIView):
             )
         )
 
-    @swagger_auto_schema(
-        operation_summary="Update Contact Message",
-        operation_description="""
-        **Update contact message details**
 
-        This endpoint allows admins to update contact message status, response notes, etc.
+class EmailSubscriptionListView(APIView):
+    """API endpoint for admins to view email subscribers"""
+
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="List Email Subscribers",
+        operation_description="""
+        **List all email subscribers**
+
+        This endpoint allows admins to view email subscriptions with optional filtering.
         """,
-        request_body=ContactMessageAdminSerializer,
+        manual_parameters=[
+            openapi.Parameter(
+                'status',
+                openapi.IN_QUERY,
+                description="Filter by status (active, unsubscribed)",
+                type=openapi.TYPE_STRING,
+                enum=['active', 'unsubscribed']
+            ),
+            openapi.Parameter(
+                'search',
+                openapi.IN_QUERY,
+                description="Search by email, first name, or last name",
+                type=openapi.TYPE_STRING
+            ),
+        ],
         responses={
-            200: openapi.Response("Contact message updated", ContactMessageSerializer),
-            400: "Bad Request",
-            404: "Not Found",
+            200: openapi.Response("Subscribers list", EmailSubscriptionSerializer(many=True)),
             401: "Unauthorized",
         },
     )
-    def put(self, request, message_id):
+    def get(self, request):
+        from users.models import EmailSubscription
+
+        queryset = EmailSubscription.objects.all()
+
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        search_query = request.query_params.get('search')
+        if search_query:
+            queryset = queryset.filter(
+                models.Q(email__icontains=search_query) |
+                models.Q(first_name__icontains=search_query) |
+                models.Q(last_name__icontains=search_query)
+            )
+
+        queryset = queryset.order_by('-subscribed_at')
+        serializer = EmailSubscriptionSerializer(queryset, many=True)
+
+        return Response(
+            api_response(
+                message="Subscribers retrieved successfully",
+                status=True,
+                data=serializer.data,
+            )
+        )
+
+    # @swagger_auto_schema(
+    #     operation_summary="Update Contact Message",
+    #     operation_description="""
+    #     **Update contact message details**
+
+    #     This endpoint allows admins to update contact message status, response notes, etc.
+    #     """,
+    #     request_body=ContactMessageAdminSerializer,
+    #     responses={
+    #         200: openapi.Response("Contact message updated", ContactMessageSerializer),
+    #         400: "Bad Request",
+    #         404: "Not Found",
+    #         401: "Unauthorized",
+    #     },
+    # )
+    # def put(self, request, message_id):
         """
         Update a contact message
         """
