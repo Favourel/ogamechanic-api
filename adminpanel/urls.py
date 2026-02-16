@@ -33,6 +33,7 @@ from .views import (
     # Contact Message Management
     ContactMessageListView,
     ContactMessageDetailView,
+    EmailSubscriptionListView,
 )
 
 app_name = 'adminpanel'

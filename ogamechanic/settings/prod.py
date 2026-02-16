@@ -137,17 +137,17 @@ LOGGING = {
     'loggers': {
         'django': {
             'handlers': ['file'],
-            'level': 'INFO',
+            'level': 'ERROR',
             'propagate': True,
         },
         'django.server': {
             'handlers': ['file'],
-            'level': 'INFO',
+            'level': 'ERROR',
             'propagate': True,
         },
         'django.request': {
             'handlers': ['file'],
-            'level': 'INFO',
+            'level': 'ERROR',
             'propagate': True,
         },
     },
