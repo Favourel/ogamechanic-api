@@ -4925,6 +4925,642 @@ class ContactMessageDetailView(APIView):
         )
 
 
+class PrimaryUserProfileSummaryView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def _get_primary_user(self, user_id):
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return None, Response(
+                api_response(message="User not found", status=False), status=404
+            )
+
+        if not user.roles.filter(name="primary_user").exists():
+            return None, Response(
+                api_response(message="User is not a primary user", status=False),
+                status=400,
+            )
+
+        return user, None
+
+    def _parse_date_range(self, request):
+        from django.utils.dateparse import parse_datetime, parse_date
+
+        from_param = request.query_params.get("from")
+        to_param = request.query_params.get("to")
+
+        start_dt = None
+        end_dt = None
+
+        if from_param:
+            start_dt = parse_datetime(from_param)
+            if start_dt is None:
+                start_date = parse_date(from_param)
+                if start_date is not None:
+                    start_dt = timezone.make_aware(
+                        timezone.datetime.combine(start_date, timezone.datetime.min.time())
+                    )
+
+        if to_param:
+            end_dt = parse_datetime(to_param)
+            if end_dt is None:
+                end_date = parse_date(to_param)
+                if end_date is not None:
+                    end_dt = timezone.make_aware(
+                        timezone.datetime.combine(end_date, timezone.datetime.max.time())
+                    )
+
+        return start_dt, end_dt
+
+    def get(self, request, user_id):
+        status_, data = get_incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        user, error_response = self._get_primary_user(user_id)
+        if error_response is not None:
+            return error_response
+
+        start_dt, end_dt = self._parse_date_range(request)
+
+        summary = {
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "phone_number": user.phone_number,
+                "is_active": user.is_active,
+                "is_verified": user.is_verified,
+                "date_joined": user.date_joined.isoformat() if user.date_joined else None,
+                "last_login": user.last_login.isoformat() if user.last_login else None,
+            },
+            "patronage": {},
+        }
+
+        # Mechanic patronage
+        try:
+            from mechanics.models import RepairRequest
+
+            repairs = RepairRequest.objects.filter(customer=user)
+            if start_dt:
+                repairs = repairs.filter(requested_at__gte=start_dt)
+            if end_dt:
+                repairs = repairs.filter(requested_at__lte=end_dt)
+
+            summary["patronage"]["mechanic"] = {
+                "total": repairs.count(),
+                "pending": repairs.filter(status="pending").count(),
+                "accepted": repairs.filter(status="accepted").count(),
+                "in_progress": repairs.filter(status="in_progress").count(),
+                "completed": repairs.filter(status="completed").count(),
+                "cancelled": repairs.filter(status="cancelled").count(),
+                "last_request_at": (
+                    repairs.order_by("-requested_at").values_list("requested_at", flat=True).first()
+                ),
+            }
+            if summary["patronage"]["mechanic"]["last_request_at"]:
+                summary["patronage"]["mechanic"]["last_request_at"] = (
+                    summary["patronage"]["mechanic"]["last_request_at"].isoformat()
+                )
+        except ImportError:
+            summary["patronage"]["mechanic"] = None
+
+        # Courier patronage
+        try:
+            from couriers.models import DeliveryRequest
+
+            deliveries = DeliveryRequest.objects.filter(customer=user)
+            if start_dt:
+                deliveries = deliveries.filter(requested_at__gte=start_dt)
+            if end_dt:
+                deliveries = deliveries.filter(requested_at__lte=end_dt)
+
+            summary["patronage"]["courier"] = {
+                "total": deliveries.count(),
+                "delivered": deliveries.filter(status="delivered").count(),
+                "cancelled": deliveries.filter(status="cancelled").count(),
+                "active": deliveries.filter(
+                    status__in=["pending", "assigned", "picked_up", "in_transit"]
+                ).count(),
+                "total_spend": float(
+                    deliveries.filter(payment_status="paid").aggregate(total=Sum("total_fare")).get("total")
+                    or 0
+                ),
+                "last_requested_at": (
+                    deliveries.order_by("-requested_at").values_list("requested_at", flat=True).first()
+                ),
+            }
+            if summary["patronage"]["courier"]["last_requested_at"]:
+                summary["patronage"]["courier"]["last_requested_at"] = (
+                    summary["patronage"]["courier"]["last_requested_at"].isoformat()
+                )
+        except ImportError:
+            summary["patronage"]["courier"] = None
+
+        # Rides patronage
+        try:
+            from rides.models import Ride
+
+            rides = Ride.objects.filter(customer=user)
+            if start_dt:
+                rides = rides.filter(requested_at__gte=start_dt)
+            if end_dt:
+                rides = rides.filter(requested_at__lte=end_dt)
+
+            summary["patronage"]["rides"] = {
+                "total": rides.count(),
+                "completed": rides.filter(status="completed").count(),
+                "cancelled": rides.filter(status="cancelled").count(),
+                "active": rides.filter(status__in=["requested", "accepted", "in_progress"]).count(),
+                "total_spend": float(
+                    rides.filter(status="completed").aggregate(total=Sum("fare")).get("total") or 0
+                ),
+                "last_requested_at": (
+                    rides.order_by("-requested_at").values_list("requested_at", flat=True).first()
+                ),
+            }
+            if summary["patronage"]["rides"]["last_requested_at"]:
+                summary["patronage"]["rides"]["last_requested_at"] = (
+                    summary["patronage"]["rides"]["last_requested_at"].isoformat()
+                )
+        except ImportError:
+            summary["patronage"]["rides"] = None
+
+        # Rentals patronage
+        try:
+            from rentals.models import RentalBooking
+
+            rentals = RentalBooking.objects.filter(customer=user)
+            if start_dt:
+                rentals = rentals.filter(booked_at__gte=start_dt)
+            if end_dt:
+                rentals = rentals.filter(booked_at__lte=end_dt)
+
+            summary["patronage"]["rentals"] = {
+                "total": rentals.count(),
+                "completed": rentals.filter(status="completed").count(),
+                "cancelled": rentals.filter(status="cancelled").count(),
+                "active": rentals.filter(status__in=["confirmed", "active"]).count(),
+                "total_spend": float(
+                    rentals.filter(status__in=["confirmed", "active", "completed"]).aggregate(
+                        total=Sum("total_amount")
+                    ).get("total")
+                    or 0
+                ),
+                "last_booked_at": (
+                    rentals.order_by("-booked_at").values_list("booked_at", flat=True).first()
+                ),
+            }
+            if summary["patronage"]["rentals"]["last_booked_at"]:
+                summary["patronage"]["rentals"]["last_booked_at"] = (
+                    summary["patronage"]["rentals"]["last_booked_at"].isoformat()
+                )
+        except ImportError:
+            summary["patronage"]["rentals"] = None
+
+        # Product orders patronage
+        try:
+            orders = Order.objects.filter(customer=user)
+            if start_dt:
+                orders = orders.filter(created_at__gte=start_dt)
+            if end_dt:
+                orders = orders.filter(created_at__lte=end_dt)
+
+            summary["patronage"]["products"] = {
+                "total_orders": orders.count(),
+                "completed": orders.filter(status="completed").count(),
+                "cancelled": orders.filter(status="cancelled").count(),
+                "total_spend": float(
+                    orders.filter(status__in=["paid", "shipped", "completed"]).aggregate(
+                        total=Sum("total_amount")
+                    ).get("total")
+                    or 0
+                ),
+                "last_order_at": (
+                    orders.order_by("-created_at").values_list("created_at", flat=True).first()
+                ),
+            }
+            if summary["patronage"]["products"]["last_order_at"]:
+                summary["patronage"]["products"]["last_order_at"] = (
+                    summary["patronage"]["products"]["last_order_at"].isoformat()
+                )
+        except Exception:
+            summary["patronage"]["products"] = None
+
+        return Response(
+            api_response(
+                message="Primary user profile summary retrieved successfully",
+                status=True,
+                data=summary,
+            )
+        )
+
+
+class PrimaryUserProfileTabBaseView(PrimaryUserProfileSummaryView):
+    permission_classes = [IsAdminUser]
+
+    def _pagination(self, request):
+        limit = int(request.query_params.get("limit", 50))
+        offset = int(request.query_params.get("offset", 0))
+        return limit, offset
+
+    def _serialize_user_brief(self, user):
+        if user is None:
+            return None
+        return {
+            "id": str(user.id),
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+        }
+
+
+class PrimaryUserMechanicTabView(PrimaryUserProfileTabBaseView):
+    def get(self, request, user_id):
+        status_, data = get_incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        user, error_response = self._get_primary_user(user_id)
+        if error_response is not None:
+            return error_response
+
+        from mechanics.models import RepairRequest
+
+        start_dt, end_dt = self._parse_date_range(request)
+        limit, offset = self._pagination(request)
+
+        queryset = RepairRequest.objects.filter(customer=user).select_related("mechanic", "customer")
+        if start_dt:
+            queryset = queryset.filter(requested_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(requested_at__lte=end_dt)
+
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        total_count = queryset.count()
+        repairs = queryset.order_by("-requested_at")[offset : offset + limit]
+
+        items = []
+        for r in repairs:
+            items.append(
+                {
+                    "id": str(r.id),
+                    "status": r.status,
+                    "service_type": r.service_type,
+                    "vehicle_make": r.vehicle_make,
+                    "vehicle_model": r.vehicle_model,
+                    "vehicle_year": r.vehicle_year,
+                    "estimated_cost": float(r.estimated_cost) if r.estimated_cost else None,
+                    "actual_cost": float(r.actual_cost) if r.actual_cost else None,
+                    "requested_at": r.requested_at.isoformat() if r.requested_at else None,
+                    "accepted_at": r.accepted_at.isoformat() if r.accepted_at else None,
+                    "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                    "mechanic": self._serialize_user_brief(r.mechanic),
+                }
+            )
+
+        return Response(
+            api_response(
+                message="Primary user mechanic activities retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "repairs": items,
+                },
+            )
+        )
+
+
+class PrimaryUserCourierTabView(PrimaryUserProfileTabBaseView):
+    def get(self, request, user_id):
+        status_, data = get_incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        user, error_response = self._get_primary_user(user_id)
+        if error_response is not None:
+            return error_response
+
+        from couriers.models import DeliveryRequest
+
+        start_dt, end_dt = self._parse_date_range(request)
+        limit, offset = self._pagination(request)
+
+        queryset = DeliveryRequest.objects.filter(customer=user).select_related("driver", "customer")
+        if start_dt:
+            queryset = queryset.filter(requested_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(requested_at__lte=end_dt)
+
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        total_count = queryset.count()
+        deliveries = queryset.order_by("-requested_at")[offset : offset + limit]
+
+        items = []
+        for d in deliveries:
+            items.append(
+                {
+                    "id": str(d.id),
+                    "status": d.status,
+                    "payment_status": d.payment_status,
+                    "payment_method": d.payment_method,
+                    "total_fare": float(d.total_fare) if d.total_fare else 0,
+                    "requested_at": d.requested_at.isoformat() if d.requested_at else None,
+                    "assigned_at": d.assigned_at.isoformat() if d.assigned_at else None,
+                    "delivered_at": d.delivered_at.isoformat() if d.delivered_at else None,
+                    "pickup_address": d.pickup_address,
+                    "delivery_address": d.delivery_address,
+                    "driver": self._serialize_user_brief(d.driver),
+                }
+            )
+
+        return Response(
+            api_response(
+                message="Primary user courier activities retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "deliveries": items,
+                },
+            )
+        )
+
+
+class PrimaryUserRidesTabView(PrimaryUserProfileTabBaseView):
+    def get(self, request, user_id):
+        status_, data = get_incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        user, error_response = self._get_primary_user(user_id)
+        if error_response is not None:
+            return error_response
+
+        from rides.models import Ride
+
+        start_dt, end_dt = self._parse_date_range(request)
+        limit, offset = self._pagination(request)
+
+        queryset = Ride.objects.filter(customer=user).select_related("driver", "customer")
+        if start_dt:
+            queryset = queryset.filter(requested_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(requested_at__lte=end_dt)
+
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        total_count = queryset.count()
+        rides = queryset.order_by("-requested_at")[offset : offset + limit]
+
+        items = []
+        for r in rides:
+            items.append(
+                {
+                    "id": str(r.id),
+                    "status": r.status,
+                    "fare": float(r.fare) if r.fare else 0,
+                    "requested_at": r.requested_at.isoformat() if r.requested_at else None,
+                    "accepted_at": r.accepted_at.isoformat() if r.accepted_at else None,
+                    "started_at": r.started_at.isoformat() if r.started_at else None,
+                    "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                    "pickup_address": r.pickup_address,
+                    "dropoff_address": r.dropoff_address,
+                    "driver": self._serialize_user_brief(r.driver),
+                }
+            )
+
+        return Response(
+            api_response(
+                message="Primary user ride activities retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "rides": items,
+                },
+            )
+        )
+
+
+class PrimaryUserRentalsTabView(PrimaryUserProfileTabBaseView):
+    def get(self, request, user_id):
+        status_, data = get_incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        user, error_response = self._get_primary_user(user_id)
+        if error_response is not None:
+            return error_response
+
+        from rentals.models import RentalBooking
+
+        start_dt, end_dt = self._parse_date_range(request)
+        limit, offset = self._pagination(request)
+
+        queryset = RentalBooking.objects.filter(customer=user).select_related("customer", "product")
+        if start_dt:
+            queryset = queryset.filter(booked_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(booked_at__lte=end_dt)
+
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        total_count = queryset.count()
+        rentals = queryset.order_by("-booked_at")[offset : offset + limit]
+
+        items = []
+        for rb in rentals:
+            product = rb.product
+            items.append(
+                {
+                    "id": str(rb.id),
+                    "status": rb.status,
+                    "booking_reference": rb.booking_reference,
+                    "start_date": rb.start_date.isoformat() if rb.start_date else None,
+                    "end_date": rb.end_date.isoformat() if rb.end_date else None,
+                    "daily_rate": float(rb.daily_rate) if rb.daily_rate else None,
+                    "total_amount": float(rb.total_amount) if rb.total_amount else None,
+                    "booked_at": rb.booked_at.isoformat() if rb.booked_at else None,
+                    "product": {
+                        "id": str(product.id) if product else None,
+                        "name": product.name if product else None,
+                    },
+                }
+            )
+
+        return Response(
+            api_response(
+                message="Primary user rental activities retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "rentals": items,
+                },
+            )
+        )
+
+
+class PrimaryUserProductsTabView(PrimaryUserProfileTabBaseView):
+    def get(self, request, user_id):
+        status_, data = get_incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        user, error_response = self._get_primary_user(user_id)
+        if error_response is not None:
+            return error_response
+
+        start_dt, end_dt = self._parse_date_range(request)
+        limit, offset = self._pagination(request)
+
+        queryset = Order.objects.filter(customer=user)
+        if start_dt:
+            queryset = queryset.filter(created_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(created_at__lte=end_dt)
+
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        total_count = queryset.count()
+        orders = queryset.order_by("-created_at")[offset : offset + limit]
+
+        items = []
+        for o in orders:
+            items.append(
+                {
+                    "id": str(o.id),
+                    "status": o.status,
+                    "total_amount": float(o.total_amount) if o.total_amount else 0,
+                    "created_at": o.created_at.isoformat() if o.created_at else None,
+                    "updated_at": o.updated_at.isoformat() if o.updated_at else None,
+                }
+            )
+
+        return Response(
+            api_response(
+                message="Primary user product activities retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "orders": items,
+                },
+            )
+        )
+
+
+class PrimaryUserActivityLogTabView(PrimaryUserProfileTabBaseView):
+    def get(self, request, user_id):
+        status_, data = get_incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        user, error_response = self._get_primary_user(user_id)
+        if error_response is not None:
+            return error_response
+
+        from users.models import UserActivityLog
+
+        start_dt, end_dt = self._parse_date_range(request)
+        limit, offset = self._pagination(request)
+
+        queryset = UserActivityLog.objects.filter(user=user)
+        if start_dt:
+            queryset = queryset.filter(timestamp__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(timestamp__lte=end_dt)
+
+        action_filter = request.query_params.get("action")
+        category_filter = request.query_params.get("category")
+        severity_filter = request.query_params.get("severity")
+
+        if action_filter:
+            queryset = queryset.filter(action__icontains=action_filter)
+        if category_filter:
+            queryset = queryset.filter(category__icontains=category_filter)
+        if severity_filter:
+            queryset = queryset.filter(severity__iexact=severity_filter)
+
+        total_count = queryset.count()
+        logs = queryset.order_by("-timestamp")[offset : offset + limit]
+
+        items = []
+        for log in logs:
+            items.append(
+                {
+                    "id": str(log.id),
+                    "action": log.action,
+                    "category": log.category,
+                    "severity": log.severity,
+                    "success": log.success,
+                    "description": log.description,
+                    "object_type": log.object_type,
+                    "object_id": log.object_id,
+                    "request_method": log.request_method,
+                    "request_path": log.request_path,
+                    "response_status": log.response_status,
+                    "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+                    "metadata": log.metadata,
+                }
+            )
+
+        return Response(
+            api_response(
+                message="Primary user activity logs retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "activity_logs": items,
+                },
+            )
+        )
+
+
 class EmailSubscriptionListView(APIView):
     """API endpoint for admins to view email subscribers"""
 

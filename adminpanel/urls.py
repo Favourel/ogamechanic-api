@@ -34,6 +34,13 @@ from .views import (
     ContactMessageListView,
     ContactMessageDetailView,
     EmailSubscriptionListView,
+    PrimaryUserProfileSummaryView,
+    PrimaryUserMechanicTabView,
+    PrimaryUserCourierTabView,
+    PrimaryUserRidesTabView,
+    PrimaryUserRentalsTabView,
+    PrimaryUserProductsTabView,
+    PrimaryUserActivityLogTabView,
 )
 
 app_name = 'adminpanel'
@@ -198,5 +205,41 @@ urlpatterns = [
         'subscribers/',
         EmailSubscriptionListView.as_view(),
         name='email-subscribers'
+    ),
+
+    path(
+        'users/primary/<uuid:user_id>/profile/summary/',
+        PrimaryUserProfileSummaryView.as_view(),
+        name='primary-user-profile-summary',
+    ),
+    path(
+        'users/primary/<uuid:user_id>/profile/mechanic/',
+        PrimaryUserMechanicTabView.as_view(),
+        name='primary-user-profile-mechanic',
+    ),
+    path(
+        'users/primary/<uuid:user_id>/profile/courier/',
+        PrimaryUserCourierTabView.as_view(),
+        name='primary-user-profile-courier',
+    ),
+    path(
+        'users/primary/<uuid:user_id>/profile/rides/',
+        PrimaryUserRidesTabView.as_view(),
+        name='primary-user-profile-rides',
+    ),
+    path(
+        'users/primary/<uuid:user_id>/profile/rentals/',
+        PrimaryUserRentalsTabView.as_view(),
+        name='primary-user-profile-rentals',
+    ),
+    path(
+        'users/primary/<uuid:user_id>/profile/products/',
+        PrimaryUserProductsTabView.as_view(),
+        name='primary-user-profile-products',
+    ),
+    path(
+        'users/primary/<uuid:user_id>/profile/activity-logs/',
+        PrimaryUserActivityLogTabView.as_view(),
+        name='primary-user-profile-activity-logs',
     ),
 ]
