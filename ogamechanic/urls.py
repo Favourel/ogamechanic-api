@@ -73,7 +73,7 @@ schema_view = get_schema_view(
         contact=openapi.Contact(email="contact@example.com"),
         license=openapi.License(name="BSD License"),
     ),
-    public=settings.DEBUG,
+    public=True,
     permission_classes=(AllowAny,) if settings.DEBUG else (DocsAccessPermission,), # noqa
     url=API_URL,
 )
