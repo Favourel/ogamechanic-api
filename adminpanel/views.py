@@ -965,7 +965,7 @@ class AccountManagementView(APIView):
 
     def _get_primary_users(self, limit, offset, search, approved):
         """Get primary users"""
-        queryset = User.objects.filter(role="primary_user")
+        queryset = User.objects.filter(roles__name="primary_user")
 
         if approved:
             is_approved = approved.lower() == "true"
