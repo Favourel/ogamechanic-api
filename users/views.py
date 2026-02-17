@@ -1507,38 +1507,47 @@ class MerchantProfileManagementView(APIView):
                         "data": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                "id": openapi.Schema(
-                                    type=openapi.TYPE_INTEGER, description="Profile ID"
+                                "has_merchant_profile": openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN,
+                                    description="Indicates if user has a merchant profile",
                                 ),
-                                "user": openapi.Schema(
-                                    type=openapi.TYPE_STRING, description="User UUID"
-                                ),
-                                "location": openapi.Schema(type=openapi.TYPE_STRING),
-                                "lga": openapi.Schema(type=openapi.TYPE_STRING),
-                                "cac_number": openapi.Schema(type=openapi.TYPE_STRING),
-                                "cac_document": openapi.Schema(
-                                    type=openapi.TYPE_STRING,
-                                    description="URL to CAC document",
-                                ),
-                                "selfie": openapi.Schema(
-                                    type=openapi.TYPE_STRING,
-                                    description="URL to selfie",
-                                ),
-                                "business_address": openapi.Schema(
-                                    type=openapi.TYPE_STRING
-                                ),
-                                "profile_picture": openapi.Schema(
-                                    type=openapi.TYPE_STRING,
-                                    description="URL to profile picture",
-                                ),
-                                "is_approved": openapi.Schema(
-                                    type=openapi.TYPE_BOOLEAN, example=False
-                                ),
-                                "created_at": openapi.Schema(
-                                    type=openapi.TYPE_STRING, format="date-time"
-                                ),
-                                "updated_at": openapi.Schema(
-                                    type=openapi.TYPE_STRING, format="date-time"
+                                "merchant_profile": openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        "id": openapi.Schema(
+                                            type=openapi.TYPE_INTEGER, description="Profile ID"
+                                        ),
+                                        "user": openapi.Schema(
+                                            type=openapi.TYPE_STRING, description="User UUID"
+                                        ),
+                                        "location": openapi.Schema(type=openapi.TYPE_STRING),
+                                        "lga": openapi.Schema(type=openapi.TYPE_STRING),
+                                        "cac_number": openapi.Schema(type=openapi.TYPE_STRING),
+                                        "cac_document": openapi.Schema(
+                                            type=openapi.TYPE_STRING,
+                                            description="URL to CAC document",
+                                        ),
+                                        "selfie": openapi.Schema(
+                                            type=openapi.TYPE_STRING,
+                                            description="URL to selfie",
+                                        ),
+                                        "business_address": openapi.Schema(
+                                            type=openapi.TYPE_STRING
+                                        ),
+                                        "profile_picture": openapi.Schema(
+                                            type=openapi.TYPE_STRING,
+                                            description="URL to profile picture",
+                                        ),
+                                        "is_approved": openapi.Schema(
+                                            type=openapi.TYPE_BOOLEAN, example=False
+                                        ),
+                                        "created_at": openapi.Schema(
+                                            type=openapi.TYPE_STRING, format="date-time"
+                                        ),
+                                        "updated_at": openapi.Schema(
+                                            type=openapi.TYPE_STRING, format="date-time"
+                                        ),
+                                    },
                                 ),
                             },
                         ),
@@ -1580,26 +1589,53 @@ class MerchantProfileManagementView(APIView):
     )
     def get(self, request):
         from uuid import UUID
+        from users.models import User
 
-        target_user = request.user
+        merchant_user_uuid = request.query_params.get("merchant_user_uuid")
+        is_staff = getattr(request.user, "is_staff", False)
 
-        # Ensure the user is in the merchant role to view their own profile
-        if not (target_user.active_role and target_user.active_role.name == "merchant"):
+        is_own_profile = not bool(merchant_user_uuid)
+        if is_own_profile:
+            target_user = request.user
+
+            if not (
+                target_user.active_role and target_user.active_role.name == "merchant"
+            ):
+                return Response(
+                    api_response(
+                        message="Your active role must be 'merchant' to view your merchant profile.",
+                        status=False,
+                        data={
+                            "suggestion": "Use /api/users/switch-role/ to switch to the merchant role"
+                        },
+                    ),
+                    status=403,
+                )
+        else:
+            try:
+                UUID(merchant_user_uuid)
+            except Exception:
+                return Response(
+                    api_response(
+                        message="Invalid merchant_user_uuid.",
+                        status=False,
+                    ),
+                    status=400,
+                )
+
+            try:
+                target_user = User.objects.get(id=merchant_user_uuid)
+            except User.DoesNotExist:
+                return Response(
+                    api_response(message="User not found.", status=False),
+                    status=404,
+                )
+
+        has_merchant_role = target_user.roles.filter(name="merchant").exists()
+        if not has_merchant_role:
             return Response(
                 api_response(
-                    message="Your active role must be 'merchant' to view your merchant profile.",  # noqa
-                    status=False,
-                    data={
-                        "suggestion": "Use /api/users/switch-role/ to switch to the merchant role"
-                    },  # noqa
-                ),
-                status=403,
-            )
-        # Check if the target user has the 'merchant' role and an associated profile
-        if not target_user.roles.filter(name="merchant").exists():
-            return Response(
-                api_response(
-                    message="The specified user does not have a merchant role.",
+                    message="User does not have a merchant role.",
                     status=False,
                 ),
                 status=400,
@@ -1608,25 +1644,47 @@ class MerchantProfileManagementView(APIView):
         merchant_profile = getattr(target_user, "merchant_profile", None)
         if not merchant_profile:
             return Response(
-                api_response(
-                    message="Merchant profile not found for user.", status=False
-                ),
-                status=400,
+                api_response(message="Merchant profile not found.", status=False),
+                status=404,
             )
 
-        # For staff, profile owner, or authenticated, return full info.
         is_requester_owner = request.user.id == target_user.id
-        is_staff = getattr(request.user, "is_staff", False)
 
-        # Security: Optionally restrict access to profiles not yet approved for non-owners/non-admins # noqa
-        if not merchant_profile.is_approved and not (
-            is_staff or is_requester_owner
-        ):  # noqa
+        if not merchant_profile.is_approved and not (is_staff or is_requester_owner):
+            public_profile = {
+                "id": str(merchant_profile.id),
+                "user": str(target_user.id),
+                "location": merchant_profile.location,
+                "lga": merchant_profile.lga,
+                "profile_picture": (
+                    request.build_absolute_uri(merchant_profile.profile_picture.url)
+                    if getattr(merchant_profile, "profile_picture", None)
+                    and hasattr(merchant_profile.profile_picture, "url")
+                    else None
+                ),
+                "is_approved": merchant_profile.is_approved,
+                "created_at": (
+                    merchant_profile.created_at.isoformat()
+                    if merchant_profile.created_at
+                    else None
+                ),
+                "updated_at": (
+                    merchant_profile.updated_at.isoformat()
+                    if merchant_profile.updated_at
+                    else None
+                ),
+            }
             return Response(
                 api_response(
-                    message="Merchant profile is not yet approved.", status=False
+                    message="Merchant profile retrieved successfully.",
+                    status=True,
+                    data={
+                        "has_merchant_profile": True,
+                        "merchant_profile": public_profile,
+                        "restricted": True,
+                    },
                 ),
-                status=403,
+                status=200,
             )
 
         serializer = MerchantProfileSerializer(
@@ -1636,7 +1694,11 @@ class MerchantProfileManagementView(APIView):
             api_response(
                 message="Merchant profile retrieved successfully.",
                 status=True,
-                data=serializer.data,
+                data={
+                    "has_merchant_profile": True,
+                    "merchant_profile": serializer.data,
+                    "restricted": False,
+                },
             ),
             status=200,
         )
@@ -2096,30 +2158,101 @@ class MechanicProfileManagementView(APIView):
         responses={200: MechanicProfileSerializer()},
     )
     def get(self, request):
-        from django.contrib.auth import get_user_model
+        from uuid import UUID
+        from users.models import User
 
-        user = request.user
+        mechanic_user_uuid = request.query_params.get("id")
+        is_staff = getattr(request.user, "is_staff", False)
 
-        if not (user.active_role and user.active_role.name == "mechanic"):
+        is_own_profile = not bool(mechanic_user_uuid)
+        if is_own_profile:
+            target_user = request.user
+
+            if not (
+                target_user.active_role and target_user.active_role.name == "mechanic"
+            ):
+                return Response(
+                    api_response(
+                        message="Your active role must be 'mechanic' to view your mechanic profile.",
+                        status=False,
+                        data={
+                            "suggestion": "Use /api/users/switch-role/ to switch to the mechanic role"
+                        },
+                    ),
+                    status=403,
+                )
+        else:
+            try:
+                UUID(mechanic_user_uuid)
+            except Exception:
+                return Response(
+                    api_response(message="Invalid id.", status=False),
+                    status=400,
+                )
+
+            try:
+                target_user = User.objects.get(id=mechanic_user_uuid)
+            except User.DoesNotExist:
+                return Response(
+                    api_response(message="User not found.", status=False),
+                    status=404,
+                )
+
+        has_mechanic_role = target_user.roles.filter(name="mechanic").exists()
+        if not has_mechanic_role:
             return Response(
-                api_response(
-                    message="Your active role must be 'mechanic' to view your mechanic profile.",
-                    status=False,
-                    data={
-                        "suggestion": "Use /api/users/switch-role/ to switch to the mechanic role"
-                    },
-                ),
-                status=403,
+                api_response(message="User does not have a mechanic role.", status=False),
+                status=400,
             )
 
-        mechanic_profile = getattr(user, "mechanic_profile", None)
+        mechanic_profile = getattr(target_user, "mechanic_profile", None)
         if not mechanic_profile:
             return Response(
                 api_response(
-                    message="User does not have a mechanic profile.",
+                    message="Mechanic profile not found.",
                     status=False,
+                    data={"has_mechanic_profile": False},
                 ),
-                status=400,
+                status=404,
+            )
+
+        is_requester_owner = request.user.id == target_user.id
+
+        if not mechanic_profile.is_approved and not (is_staff or is_requester_owner):
+            public_profile = {
+                "id": str(mechanic_profile.id),
+                "user": str(target_user.id),
+                "location": mechanic_profile.location,
+                "lga": mechanic_profile.lga,
+                "profile_picture": (
+                    request.build_absolute_uri(mechanic_profile.profile_picture.url)
+                    if getattr(mechanic_profile, "profile_picture", None)
+                    and hasattr(mechanic_profile.profile_picture, "url")
+                    else None
+                ),
+                "is_approved": mechanic_profile.is_approved,
+                "created_at": (
+                    mechanic_profile.created_at.isoformat()
+                    if mechanic_profile.created_at
+                    else None
+                ),
+                "updated_at": (
+                    mechanic_profile.updated_at.isoformat()
+                    if mechanic_profile.updated_at
+                    else None
+                ),
+            }
+            return Response(
+                api_response(
+                    message="Mechanic profile retrieved successfully.",
+                    status=True,
+                    data={
+                        "has_mechanic_profile": True,
+                        "mechanic_profile": public_profile,
+                        "restricted": True,
+                    },
+                ),
+                status=200,
             )
 
         serializer = MechanicProfileSerializer(
@@ -2130,7 +2263,11 @@ class MechanicProfileManagementView(APIView):
             api_response(
                 message="Mechanic profile retrieved successfully.",
                 status=True,
-                data=serializer.data,
+                data={
+                    "has_mechanic_profile": True,
+                    "mechanic_profile": serializer.data,
+                    "restricted": False,
+                },
             ),
             status=200,
         )
@@ -2266,28 +2403,102 @@ class DriverProfileManagementView(APIView):
         responses={200: DriverProfileSerializer(many=True)},
     )
     def get(self, request):
-        user = request.user
+        from uuid import UUID
+        from users.models import User
 
-        if not (user.active_role and user.active_role.name in ["driver", "rider"]):
+        driver_user_uuid = request.query_params.get("driver_user_uuid")
+        is_staff = getattr(request.user, "is_staff", False)
+
+        is_own_profile = not bool(driver_user_uuid)
+        if is_own_profile:
+            target_user = request.user
+
+            if not (
+                target_user.active_role
+                and target_user.active_role.name in ["driver", "rider"]
+            ):
+                return Response(
+                    api_response(
+                        message="Your active role must be 'driver' or 'rider' to view your driver profile.",
+                        status=False,
+                        data={
+                            "suggestion": "Use /api/users/switch-role/ to switch to the driver or rider role"
+                        },
+                    ),
+                    status=403,
+                )
+        else:
+            try:
+                UUID(driver_user_uuid)
+            except Exception:
+                return Response(
+                    api_response(message="Invalid driver_user_uuid.", status=False),
+                    status=400,
+                )
+
+            try:
+                target_user = User.objects.get(id=driver_user_uuid)
+            except User.DoesNotExist:
+                return Response(
+                    api_response(message="User not found.", status=False),
+                    status=404,
+                )
+
+        has_driver_role = target_user.roles.filter(name="driver").exists() or target_user.roles.filter(name="rider").exists()
+        if not has_driver_role:
             return Response(
-                api_response(
-                    message="Your active role must be 'driver' or 'rider' to view your driver profile.",  # noqa
-                    status=False,
-                    data={
-                        "suggestion": "Use /api/users/switch-role/ to switch to the driver or rider role"
-                    },  # noqa
-                ),
-                status=403,
+                api_response(message="User does not have a driver or rider role.", status=False),
+                status=400,
             )
 
-        # Check if user has a driver profile
-        driver_profile = getattr(user, "driver_profile", None)
+        driver_profile = getattr(target_user, "driver_profile", None)
         if not driver_profile:
             return Response(
                 api_response(
-                    message="User does not have a driver profile.", status=False
+                    message="Driver profile not found.",
+                    status=False,
+                    data={"has_driver_profile": False},
                 ),
-                status=400,
+                status=404,
+            )
+
+        is_requester_owner = request.user.id == target_user.id
+
+        if not driver_profile.is_approved and not (is_staff or is_requester_owner):
+            public_profile = {
+                "id": str(driver_profile.id),
+                "user": str(target_user.id),
+                "city": getattr(driver_profile, "city", None),
+                "location": getattr(driver_profile, "location", None),
+                "profile_picture": (
+                    request.build_absolute_uri(driver_profile.profile_picture.url)
+                    if getattr(driver_profile, "profile_picture", None)
+                    and hasattr(driver_profile.profile_picture, "url")
+                    else None
+                ),
+                "is_approved": driver_profile.is_approved,
+                "created_at": (
+                    driver_profile.created_at.isoformat()
+                    if getattr(driver_profile, "created_at", None)
+                    else None
+                ),
+                "updated_at": (
+                    driver_profile.updated_at.isoformat()
+                    if getattr(driver_profile, "updated_at", None)
+                    else None
+                ),
+            }
+            return Response(
+                api_response(
+                    message="Driver profile retrieved successfully.",
+                    status=True,
+                    data={
+                        "has_driver_profile": True,
+                        "driver_profile": public_profile,
+                        "restricted": True,
+                    },
+                ),
+                status=200,
             )
 
         serializer = DriverProfileSerializer(
@@ -2297,7 +2508,11 @@ class DriverProfileManagementView(APIView):
             api_response(
                 message="Driver profile retrieved successfully.",
                 status=True,
-                data=serializer.data,
+                data={
+                    "has_driver_profile": True,
+                    "driver_profile": serializer.data,
+                    "restricted": False,
+                },
             ),
             status=200,
         )
