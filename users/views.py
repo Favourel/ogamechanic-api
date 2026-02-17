@@ -1,3 +1,4 @@
+ # flake8: noqa: E501,W293
 import logging
 import traceback
 from django.contrib.auth import get_user_model
@@ -87,6 +88,125 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _is_missing_kyc_value(value):
+    if value is None:
+        return True
+    if isinstance(value, str) and value.strip() == "":
+        return True
+    return False
+
+
+def _compute_kyc(profile, required_fields):
+    if profile is None:
+        return {
+            "profile_exists": False,
+            "is_complete": False,
+            "missing_fields": list(required_fields),
+            "missing_count": len(required_fields),
+        }
+
+    missing = []
+    for field in required_fields:
+        if not hasattr(profile, field):
+            missing.append(field)
+            continue
+
+        value = getattr(profile, field)
+
+        if _is_missing_kyc_value(value):
+            missing.append(field)
+            continue
+
+        if hasattr(value, "name") and _is_missing_kyc_value(value.name):
+            missing.append(field)
+
+    return {
+        "profile_exists": True,
+        "is_complete": len(missing) == 0,
+        "missing_fields": missing,
+        "missing_count": len(missing),
+    }
+
+
+def _compute_kyc_from_dict(profile_dict, required_fields):
+    if profile_dict is None:
+        return {
+            "profile_exists": False,
+            "is_complete": False,
+            "missing_fields": list(required_fields),
+            "missing_count": len(required_fields),
+        }
+
+    missing = []
+    for field in required_fields:
+        if field not in profile_dict:
+            missing.append(field)
+            continue
+        value = profile_dict.get(field)
+        if _is_missing_kyc_value(value):
+            missing.append(field)
+
+    return {
+        "profile_exists": True,
+        "is_complete": len(missing) == 0,
+        "missing_fields": missing,
+        "missing_count": len(missing),
+    }
+
+
+MERCHANT_KYC_REQUIRED_FIELDS = [
+    "location",
+    "cac_number",
+    "cac_document",
+    "selfie",
+    "business_address",
+    "profile_picture",
+]
+
+MECHANIC_KYC_REQUIRED_FIELDS = [
+    "location",
+    "cac_number",
+    "cac_document",
+    "selfie",
+    "govt_id_type",
+    "government_id_front",
+    "government_id_back",
+]
+
+DRIVER_KYC_REQUIRED_FIELDS = [
+    "full_name",
+    "phone_number",
+    "city",
+    "date_of_birth",
+    "gender",
+    "address",
+    "location",
+    "license_number",
+    "license_issue_date",
+    "license_expiry_date",
+    "license_front_image",
+    "license_back_image",
+    "vin",
+    "vehicle_name",
+    "plate_number",
+    "vehicle_model",
+    "vehicle_color",
+    "vehicle_photo_front",
+    "vehicle_photo_back",
+    "vehicle_photo_right",
+    "vehicle_photo_left",
+    "bank_name",
+    "account_number",
+    "rating",
+    "government_id",
+    "driver_license",
+    "vehicle_type",
+    "vehicle_registration_number",
+    "vehicle_photo",
+    "insurance_document",
+]
 
 User = get_user_model()
 
@@ -433,7 +553,9 @@ class UserRegistrationView(APIView):
                         message="Invalid role selected",
                         status=False,
                         errors={
-                            "role": [f'Role must be one of: {", ".join(valid_roles)}']
+                            "role": [
+                                f"Role must be one of: {', '.join(valid_roles)}"
+                            ]
                         },
                     ),
                     status=http_status.HTTP_400_BAD_REQUEST,
@@ -1025,7 +1147,9 @@ class SwitchRoleView(APIView):
             # Check if user already has this role
             role_added = False
             print(f"User {user.email} switching to role {role_name}")
-            print(f"User current roles: {[r.name for r in user.roles.all()]}")
+            print(
+                f"User current roles: {[r.name for r in user.roles.all()]}"
+            )
             
             if not user.roles.filter(id=role.id).exists():
                 user.roles.add(role)
@@ -1036,15 +1160,21 @@ class SwitchRoleView(APIView):
                 if role_name == "merchant":
                     from users.models import MerchantProfile
                     profile, created = MerchantProfile.objects.get_or_create(user=user)
-                    print(f"Merchant profile for user {user.email}: created={created}")
+                    print(
+                        f"Merchant profile for user {user.email}: created={created}"
+                    )
                 elif role_name == "mechanic":
                     from users.models import MechanicProfile
                     profile, created = MechanicProfile.objects.get_or_create(user=user)
-                    print(f"Mechanic profile for user {user.email}: created={created}")
+                    print(
+                        f"Mechanic profile for user {user.email}: created={created}"
+                    )
                 elif role_name == "driver":
                     from users.models import DriverProfile
                     profile, created = DriverProfile.objects.get_or_create(user=user)
-                    print(f"Driver profile for user {user.email}: created={created}")
+                    print(
+                        f"Driver profile for user {user.email}: created={created}"
+                    )
             else:
                 print(f"User {user.email} already has role {role_name}")
 
@@ -1096,6 +1226,24 @@ class SwitchRoleView(APIView):
                     profile_exists = True
                     logger.info(f"Fallback: Created driver profile for user {user.email}")
 
+            # Role-specific KYC
+            kyc = None
+            if role_name == "merchant":
+                kyc = _compute_kyc(
+                    getattr(user, "merchant_profile", None),
+                    MERCHANT_KYC_REQUIRED_FIELDS,
+                )
+            elif role_name == "mechanic":
+                kyc = _compute_kyc(
+                    getattr(user, "mechanic_profile", None),
+                    MECHANIC_KYC_REQUIRED_FIELDS,
+                )
+            elif role_name == "driver":
+                kyc = _compute_kyc(
+                    getattr(user, "driver_profile", None),
+                    DRIVER_KYC_REQUIRED_FIELDS,
+                )
+
             # Log activity
             try:
                 action = "role_added" if role_added else "role_switched"
@@ -1132,6 +1280,7 @@ class SwitchRoleView(APIView):
                         "profile_required": profile_required,
                         "profile_endpoint": profile_endpoint,
                         "profile_exists": profile_exists,
+                        "kyc": kyc,
                     },
                 ),
                 status=http_status.HTTP_200_OK,
@@ -1650,6 +1799,8 @@ class MerchantProfileManagementView(APIView):
 
         is_requester_owner = request.user.id == target_user.id
 
+        kyc = _compute_kyc(merchant_profile, MERCHANT_KYC_REQUIRED_FIELDS)
+
         if not merchant_profile.is_approved and not (is_staff or is_requester_owner):
             public_profile = {
                 "id": str(merchant_profile.id),
@@ -1681,6 +1832,10 @@ class MerchantProfileManagementView(APIView):
                     data={
                         "has_merchant_profile": True,
                         "merchant_profile": public_profile,
+                        "kyc": _compute_kyc_from_dict(
+                            public_profile,
+                            MERCHANT_KYC_REQUIRED_FIELDS,
+                        ),
                         "restricted": True,
                     },
                 ),
@@ -1697,6 +1852,7 @@ class MerchantProfileManagementView(APIView):
                 data={
                     "has_merchant_profile": True,
                     "merchant_profile": serializer.data,
+                    "kyc": kyc,
                     "restricted": False,
                 },
             ),
@@ -2201,7 +2357,10 @@ class MechanicProfileManagementView(APIView):
         has_mechanic_role = target_user.roles.filter(name="mechanic").exists()
         if not has_mechanic_role:
             return Response(
-                api_response(message="User does not have a mechanic role.", status=False),
+                api_response(
+                    message="User does not have a mechanic role.",
+                    status=False,
+                ),
                 status=400,
             )
 
@@ -2217,6 +2376,8 @@ class MechanicProfileManagementView(APIView):
             )
 
         is_requester_owner = request.user.id == target_user.id
+
+        kyc = _compute_kyc(mechanic_profile, MECHANIC_KYC_REQUIRED_FIELDS)
 
         if not mechanic_profile.is_approved and not (is_staff or is_requester_owner):
             public_profile = {
@@ -2249,6 +2410,10 @@ class MechanicProfileManagementView(APIView):
                     data={
                         "has_mechanic_profile": True,
                         "mechanic_profile": public_profile,
+                        "kyc": _compute_kyc_from_dict(
+                            public_profile,
+                            MECHANIC_KYC_REQUIRED_FIELDS,
+                        ),
                         "restricted": True,
                     },
                 ),
@@ -2266,6 +2431,7 @@ class MechanicProfileManagementView(APIView):
                 data={
                     "has_mechanic_profile": True,
                     "mechanic_profile": serializer.data,
+                    "kyc": kyc,
                     "restricted": False,
                 },
             ),
@@ -2419,10 +2585,14 @@ class DriverProfileManagementView(APIView):
             ):
                 return Response(
                     api_response(
-                        message="Your active role must be 'driver' or 'rider' to view your driver profile.",
+                        message=(
+                            "Your active role must be 'driver' or 'rider' to view your driver profile."
+                        ),
                         status=False,
                         data={
-                            "suggestion": "Use /api/users/switch-role/ to switch to the driver or rider role"
+                            "suggestion": (
+                                "Use /api/users/switch-role/ to switch to the driver or rider role"
+                            )
                         },
                     ),
                     status=403,
@@ -2444,10 +2614,16 @@ class DriverProfileManagementView(APIView):
                     status=404,
                 )
 
-        has_driver_role = target_user.roles.filter(name="driver").exists() or target_user.roles.filter(name="rider").exists()
+        has_driver_role = (
+            target_user.roles.filter(name="driver").exists()
+            or target_user.roles.filter(name="rider").exists()
+        )
         if not has_driver_role:
             return Response(
-                api_response(message="User does not have a driver or rider role.", status=False),
+                api_response(
+                    message="User does not have a driver or rider role.",
+                    status=False,
+                ),
                 status=400,
             )
 
@@ -2463,6 +2639,8 @@ class DriverProfileManagementView(APIView):
             )
 
         is_requester_owner = request.user.id == target_user.id
+
+        kyc = _compute_kyc(driver_profile, DRIVER_KYC_REQUIRED_FIELDS)
 
         if not driver_profile.is_approved and not (is_staff or is_requester_owner):
             public_profile = {
@@ -2495,6 +2673,10 @@ class DriverProfileManagementView(APIView):
                     data={
                         "has_driver_profile": True,
                         "driver_profile": public_profile,
+                        "kyc": _compute_kyc_from_dict(
+                            public_profile,
+                            DRIVER_KYC_REQUIRED_FIELDS,
+                        ),
                         "restricted": True,
                     },
                 ),
@@ -2511,6 +2693,7 @@ class DriverProfileManagementView(APIView):
                 data={
                     "has_driver_profile": True,
                     "driver_profile": serializer.data,
+                    "kyc": kyc,
                     "restricted": False,
                 },
             ),
