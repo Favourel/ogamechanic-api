@@ -5,12 +5,12 @@ from .models import Ride, CourierRequest, Waypoint
 class WaypointSerializer(serializers.ModelSerializer):
     """Serializer for Waypoint model."""
     waypoint_type_display = serializers.CharField(source='get_waypoint_type_display', read_only=True)
-    
+
     class Meta:
         model = Waypoint
         fields = [
-            'id', 'address', 'latitude', 'longitude', 'waypoint_type', 
-            'waypoint_type_display', 'sequence_order', 'contact_name', 
+            'id', 'address', 'latitude', 'longitude', 'waypoint_type',
+            'waypoint_type_display', 'sequence_order', 'contact_name',
             'contact_phone', 'instructions', 'is_completed', 'completed_at',
             'created_at', 'updated_at'
         ]
@@ -19,14 +19,14 @@ class WaypointSerializer(serializers.ModelSerializer):
 
 class WaypointCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating waypoints."""
-    
+
     class Meta:
         model = Waypoint
         fields = [
-            'address', 'latitude', 'longitude', 'waypoint_type', 
+            'address', 'latitude', 'longitude', 'waypoint_type',
             'sequence_order', 'contact_name', 'contact_phone', 'instructions'
         ]
-    
+
     def validate_sequence_order(self, value):
         """Validate sequence order is positive."""
         if value <= 0:
@@ -40,12 +40,12 @@ class RideSerializer(serializers.ModelSerializer):
     driver = serializers.StringRelatedField()
     waypoints = WaypointSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = Ride
         fields = [
-            'id', 'customer', 'driver', 'pickup_address', 'pickup_latitude', 
-            'pickup_longitude', 'dropoff_address', 'dropoff_latitude', 
+            'id', 'customer', 'driver', 'pickup_address', 'pickup_latitude',
+            'pickup_longitude', 'dropoff_address', 'dropoff_latitude',
             'dropoff_longitude', 'waypoints', 'current_waypoint_index',
             'total_distance_km', 'total_duration_min', 'route_polyline',
             'status', 'status_display', 'fare', 'distance_km', 'duration_min',
@@ -54,7 +54,7 @@ class RideSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id', 'customer', 'driver', 'current_waypoint_index',
             'total_distance_km', 'total_duration_min', 'route_polyline',
-            'fare', 'distance_km', 'duration_min', 'requested_at', 
+            'fare', 'distance_km', 'duration_min', 'requested_at',
             'accepted_at', 'started_at', 'completed_at', 'cancelled_at'
         ]
 
@@ -62,7 +62,7 @@ class RideSerializer(serializers.ModelSerializer):
 class RideCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating rides with multiple waypoints."""
     waypoints = WaypointCreateSerializer(many=True, required=False)
-    
+
     class Meta:
         model = Ride
         fields = [
@@ -70,11 +70,11 @@ class RideCreateSerializer(serializers.ModelSerializer):
             'dropoff_address', 'dropoff_latitude', 'dropoff_longitude',
             'waypoints'
         ]
-    
+
     def create(self, validated_data):
         waypoints_data = validated_data.pop('waypoints', [])
         ride = Ride.objects.create(**validated_data)
-        
+
         # Create waypoints if provided
         if waypoints_data:
             for waypoint_data in waypoints_data:
@@ -91,7 +91,7 @@ class RideCreateSerializer(serializers.ModelSerializer):
                     sequence_order=1
                 )
                 ride.waypoints.add(pickup_waypoint)
-            
+
             if validated_data.get('dropoff_address'):
                 dropoff_waypoint = Waypoint.objects.create(
                     address=validated_data['dropoff_address'],
@@ -101,7 +101,7 @@ class RideCreateSerializer(serializers.ModelSerializer):
                     sequence_order=2
                 )
                 ride.waypoints.add(dropoff_waypoint)
-        
+
         return ride
 
 
@@ -111,22 +111,22 @@ class CourierRequestSerializer(serializers.ModelSerializer):
     driver = serializers.StringRelatedField()
     waypoints = WaypointSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = CourierRequest
         fields = [
-            'id', 'customer', 'driver', 'pickup_address', 'pickup_latitude', 
-            'pickup_longitude', 'dropoff_address', 'dropoff_latitude', 
+            'id', 'customer', 'driver', 'pickup_address', 'pickup_latitude',
+            'pickup_longitude', 'dropoff_address', 'dropoff_latitude',
             'dropoff_longitude', 'waypoints', 'current_waypoint_index',
             'total_distance_km', 'total_duration_min', 'route_polyline',
             'item_description', 'item_weight', 'status', 'status_display',
-            'fare', 'requested_at', 'accepted_at', 'started_at', 
+            'fare', 'requested_at', 'accepted_at', 'started_at',
             'completed_at', 'cancelled_at'
         ]
         read_only_fields = [
             'id', 'customer', 'driver', 'current_waypoint_index',
             'total_distance_km', 'total_duration_min', 'route_polyline',
-            'fare', 'requested_at', 'accepted_at', 'started_at', 
+            'fare', 'requested_at', 'accepted_at', 'started_at',
             'completed_at', 'cancelled_at'
         ]
 
@@ -134,7 +134,7 @@ class CourierRequestSerializer(serializers.ModelSerializer):
 class CourierRequestCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating courier requests with multiple waypoints."""
     waypoints = WaypointCreateSerializer(many=True, required=False)
-    
+
     class Meta:
         model = CourierRequest
         fields = [
@@ -142,11 +142,11 @@ class CourierRequestCreateSerializer(serializers.ModelSerializer):
             'dropoff_address', 'dropoff_latitude', 'dropoff_longitude',
             'item_description', 'item_weight', 'waypoints'
         ]
-    
+
     def create(self, validated_data):
         waypoints_data = validated_data.pop('waypoints', [])
         courier_request = CourierRequest.objects.create(**validated_data)
-        
+
         # Create waypoints if provided
         if waypoints_data:
             for waypoint_data in waypoints_data:
@@ -163,7 +163,7 @@ class CourierRequestCreateSerializer(serializers.ModelSerializer):
                     sequence_order=1
                 )
                 courier_request.waypoints.add(pickup_waypoint)
-            
+
             if validated_data.get('dropoff_address'):
                 dropoff_waypoint = Waypoint.objects.create(
                     address=validated_data['dropoff_address'],
@@ -173,24 +173,24 @@ class CourierRequestCreateSerializer(serializers.ModelSerializer):
                     sequence_order=2
                 )
                 courier_request.waypoints.add(dropoff_waypoint)
-        
+
         return courier_request
 
 
 class WaypointUpdateSerializer(serializers.ModelSerializer):
     """Serializer for updating waypoint completion status."""
-    
+
     class Meta:
         model = Waypoint
         fields = ['is_completed']
-    
+
     def update(self, instance, validated_data):
         from django.utils import timezone
-        
+
         is_completed = validated_data.get('is_completed', False)
         if is_completed and not instance.is_completed:
             instance.completed_at = timezone.now()
-        
+
         instance.is_completed = is_completed
         instance.save()
         return instance

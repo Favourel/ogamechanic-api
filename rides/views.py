@@ -63,11 +63,11 @@ class RideListCreateView(APIView):
         base_fare = 500  # Base fare in NGN
         per_km_rate = 100  # Rate per kilometer
         per_min_rate = 2  # Rate per minute
-        
+
         distance_fare = distance_km * per_km_rate
         time_fare = duration_min * per_min_rate
         total_fare = base_fare + distance_fare + time_fare
-        
+
         return round(total_fare, 2)
 
     @swagger_auto_schema(
@@ -162,7 +162,7 @@ class RideListCreateView(APIView):
                 ),
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         if not LocationService.validate_coordinates(dropoff_lat, dropoff_lon):
             return Response(
                 api_response(
@@ -176,7 +176,7 @@ class RideListCreateView(APIView):
         route_info = LocationService.get_directions(
             pickup_lat, pickup_lon, dropoff_lat, dropoff_lon
         )
-        
+
         if route_info:
             distance_km = route_info['distance_km']
             duration_min = route_info['duration_min']
@@ -320,7 +320,7 @@ class RideConfirmView(APIView):
         except Ride.DoesNotExist:
             return Response(
                 api_response(
-                    message="Initiated ride not found for confirmation.", 
+                    message="Initiated ride not found for confirmation.",
                     status=False
                 ),
                 status=status.HTTP_404_NOT_FOUND,
@@ -366,7 +366,7 @@ class RideConfirmView(APIView):
         ]:
             if field in data and data[field] not in [None, ""]:
                 setattr(ride, field, data[field])
-                
+
         ride.save()
         serializer = RideSerializer(ride)
         return Response(
@@ -531,17 +531,17 @@ class CourierRequestOptionsView(APIView):
             ],
             properties={
                 "pickup_address": openapi.Schema(type=openapi.TYPE_STRING),
-                "pickup_latitude": openapi.Schema(type=openapi.TYPE_NUMBER, 
+                "pickup_latitude": openapi.Schema(type=openapi.TYPE_NUMBER,
                                                   format="float"),
-                "pickup_longitude": openapi.Schema(type=openapi.TYPE_NUMBER, 
+                "pickup_longitude": openapi.Schema(type=openapi.TYPE_NUMBER,
                                                    format="float"),
                 "dropoff_address": openapi.Schema(type=openapi.TYPE_STRING),
-                "dropoff_latitude": openapi.Schema(type=openapi.TYPE_NUMBER, 
+                "dropoff_latitude": openapi.Schema(type=openapi.TYPE_NUMBER,
                                                    format="float"),
-                "dropoff_longitude": openapi.Schema(type=openapi.TYPE_NUMBER, 
+                "dropoff_longitude": openapi.Schema(type=openapi.TYPE_NUMBER,
                                                     format="float"),
                 "item_description": openapi.Schema(type=openapi.TYPE_STRING),
-                "item_weight": openapi.Schema(type=openapi.TYPE_NUMBER, 
+                "item_weight": openapi.Schema(type=openapi.TYPE_NUMBER,
                                               format="float"),
             },
         ),
@@ -567,7 +567,7 @@ class CourierRequestOptionsView(APIView):
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
-                api_response(message=data, status=False), 
+                api_response(message=data, status=False),
                 status=status.HTTP_400_BAD_REQUEST)
         user = request.user
         if not user.roles.filter(name="customer").exists():
@@ -617,7 +617,7 @@ class CourierRequestOptionsView(APIView):
         if resp.status_code != 200:
             return Response(
                 api_response(
-                    message="Failed to get route from Google Maps.", 
+                    message="Failed to get route from Google Maps.",
                     status=False
                 ),
                 status=500,
@@ -626,7 +626,7 @@ class CourierRequestOptionsView(APIView):
         if not directions["routes"]:
             return Response(
                 api_response(
-                    message="No route found between points.", 
+                    message="No route found between points.",
                     status=False
                 ),
                 status=400,
@@ -787,7 +787,7 @@ class CourierRequestConfirmView(APIView):
         except User.DoesNotExist:
             return Response(
                 api_response(
-                    message="Selected driver not available.", 
+                    message="Selected driver not available.",
                     status=False),
                 status=400,
             )
@@ -797,7 +797,7 @@ class CourierRequestConfirmView(APIView):
         ).exists():
             return Response(
                 api_response(
-                    message="Driver is no longer available.", 
+                    message="Driver is no longer available.",
                     status=False),
                 status=400,
             )
@@ -864,7 +864,7 @@ class CourierRequestStatusUpdateView(APIView):
             "cancelled",
         ]:
             return Response(
-                api_response(message="Invalid status.", 
+                api_response(message="Invalid status.",
                              status=False), status=400
             )
         # Only assigned driver or customer can update
@@ -872,7 +872,7 @@ class CourierRequestStatusUpdateView(APIView):
         is_customer = courier.customer == user
         if not (is_driver or is_customer):
             return Response(
-                api_response(message="Not allowed.", 
+                api_response(message="Not allowed.",
                              status=False), status=403
             )
         # Define allowed transitions
@@ -885,7 +885,7 @@ class CourierRequestStatusUpdateView(APIView):
         }
         if new_status not in valid_transitions.get(courier.status, []):
             return Response(
-                api_response(message="Invalid status transition.", 
+                api_response(message="Invalid status transition.",
                              status=False),
                 status=400,
             )
@@ -1123,13 +1123,13 @@ class LocationTrackingView(APIView):
                 api_response(message=data, status=False),
                 status=400
             )
-        
+
         try:
             ride = Ride.objects.get(id=ride_id)
-            
+
             # Check if user has access to this ride
-            if not (request.user == ride.customer or 
-                   request.user == ride.driver or 
+            if not (request.user == ride.customer or
+                   request.user == ride.driver or
                    request.user.is_staff):
                 return Response(
                     api_response(
@@ -1138,7 +1138,7 @@ class LocationTrackingView(APIView):
                     ),
                     status=403
                 )
-            
+
             # Get driver location
             driver_location = None
             if ride.driver and ride.driver.driver_profile:
@@ -1150,7 +1150,7 @@ class LocationTrackingView(APIView):
                         'accuracy': None,  # Could be added to driver profile
                         'timestamp': profile.updated_at.isoformat()
                     }
-            
+
             # Calculate ETA
             eta_data = None
             if driver_location:
@@ -1159,13 +1159,13 @@ class LocationTrackingView(APIView):
                     float(ride.dropoff_latitude), float(ride.dropoff_longitude),
                     driver_location['latitude'], driver_location['longitude']
                 )
-            
+
             # Get route polyline
             route_info = LocationService.get_directions(
                 float(ride.pickup_latitude), float(ride.pickup_longitude),
                 float(ride.dropoff_latitude), float(ride.dropoff_longitude)
             )
-            
+
             response_data = {
                 'ride_id': str(ride.id),
                 'ride_status': ride.status,
@@ -1183,7 +1183,7 @@ class LocationTrackingView(APIView):
                     'address': ride.dropoff_address
                 }
             }
-            
+
             return Response(
                 api_response(
                     message="Location tracking data retrieved successfully",
@@ -1191,7 +1191,7 @@ class LocationTrackingView(APIView):
                     data=response_data
                 )
             )
-            
+
         except Ride.DoesNotExist:
             return Response(
                 api_response(
@@ -1225,7 +1225,7 @@ class DriverLocationUpdateView(APIView):
                 api_response(message=data, status=False),
                 status=400
             )
-        
+
         # Check if user is a driver
         if not request.user.roles.filter(name='driver').exists():
             return Response(
@@ -1235,11 +1235,11 @@ class DriverLocationUpdateView(APIView):
                 ),
                 status=403
             )
-        
+
         latitude = request.data.get('latitude')
         longitude = request.data.get('longitude')
         accuracy = request.data.get('accuracy')
-        
+
         if not latitude or not longitude:
             return Response(
                 api_response(
@@ -1248,7 +1248,7 @@ class DriverLocationUpdateView(APIView):
                 ),
                 status=400
             )
-        
+
         # Validate coordinates
         if not LocationService.validate_coordinates(latitude, longitude):
             return Response(
@@ -1258,12 +1258,12 @@ class DriverLocationUpdateView(APIView):
                 ),
                 status=400
             )
-        
+
         # Update driver location
         success = LocationService.update_driver_location(
             str(request.user.id), latitude, longitude, accuracy
         )
-        
+
         if success:
             return Response(
                 api_response(
@@ -1336,11 +1336,11 @@ class NearbyDriversView(APIView):
                 api_response(message=data, status=False),
                 status=400
             )
-        
+
         latitude = request.query_params.get('latitude')
         longitude = request.query_params.get('longitude')
         radius = float(request.query_params.get('radius', 10.0))
-        
+
         if not latitude or not longitude:
             return Response(
                 api_response(
@@ -1349,7 +1349,7 @@ class NearbyDriversView(APIView):
                 ),
                 status=400
             )
-        
+
         try:
             latitude = float(latitude)
             longitude = float(longitude)
@@ -1361,7 +1361,7 @@ class NearbyDriversView(APIView):
                 ),
                 status=400
             )
-        
+
         # Validate coordinates
         if not LocationService.validate_coordinates(latitude, longitude):
             return Response(
@@ -1371,12 +1371,12 @@ class NearbyDriversView(APIView):
                 ),
                 status=400
             )
-        
+
         # Find nearby drivers
         nearby_drivers = LocationService.find_nearby_drivers(
             latitude, longitude, radius, limit=20
         )
-        
+
         return Response(
             api_response(
                 message=f"Found {len(nearby_drivers)} nearby drivers",
@@ -1422,7 +1422,7 @@ class GeocodingView(APIView):
                 api_response(message=data, status=False),
                 status=400
             )
-        
+
         address = request.query_params.get('address')
         if not address:
             return Response(
@@ -1432,10 +1432,10 @@ class GeocodingView(APIView):
                 ),
                 status=400
             )
-        
+
         # Geocode the address
         result = LocationService.geocode_address(address)
-        
+
         if result:
             return Response(
                 api_response(
@@ -1487,10 +1487,10 @@ class ReverseGeocodingView(APIView):
                 api_response(message=data, status=False),
                 status=400
             )
-        
+
         latitude = request.query_params.get('latitude')
         longitude = request.query_params.get('longitude')
-        
+
         if not latitude or not longitude:
             return Response(
                 api_response(
@@ -1499,7 +1499,7 @@ class ReverseGeocodingView(APIView):
                 ),
                 status=400
             )
-        
+
         try:
             latitude = float(latitude)
             longitude = float(longitude)
@@ -1511,7 +1511,7 @@ class ReverseGeocodingView(APIView):
                 ),
                 status=400
             )
-        
+
         # Validate coordinates
         if not LocationService.validate_coordinates(latitude, longitude):
             return Response(
@@ -1521,10 +1521,10 @@ class ReverseGeocodingView(APIView):
                 ),
                 status=400
             )
-        
+
         # Reverse geocode the coordinates
         address = LocationService.reverse_geocode(latitude, longitude)
-        
+
         if address:
             return Response(
                 api_response(
@@ -1559,17 +1559,17 @@ class WaypointListView(APIView):
         """Get waypoints for a ride."""
         try:
             ride = Ride.objects.get(id=ride_id)
-            
+
             # Check if user has access to this ride
             if ride.customer != request.user and ride.driver != request.user:
                 return Response(
                     api_response(message="Access denied", status=False),
                     status=403
                 )
-            
+
             waypoints = ride.waypoints.all().order_by('sequence_order')
             serializer = WaypointSerializer(waypoints, many=True)
-            
+
             return Response(
                 api_response(
                     message="Waypoints retrieved successfully",
@@ -1598,24 +1598,24 @@ class WaypointUpdateView(APIView):
         try:
             ride = Ride.objects.get(id=ride_id)
             waypoint = Waypoint.objects.get(id=waypoint_id, rides=ride)
-            
+
             # Check if user has access to this ride
             if ride.customer != request.user and ride.driver != request.user:
                 return Response(
                     api_response(message="Access denied", status=False),
                     status=403
                 )
-            
+
             serializer = WaypointUpdateSerializer(waypoint, data=request.data, partial=True)
             if serializer.is_valid():
                 waypoint = serializer.save()
-                
+
                 # Check if all waypoints are completed
                 if ride.is_route_completed():
                     ride.status = 'completed'
                     ride.completed_at = timezone.now()
                     ride.save()
-                
+
                 response_serializer = WaypointSerializer(waypoint)
                 return Response(
                     api_response(
@@ -1624,7 +1624,7 @@ class WaypointUpdateView(APIView):
                         data=response_serializer.data
                     )
                 )
-            
+
             return Response(
                 api_response(message=serializer.errors, status=False),
                 status=400
@@ -1650,21 +1650,21 @@ class MultiWaypointRideCreateView(APIView):
         serializer = RideCreateSerializer(data=request.data)
         if serializer.is_valid():
             ride = serializer.save(customer=request.user)
-            
+
             # Calculate total distance and duration
             total_distance = ride.calculate_total_distance_km()
             total_duration = total_distance * 2  # Rough estimate: 2 min per km
-            
+
             # Update ride with calculated values
             ride.total_distance_km = total_distance
             ride.total_duration_min = total_duration
             ride.save()
-            
+
             # Calculate fare
             fare = self._calculate_fare(total_distance, total_duration)
             ride.fare = fare
             ride.save()
-            
+
             response_serializer = RideSerializer(ride)
             return Response(
                 api_response(
@@ -1674,22 +1674,22 @@ class MultiWaypointRideCreateView(APIView):
                 ),
                 status=201
             )
-        
+
         return Response(
             api_response(message=serializer.errors, status=False),
             status=400
         )
-    
+
     def _calculate_fare(self, distance_km, duration_min):
         """Calculate fare based on distance and duration."""
         base_fare = 500  # Base fare in NGN
         per_km_rate = 100  # Rate per kilometer
         per_min_rate = 2  # Rate per minute
-        
+
         distance_fare = distance_km * per_km_rate
         time_fare = duration_min * per_min_rate
         total_fare = base_fare + distance_fare + time_fare
-        
+
         return round(total_fare, 2)
 
 
@@ -1734,7 +1734,7 @@ class RouteOptimizationView(APIView):
     def post(self, request):
         """Optimize route for multiple waypoints."""
         waypoints_data = request.data.get('waypoints', [])
-        
+
         if len(waypoints_data) < 2:
             return Response(
                 api_response(
@@ -1743,21 +1743,21 @@ class RouteOptimizationView(APIView):
                 ),
                 status=400
             )
-        
+
         try:
             # Simple optimization: sort by distance from first waypoint
             # In production, use more sophisticated algorithms
             first_waypoint = waypoints_data[0]
             other_waypoints = waypoints_data[1:]
-            
+
             # Calculate distances from first waypoint
             optimized_waypoints = [first_waypoint]
-            
+
             while other_waypoints:
                 current_waypoint = optimized_waypoints[-1]
                 nearest_waypoint = None
                 min_distance = float('inf')
-                
+
                 for waypoint in other_waypoints:
                     distance = LocationService.haversine_distance(
                         float(current_waypoint['latitude']),
@@ -1765,15 +1765,15 @@ class RouteOptimizationView(APIView):
                         float(waypoint['latitude']),
                         float(waypoint['longitude'])
                     )
-                    
+
                     if distance < min_distance:
                         min_distance = distance
                         nearest_waypoint = waypoint
-                
+
                 if nearest_waypoint:
                     optimized_waypoints.append(nearest_waypoint)
                     other_waypoints.remove(nearest_waypoint)
-            
+
             # Calculate total distance and duration
             total_distance = 0
             for i in range(len(optimized_waypoints) - 1):
@@ -1784,9 +1784,9 @@ class RouteOptimizationView(APIView):
                     float(wp2['latitude']), float(wp2['longitude'])
                 )
                 total_distance += distance
-            
+
             total_duration = total_distance * 2  # Rough estimate
-            
+
             return Response(
                 api_response(
                     message="Route optimized successfully",

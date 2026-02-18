@@ -363,7 +363,7 @@ class Command(BaseCommand):
                     }
                 )
                 vehicle_makes.append(vehicle_make)
-            
+
             self.stdout.write(
                 self.style.SUCCESS(
                     f"Created {len(vehicle_makes)} vehicle makes."
@@ -434,11 +434,11 @@ class Command(BaseCommand):
             expertise_created = 0
             for mechanic_user in mechanic_users:
                 mechanic_profile = mechanic_user.mechanic_profile
-                
+
                 # Each mechanic specializes in 2-5 vehicle makes
                 num_expertise = random.randint(2, 5)
                 selected_makes = random.sample(vehicle_makes, num_expertise)
-                
+
                 for vehicle_make in selected_makes:
                     MechanicVehicleExpertise.objects.create(
                         mechanic=mechanic_profile,

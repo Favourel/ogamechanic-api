@@ -33,7 +33,7 @@ class ChatRoom(models.Model):
     def unread_count(self, user):
         """Get unread message count for a specific user"""
         return self.messages.filter(
-            sender__in=self.participants.exclude(id=user.id), 
+            sender__in=self.participants.exclude(id=user.id),
             read_at__isnull=True
         ).count()
 

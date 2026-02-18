@@ -53,10 +53,10 @@ class RentalBookingSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         customer_id = validated_data.pop('customer_id')
         product_id = validated_data.pop('product_id')
-        
+
         validated_data['customer_id'] = customer_id
         validated_data['product_id'] = product_id
-        
+
         return super().create(validated_data)
 
 
@@ -100,10 +100,10 @@ class RentalReviewSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         customer_id = validated_data.pop('customer_id')
         rental_id = validated_data.pop('rental_id')
-        
+
         validated_data['customer_id'] = customer_id
         validated_data['rental_id'] = rental_id
-        
+
         return super().create(validated_data)
 
 
@@ -153,4 +153,4 @@ class RentalPeriodListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'product', 'start_date', 'end_date', 'is_available',
             'daily_rate', 'duration_days', 'total_cost'
-        ] 
+        ]

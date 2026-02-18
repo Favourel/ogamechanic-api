@@ -626,7 +626,7 @@ class DriverProfileSerializer(serializers.ModelSerializer):
         if obj.insurance_document and hasattr(obj.insurance_document, 'url'):
             return self._get_absolute_url(obj.insurance_document.url, request)
         return None
-    
+
     def get_rating(self, obj):
         from django.db.models import Avg
         from users.models import DriverReview
@@ -678,7 +678,7 @@ class MechanicReviewSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         user = self.context["request"].user
         mechanic = attrs.get("mechanic")
-        
+
         # Only validate if mechanic is provided (from URL or body)
         if mechanic:
             if (
@@ -691,7 +691,7 @@ class MechanicReviewSerializer(serializers.ModelSerializer):
                     "You have already reviewed this mechanic."
                 )
         return attrs
-    
+
     def get_mechanic_info(self, obj):
         """
         Return selected info of the mechanic profile.
@@ -712,8 +712,8 @@ class MechanicReviewSerializer(serializers.ModelSerializer):
 class DriverReviewSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     # driver_id = serializers.PrimaryKeyRelatedField(
-    #     queryset=DriverProfile.objects.all(), 
-    #     source="driver", 
+    #     queryset=DriverProfile.objects.all(),
+    #     source="driver",
     #     write_only=True,
     #     required=False  # Make it optional since it comes from URL
     # )
@@ -737,7 +737,7 @@ class DriverReviewSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         user = self.context["request"].user
         driver = attrs.get("driver")
-        
+
         # Only validate if driver is provided (from URL or body)
         if driver:
             if (
@@ -1253,26 +1253,26 @@ class StepFourMechanicDetailsSerializer(serializers.Serializer):
     #         )
 
     #     return value
-    
+
     def validate_expertise_details(self, value):
         """Validate expertise details if provided"""
         if not value:
             return value
-            
+
         # Check that each detail has required fields
         for detail in value:
             if 'vehicle_make_id' not in detail:
                 raise serializers.ValidationError(
                     "Each expertise detail must include 'vehicle_make_id'"
                 )
-            
+
             if 'years_of_experience' in detail:
                 years = detail['years_of_experience']
                 if not isinstance(years, int) or years < 0:
                     raise serializers.ValidationError(
                         "Years of experience must be a non-negative integer"
                     )
-            
+
             if 'certification_level' in detail:
                 valid_levels = [
                     'basic', 'intermediate', 'advanced', 'expert', 'certified']
@@ -1280,7 +1280,7 @@ class StepFourMechanicDetailsSerializer(serializers.Serializer):
                     raise serializers.ValidationError(
                         f"Invalid certification level. Must be one of: {valid_levels}"  # noqa
                     )
-        
+
         return value
 
 
@@ -1391,7 +1391,7 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
         # Generate JWT tokens
         from rest_framework_simplejwt.tokens import RefreshToken
         refresh = RefreshToken.for_user(user)
-        
+
         return {
             'refresh': str(refresh),
             'access': str(refresh.access_token),

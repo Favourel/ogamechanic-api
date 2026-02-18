@@ -51,7 +51,7 @@ def send_password_reset_email(self, email, reset_token):
         logger.info(f"Password reset email sent to {email}")
     except Exception as exc:
         logger.error(
-            f"Failed to send password reset email to {email}: {exc}", 
+            f"Failed to send password reset email to {email}: {exc}",
             exc_info=True)
         try:
             self.retry(exc=exc)
@@ -64,7 +64,7 @@ def send_password_reset_email(self, email, reset_token):
 def unlock_expired_accounts():
     """Unlock accounts where lockout period has expired."""
     from django.utils import timezone
-    
+
     try:
         unlocked_count = User.objects.filter(
             locked_until__lt=timezone.now(),
@@ -73,10 +73,10 @@ def unlock_expired_accounts():
             locked_until=None,
             failed_login_attempts=0
         )
-        
+
         if unlocked_count > 0:
             print(f"Unlocked {unlocked_count} expired accounts")
-        
+
         return f"Unlocked {unlocked_count} accounts"
     except Exception as e:
         print(f"Error unlocking accounts: {e}")

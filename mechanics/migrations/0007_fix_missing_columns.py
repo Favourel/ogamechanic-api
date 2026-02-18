@@ -6,11 +6,11 @@ from django.db import migrations
 def add_missing_columns(apps, schema_editor):
     """Add missing columns if they don't exist."""
     from django.db import connection
-    
+
     with connection.cursor() as cursor:
         # Get database vendor (postgresql, sqlite, mysql, etc.)
         db_vendor = connection.vendor
-        
+
         # Check if columns exist based on database type
         if db_vendor == 'sqlite':
             cursor.execute("PRAGMA table_info(mechanics_repairrequest)")
@@ -33,7 +33,7 @@ def add_missing_columns(apps, schema_editor):
         else:
             # For other databases, try to add columns and ignore errors
             columns = []
-        
+
         # Determine the correct datetime type based on database
         if db_vendor == 'postgresql':
             datetime_type = 'TIMESTAMP'
@@ -41,7 +41,7 @@ def add_missing_columns(apps, schema_editor):
             datetime_type = 'DATETIME'
         else:  # sqlite and others
             datetime_type = 'datetime'
-        
+
         # Add missing columns
         if 'rejected_at' not in columns:
             try:
@@ -51,7 +51,7 @@ def add_missing_columns(apps, schema_editor):
                 )
             except Exception:
                 pass  # Column might already exist
-        
+
         if 'in_transit_at' not in columns:
             try:
                 cursor.execute(
@@ -60,7 +60,7 @@ def add_missing_columns(apps, schema_editor):
                 )
             except Exception:
                 pass
-        
+
         if 'in_progress_at' not in columns:
             try:
                 cursor.execute(
@@ -69,7 +69,7 @@ def add_missing_columns(apps, schema_editor):
                 )
             except Exception:
                 pass
-        
+
         if 'created_at' not in columns:
             try:
                 cursor.execute(
@@ -78,7 +78,7 @@ def add_missing_columns(apps, schema_editor):
                 )
             except Exception:
                 pass
-        
+
         if 'updated_at' not in columns:
             try:
                 cursor.execute(

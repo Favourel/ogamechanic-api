@@ -41,51 +41,51 @@ class NgrokBypassMiddleware:
 
 class ResponseTimeMiddleware(MiddlewareMixin):
     """Middleware to track response times and log performance metrics"""
-    
+
     def process_request(self, request):
         """Start timing the request"""
         request.start_time = time.time()
         return None
-    
+
     def process_response(self, request, response):
         """Calculate and log response time"""
         if hasattr(request, 'start_time'):
             duration = time.time() - request.start_time
-            
+
             # Log response time for monitoring
             print(
                 f"Response Time: {request.method} {request.path} - "
                 f"{duration:.3f}s - Status: {response.status_code} - {request.method} {request.path}"  # noqa
             )  # noqa
-            
+
             # Add response time header
             response['X-Response-Time'] = f"{duration:.3f}s {request.method} {request.path}"  # noqa
-            
+
             # Log slow requests (> 1 second)
             if duration > 1.0:
                 print(
                     f"Slow Request: {request.method} {request.path} - "
                     f"{duration:.3f}s - Status: {response.status_code} - {request.method} {request.path}"  # noqa
                 )  # noqa
-        
+
         return response
 
 
 class DatabaseQueryLoggingMiddleware(MiddlewareMixin):
     """Database query logging middleware for development"""
-    
+
     def process_response(self, request, response):
         """Log database queries in development"""
         if connection.queries:
             query_count = len(connection.queries)
             # print("query count", connection.queries)
             query_time = sum(float(q['time']) for q in connection.queries)
-            
+
             print(
                 f"Database queries for {request.path}: "
                 f"Count: {query_count}, Time: {query_time:.3f}s"
             )
-            
+
             # Log slow queries
             slow_queries = [
                 q for q in connection.queries if float(q['time']) > 0.1]

@@ -20,8 +20,8 @@ class ProductVehicleCompatibilityInline(admin.TabularInline):
     model = models.ProductVehicleCompatibility
     extra = 1
     fields = (
-        'make', 'model', 
-        # 'year_from', 'year_to', 
+        'make', 'model',
+        # 'year_from', 'year_to',
         'notes')
     autocomplete_fields = ('make', 'model')
 
@@ -29,7 +29,7 @@ class ProductVehicleCompatibilityInline(admin.TabularInline):
 @admin.register(models.Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = (
-        'name', 'merchant', 'category', 'price', 'is_rental', 
+        'name', 'merchant', 'category', 'price', 'is_rental',
         'created_at', 'updated_at'
     )
     search_fields = ('name', 'merchant__email', 'category__name', 'id')

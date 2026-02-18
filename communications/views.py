@@ -140,7 +140,7 @@ class ChatRoomDetailView(APIView):
             )
 
         chat_room = get_object_or_404(
-            ChatRoom, id=chat_room_id, participants=request.user, is_active=True  # noqa    
+            ChatRoom, id=chat_room_id, participants=request.user, is_active=True  # noqa
         )
 
         serializer = ChatRoomSerializer(chat_room, context={"request": request})  # noqa
@@ -403,7 +403,7 @@ class MessageDetailView(APIView):
         message.save()
 
         return Response(
-            api_response(message="Message deleted successfully.", 
+            api_response(message="Message deleted successfully.",
             status=True, data={}),  # noqa
             status=status.HTTP_204_NO_CONTENT,
         )

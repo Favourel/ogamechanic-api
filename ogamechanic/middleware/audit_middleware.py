@@ -20,7 +20,7 @@ class StrategicAuditMiddleware(MiddlewareMixin):
     Middleware that logs only business-critical activities.
     Designed for multi-service platforms (ecommerce, rentals, rides, mechanics).
     """
-    
+
     # Define business-critical endpoints that should be logged
     CRITICAL_PATTERNS = {
         # Authentication & Authorization
@@ -49,7 +49,7 @@ class StrategicAuditMiddleware(MiddlewareMixin):
             'severity': 'medium',
             'action': 'password_change'
         },
-        
+
         # Transactions & Payments
         '/api/v1/payments/': {
             'category': 'transaction',
@@ -71,7 +71,7 @@ class StrategicAuditMiddleware(MiddlewareMixin):
             'severity': 'critical',
             'action': 'wallet_deposit'
         },
-        
+
         # Orders & Purchases
         '/api/v1/orders/create/': {
             'category': 'business_critical',
@@ -83,7 +83,7 @@ class StrategicAuditMiddleware(MiddlewareMixin):
             'severity': 'medium',
             'action': 'order_cancelled'
         },
-        
+
         # Rides
         '/api/v1/rides/request/': {
             'category': 'business_critical',
@@ -105,7 +105,7 @@ class StrategicAuditMiddleware(MiddlewareMixin):
             'severity': 'medium',
             'action': 'ride_cancelled'
         },
-        
+
         # Rentals
         '/api/v1/rentals/book/': {
             'category': 'business_critical',
@@ -117,7 +117,7 @@ class StrategicAuditMiddleware(MiddlewareMixin):
             'severity': 'medium',
             'action': 'rental_cancelled'
         },
-        
+
         # Mechanic Services
         '/api/v1/mechanics/request/': {
             'category': 'business_critical',
@@ -134,7 +134,7 @@ class StrategicAuditMiddleware(MiddlewareMixin):
             'severity': 'high',
             'action': 'mechanic_completed'
         },
-        
+
         # Courier/Delivery
         '/api/v1/couriers/request/': {
             'category': 'business_critical',
@@ -151,7 +151,7 @@ class StrategicAuditMiddleware(MiddlewareMixin):
             'severity': 'high',
             'action': 'delivery_completed'
         },
-        
+
         # Profile & Account Changes
         '/api/v1/profile/update/': {
             'category': 'data_modification',
@@ -163,7 +163,7 @@ class StrategicAuditMiddleware(MiddlewareMixin):
             'severity': 'critical',
             'action': 'account_deletion'
         },
-        
+
         # Admin Actions
         '/api/v1/admin/approve/': {
             'category': 'authorization',
@@ -175,7 +175,7 @@ class StrategicAuditMiddleware(MiddlewareMixin):
             'severity': 'high',
             'action': 'admin_rejection'
         },
-        
+
         # Document Uploads (KYC/Verification)
         '/api/v1/documents/upload/': {
             'category': 'compliance',
@@ -188,7 +188,7 @@ class StrategicAuditMiddleware(MiddlewareMixin):
             'action': 'document_verified'
         },
     }
-    
+
     # Patterns to match (for partial URL matching)
     CRITICAL_PATTERNS_PARTIAL = [
         'payment',
@@ -201,10 +201,10 @@ class StrategicAuditMiddleware(MiddlewareMixin):
         'delete',
         'cancel',
     ]
-    
+
     # HTTP methods that indicate state changes (worth logging)
     STATE_CHANGING_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE']
-    
+
     # Paths to NEVER log (too noisy, low value)
     EXCLUDED_PATHS = [
         '/static/',
@@ -217,12 +217,12 @@ class StrategicAuditMiddleware(MiddlewareMixin):
         '/api/v1/health/',  # Health checks
         '/api/v1/ping/',  # Ping endpoints
     ]
-    
+
     def process_request(self, request):
         """Mark the start time for response time calculation."""
         request._audit_start_time = time.time()
         return None
-    
+
     def process_response(self, request, response):
         """
         Log business-critical activities based on request/response.
@@ -231,27 +231,27 @@ class StrategicAuditMiddleware(MiddlewareMixin):
         # Skip if audit logging is disabled
         if not getattr(settings, 'ENABLE_AUDIT_LOGGING', True):
             return response
-        
+
         # Calculate response time
         response_time_ms = None
         if hasattr(request, '_audit_start_time'):
             response_time_ms = int((time.time() - request._audit_start_time) * 1000)
-        
+
         # Check if this request should be logged
         if not self._should_log_request(request, response):
             return response
-        
+
         # Extract audit info
         audit_info = self._extract_audit_info(request, response, response_time_ms)
-        
+
         # Log asynchronously (don't block the response)
         try:
             self._log_activity(audit_info)
         except Exception as e:
             logger.error(f"Failed to log audit activity: {e}")
-        
+
         return response
-    
+
     def _should_log_request(self, request, response):
         """
         Determine if this request should be logged.
@@ -259,59 +259,59 @@ class StrategicAuditMiddleware(MiddlewareMixin):
         """
         path = request.path
         method = request.method
-        
+
         # Skip excluded paths
         for excluded in self.EXCLUDED_PATHS:
             if excluded in path:
                 return False
-        
+
         # Skip successful GET requests (read-only, not critical)
         if method == 'GET' and 200 <= response.status_code < 300:
             return False
-        
+
         # Log all state-changing methods on critical endpoints
         if method in self.STATE_CHANGING_METHODS:
             # Check exact match
             if path in self.CRITICAL_PATTERNS:
                 return True
-            
+
             # Check partial match
             for pattern in self.CRITICAL_PATTERNS_PARTIAL:
                 if pattern in path.lower():
                     return True
-        
+
         # Log failed requests (4xx, 5xx) on any authenticated endpoint
         if response.status_code >= 400 and request.user.is_authenticated:
             return True
-        
+
         return False
-    
+
     def _extract_audit_info(self, request, response, response_time_ms):
         """Extract relevant information for audit logging."""
         path = request.path
-        
+
         # Get predefined audit info or create default
         audit_config = self.CRITICAL_PATTERNS.get(path, {})
-        
+
         # If not in exact patterns, try to infer from path
         if not audit_config:
             audit_config = self._infer_audit_config(path, request.method)
-        
+
         # Extract user
         user = request.user if request.user.is_authenticated else None
-        
+
         # Extract IP address
         ip_address = self._get_client_ip(request)
-        
+
         # Extract user agent
         user_agent = request.META.get('HTTP_USER_AGENT', '')[:500]
-        
+
         # Extract session ID
         session_id = request.session.session_key if hasattr(request, 'session') else ''
-        
+
         # Determine success
         success = 200 <= response.status_code < 400
-        
+
         # Extract error message if failed
         error_message = ''
         if not success:
@@ -320,13 +320,13 @@ class StrategicAuditMiddleware(MiddlewareMixin):
                     error_message = str(response.data)[:500]
             except:
                 error_message = f"HTTP {response.status_code}"
-        
+
         # Build metadata
         metadata = {
             'request_body_size': len(request.body) if hasattr(request, 'body') else 0,
             'response_size': len(response.content) if hasattr(response, 'content') else 0,
         }
-        
+
         # Add request data for critical transactions (sanitized)
         if audit_config.get('category') in ['transaction', 'business_critical']:
             try:
@@ -337,7 +337,7 @@ class StrategicAuditMiddleware(MiddlewareMixin):
                     metadata['request_data'] = sanitized_data
             except:
                 pass
-        
+
         return {
             'user': user,
             'action': audit_config.get('action', f'{request.method.lower()}_{path.split("/")[-2]}'),
@@ -354,7 +354,7 @@ class StrategicAuditMiddleware(MiddlewareMixin):
             'error_message': error_message,
             'metadata': metadata,
         }
-    
+
     def _infer_audit_config(self, path, method):
         """Infer audit configuration from path and method."""
         config = {
@@ -362,10 +362,10 @@ class StrategicAuditMiddleware(MiddlewareMixin):
             'severity': 'medium',
             'action': f'{method.lower()}_request'
         }
-        
+
         # Adjust based on keywords in path
         path_lower = path.lower()
-        
+
         if any(word in path_lower for word in ['payment', 'transaction', 'withdraw', 'deposit']):
             config['category'] = 'transaction'
             config['severity'] = 'critical'
@@ -383,9 +383,9 @@ class StrategicAuditMiddleware(MiddlewareMixin):
             config['severity'] = 'high'
         elif any(word in path_lower for word in ['delete', 'remove']):
             config['severity'] = 'high'
-        
+
         return config
-    
+
     def _get_client_ip(self, request):
         """Extract client IP address from request."""
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
@@ -394,14 +394,14 @@ class StrategicAuditMiddleware(MiddlewareMixin):
         else:
             ip = request.META.get('REMOTE_ADDR')
         return ip
-    
+
     def _sanitize_data(self, data):
         """Remove sensitive fields from data before logging."""
         sensitive_fields = [
             'password', 'token', 'secret', 'api_key', 'private_key',
             'card_number', 'cvv', 'pin', 'ssn', 'account_number'
         ]
-        
+
         if isinstance(data, dict):
             sanitized = {}
             for key, value in data.items():
@@ -415,7 +415,7 @@ class StrategicAuditMiddleware(MiddlewareMixin):
                     sanitized[key] = value
             return sanitized
         return data
-    
+
     def _log_activity(self, audit_info):
         """
         Create audit log entry.

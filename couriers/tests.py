@@ -9,7 +9,7 @@ User = get_user_model()
 
 class DeliveryRequestModelTest(TestCase):
     """Test DeliveryRequest model functionality"""
-    
+
     def setUp(self):
         self.customer = User.objects.create_user(
             email='customer@test.com',
@@ -19,7 +19,7 @@ class DeliveryRequestModelTest(TestCase):
             email='driver@test.com',
             password='testpass123'
         )
-    
+
     def test_delivery_request_creation(self):
         """Test creating a delivery request"""
         delivery_request = DeliveryRequest.objects.create(
@@ -40,13 +40,13 @@ class DeliveryRequestModelTest(TestCase):
             distance_fare=200.00,
             total_fare=700.00
         )
-        
+
         self.assertEqual(delivery_request.customer, self.customer)
         self.assertEqual(delivery_request.status, 'pending')
         self.assertEqual(delivery_request.total_fare, 700.00)
         self.assertTrue(delivery_request.is_active)
         self.assertTrue(delivery_request.can_be_cancelled)
-    
+
     def test_delivery_request_status_transitions(self):
         """Test delivery request status transitions"""
         delivery_request = DeliveryRequest.objects.create(
@@ -67,16 +67,16 @@ class DeliveryRequestModelTest(TestCase):
             distance_fare=200.00,
             total_fare=700.00
         )
-        
+
         # Test assigning driver
         self.assertTrue(delivery_request.assign_driver(self.driver))
         self.assertEqual(delivery_request.status, 'assigned')
         self.assertEqual(delivery_request.driver, self.driver)
-        
+
         # Test marking as picked up
         self.assertTrue(delivery_request.mark_as_picked_up())
         self.assertEqual(delivery_request.status, 'picked_up')
-        
+
         # Test marking as delivered
         self.assertTrue(delivery_request.mark_as_delivered())
         self.assertEqual(delivery_request.status, 'delivered')
@@ -85,7 +85,7 @@ class DeliveryRequestModelTest(TestCase):
 
 class DeliveryTrackingModelTest(TestCase):
     """Test DeliveryTracking model functionality"""
-    
+
     def setUp(self):
         self.customer = User.objects.create_user(
             email='customer@test.com',
@@ -114,7 +114,7 @@ class DeliveryTrackingModelTest(TestCase):
             distance_fare=200.00,
             total_fare=700.00
         )
-    
+
     def test_tracking_update_creation(self):
         """Test creating a tracking update"""
         tracking_update = DeliveryTracking.objects.create(
@@ -125,7 +125,7 @@ class DeliveryTrackingModelTest(TestCase):
             status="Heading to pickup location",
             notes="Driver is on the way"
         )
-        
+
         self.assertEqual(tracking_update.delivery_request, self.delivery_request)
         self.assertEqual(tracking_update.driver, self.driver)
         self.assertEqual(tracking_update.status, "Heading to pickup location")
@@ -133,7 +133,7 @@ class DeliveryTrackingModelTest(TestCase):
 
 class CourierRatingModelTest(TestCase):
     """Test CourierRating model functionality"""
-    
+
     def setUp(self):
         self.customer = User.objects.create_user(
             email='customer@test.com',
@@ -163,7 +163,7 @@ class CourierRatingModelTest(TestCase):
             total_fare=700.00,
             status='delivered'
         )
-    
+
     def test_rating_creation(self):
         """Test creating a courier rating"""
         rating = CourierRating.objects.create(
@@ -176,7 +176,7 @@ class CourierRatingModelTest(TestCase):
             communication_rating=4,
             review="Great service, very professional!"
         )
-        
+
         self.assertEqual(rating.delivery_request, self.delivery_request)
         self.assertEqual(rating.customer, self.customer)
         self.assertEqual(rating.driver, self.driver)

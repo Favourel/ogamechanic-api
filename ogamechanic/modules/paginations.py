@@ -68,12 +68,12 @@ class CustomLimitOffsetPagination(BasePagination):
         from urllib.parse import urlparse, parse_qs, urlencode
         parsed = urlparse(url)
         query_params = parse_qs(parsed.query)
-        
+
         query_params[self.offset_query_param] = [str(offset)]
         query_params[self.limit_query_param] = [str(self.limit)]
-        
+
         return (
             f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
             f"?{urlencode(query_params, doseq=True)}"
         )
-    
+

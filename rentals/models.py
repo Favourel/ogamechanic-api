@@ -35,24 +35,24 @@ class RentalBooking(models.Model):
             "is_rental": True
         },
     )
-    
+
     # Rental period
     start_date = models.DateField()
     end_date = models.DateField()
     start_time = models.TimeField(default="09:00:00")
     end_time = models.TimeField(default="17:00:00")
-    
+
     # Pricing
     daily_rate = models.DecimalField(max_digits=10, decimal_places=2)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
     deposit_amount = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
     )
-    
+
     # Status and tracking
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     booking_reference = models.CharField(max_length=20, unique=True)
-    
+
     # Pickup and return
     pickup_location = models.TextField()
     return_location = models.TextField()
@@ -68,19 +68,19 @@ class RentalBooking(models.Model):
     return_longitude = models.DecimalField(
         max_digits=9, decimal_places=6, null=True, blank=True
     )
-    
+
     # Additional information
     special_requests = models.TextField(blank=True)
     cancellation_reason = models.TextField(blank=True)
     notes = models.TextField(blank=True)
-    
+
     # Timestamps
     booked_at = models.DateTimeField(auto_now_add=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
-    
+
     class Meta:
         ordering = ["-booked_at"]
         indexes = [

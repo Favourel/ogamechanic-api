@@ -332,7 +332,7 @@ class RentalReviewListView(APIView):
         ).exists():
             return Response(
                 api_response(
-                    message="You have already reviewed this rental.", 
+                    message="You have already reviewed this rental.",
                     status=False
                 ),
                 status=status.HTTP_400_BAD_REQUEST,

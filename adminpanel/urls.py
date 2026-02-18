@@ -41,6 +41,9 @@ from .views import (
     PrimaryUserRentalsTabView,
     PrimaryUserProductsTabView,
     PrimaryUserActivityLogTabView,
+    MerchantProviderDetailView,
+    MechanicProviderDetailView,
+    DriverProviderDetailView,
 )
 
 app_name = 'adminpanel'
@@ -241,5 +244,20 @@ urlpatterns = [
         'users/primary/<uuid:user_id>/profile/activity-logs/',
         PrimaryUserActivityLogTabView.as_view(),
         name='primary-user-profile-activity-logs',
+    ),
+    path(
+        'users/merchant/<uuid:user_id>/detail/',
+        MerchantProviderDetailView.as_view(),
+        name='merchant-provider-detail',
+    ),
+    path(
+        'users/mechanic/<uuid:user_id>/detail/',
+        MechanicProviderDetailView.as_view(),
+        name='mechanic-provider-detail',
+    ),
+    path(
+        'users/driver/<uuid:user_id>/detail/',
+        DriverProviderDetailView.as_view(),
+        name='driver-provider-detail',
     ),
 ]

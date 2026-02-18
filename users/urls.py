@@ -73,7 +73,7 @@ urlpatterns = [
     ),
     path('roles/', views.RoleManagementView.as_view(), name='role_management'),
     path('roles/list/', views.RoleListView.as_view(), name='role_list'),
-    
+
     # Email verification
     path(
         'verify-email/',

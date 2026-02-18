@@ -1,6 +1,6 @@
 from rest_framework import serializers
-from .models import (Category, Product, ProductImage, 
-                     ProductVehicleCompatibility, Order, OrderItem, Cart, 
+from .models import (Category, Product, ProductImage,
+                     ProductVehicleCompatibility, Order, OrderItem, Cart,
                      CartItem, ProductReview, FollowMerchant, FavoriteProduct)
 from users.serializers import MechanicProfileSerializer, UserSerializer
 from django.db.models import Avg
@@ -12,7 +12,7 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = [
-            'id', 'name', 'sub_categories', 'description', 
+            'id', 'name', 'sub_categories', 'description',
             'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
@@ -28,7 +28,7 @@ class ProductVehicleCompatibilitySerializer(serializers.Serializer):
     """Serializer for ProductVehicleCompatibility model with array support"""
     make = serializers.IntegerField()
     model = serializers.ListField(
-        child=serializers.IntegerField(), 
+        child=serializers.IntegerField(),
         required=False,
         allow_empty=True
     )
@@ -39,7 +39,7 @@ class ProductVehicleCompatibilityReadSerializer(serializers.ModelSerializer):
     """Serializer for reading ProductVehicleCompatibility model"""
     make_name = serializers.CharField(source='make.name', read_only=True)
     model_name = serializers.CharField(source='model.name', read_only=True)
-    
+
     class Meta:
         model = ProductVehicleCompatibility
         fields = [
@@ -334,15 +334,15 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         fields = [
             'category_id', 'sub_category_id', 'name', 'make', 'make_id',
             'model', 'year', 'condition',
-            'body_type', 'mileage', 'mileage_unit', 'transmission', 
-            'fuel_type', 'engine_size', 'exterior_color', 'interior_color', 
+            'body_type', 'mileage', 'mileage_unit', 'transmission',
+            'fuel_type', 'engine_size', 'exterior_color', 'interior_color',
             'model', 'model_id',
-            'number_of_doors', 'number_of_seats', 'air_conditioning', 
-            'leather_seats', 'navigation_system', 'bluetooth', 
+            'number_of_doors', 'number_of_seats', 'air_conditioning',
+            'leather_seats', 'navigation_system', 'bluetooth',
             'parking_sensors', 'cruise_control', 'keyless_entry',
             'sunroof', 'alloy_wheels', 'description', 'price', 'currency',
             'negotiable', 'discount', 'availability', 'stock', 'is_rental',
-            'airbags', 'abs', 'traction_control', 'lane_assist', 
+            'airbags', 'abs', 'traction_control', 'lane_assist',
             'blind_spot_monitor', 'delivery_option', 'vehicle_compatibility',
             'contact_info'
         ]
@@ -425,7 +425,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         if sub_category:
             product.sub_category = sub_category
             product.save()
-        
+
         # Create vehicle compatibility entries
         from mechanics.models import VehicleMake
         for compatibility_data in vehicle_compatibility_data:
@@ -440,7 +440,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     "vehicle_compatibility": f"Vehicle make with ID {make_id} does not exist."  # noqa
                 })
-            
+
             if not model_ids:
                 ProductVehicleCompatibility.objects.create(
                     product=product,
@@ -662,14 +662,14 @@ class CartItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = CartItem
         fields = [
-            'id', 
-            'product', 
-            # 'product_id', 
+            'id',
+            'product',
+            # 'product_id',
             'quantity', 'added_at'
         ]
         read_only_fields = [
-            'id', 
-            'product', 
+            'id',
+            'product',
             'added_at'
         ]
 
@@ -730,18 +730,18 @@ class ProductReviewSerializer(serializers.ModelSerializer):
 class FollowMerchantSerializer(serializers.ModelSerializer):
     """Serializer for FollowMerchant model"""
     merchant_id = serializers.UUIDField(write_only=True)
-    
+
     class Meta:
         model = FollowMerchant
         fields = ['id', 'merchant_id', 'created_at']
         read_only_fields = [
             'id', 'created_at', 'merchant_id'
         ]
-    
+
     def validate_merchant_id(self, value):
         """Validate that the merchant exists and has merchant role"""
         from django.contrib.auth import get_user_model
-        
+
         User = get_user_model()
         try:
             merchant = User.objects.get(id=value)
@@ -792,11 +792,11 @@ class FollowMerchantListSerializer(serializers.ModelSerializer):
     """Serializer for listing followed merchants"""
     merchant = UserSerializer(read_only=True)
     merchant_profile = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = FollowMerchant
         fields = ['id', 'merchant', 'merchant_profile', 'created_at']
-    
+
     def get_merchant_profile(self, obj):
         """Get merchant profile information"""
         from users.serializers import MerchantProfileSerializer
@@ -811,7 +811,7 @@ class FavoriteProductListSerializer(serializers.ModelSerializer):
     """Serializer for listing favorite products"""
     product = ProductSerializer(read_only=True)
     is_in_favorite_list = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = FavoriteProduct
         fields = ['id', 'product', 'created_at', 'is_in_favorite_list']

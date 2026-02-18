@@ -1,5 +1,5 @@
-from django.contrib.auth.models import (AbstractBaseUser, 
-                                        PermissionsMixin, 
+from django.contrib.auth.models import (AbstractBaseUser,
+                                        PermissionsMixin,
                                         BaseUserManager)
 from django.db import models
 from django.utils import timezone
@@ -93,7 +93,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     last_name = models.CharField(_('last name'), max_length=30, blank=True)
     roles = models.ManyToManyField(Role)
     active_role = models.ForeignKey(
-        Role, on_delete=models.SET_NULL, 
+        Role, on_delete=models.SET_NULL,
         null=True, related_name='active_users'
     )
     phone_number = models.CharField(
@@ -205,20 +205,20 @@ class UserActivityLog(models.Model):
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(blank=True)
     session_id = models.CharField(max_length=255, blank=True)
-    
+
     # Request details
     request_method = models.CharField(max_length=10, blank=True)  # GET, POST, etc.
     request_path = models.CharField(max_length=500, blank=True)
-    
+
     # Response details
     response_status = models.IntegerField(null=True, blank=True)
     response_time_ms = models.IntegerField(null=True, blank=True)
-    
+
     # Context
     description = models.TextField(blank=True)
     object_type = models.CharField(max_length=100, null=True, blank=True, db_index=True)
     object_id = models.CharField(max_length=100, null=True, blank=True)
-    
+
     # Severity and category
     severity = models.CharField(
         max_length=20,
@@ -245,10 +245,10 @@ class UserActivityLog(models.Model):
         default='business_critical',
         db_index=True
     )
-    
+
     # Additional metadata
     metadata = models.JSONField(default=dict, blank=True)
-    
+
     # Success/failure tracking
     success = models.BooleanField(default=True)
     error_message = models.TextField(blank=True)
@@ -302,15 +302,15 @@ class Notification(models.Model):
         choices=NOTIFICATION_TYPES,
         default='info'
     )
-    
+
     # Status
     is_read = models.BooleanField(_('is read'), default=False)
     is_sent = models.BooleanField(_('is sent'), default=False)
-    
+
     # Timestamps
     created_at = models.DateTimeField(_('created at'), auto_now_add=True)
     read_at = models.DateTimeField(_('read at'), null=True, blank=True)
-    
+
     class Meta:
         verbose_name = _('notification')
         verbose_name_plural = _('notifications')
@@ -362,7 +362,7 @@ class UserEmailVerification(models.Model):
 
 class Device(models.Model):
     user = models.ForeignKey(
-        'User', on_delete=models.CASCADE, 
+        'User', on_delete=models.CASCADE,
         related_name='devices')
     fcm_token = models.CharField(max_length=255, unique=True)
     is_active = models.BooleanField(default=True)
@@ -393,7 +393,7 @@ class MerchantProfile(models.Model):
         blank=True, null=True,
         help_text="Live photo of merchant"
     )
-    
+
     # Legacy fields for backward compatibility
     is_approved = models.BooleanField(default=False)
     business_address = models.CharField(max_length=255)
@@ -543,11 +543,11 @@ class DriverProfile(models.Model):
         ('other', 'Other'),
         ('prefer_not_to_say', 'Prefer not to say'),
     ]
-    
+
     user = models.OneToOneField(
         'User', on_delete=models.CASCADE, related_name='driver_profile'
     )
-    
+
     # Personal Information
     full_name = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=20)
@@ -556,7 +556,7 @@ class DriverProfile(models.Model):
     gender = models.CharField(max_length=20, choices=GENDER_CHOICES, blank=True, null=True) # noqa
     address = models.CharField(max_length=255)
     location = models.CharField(max_length=255, blank=True, null=True)
-    
+
     # License Information
     license_number = models.CharField(max_length=50, blank=True, null=True)
     license_issue_date = models.DateField(blank=True, null=True)
@@ -571,14 +571,14 @@ class DriverProfile(models.Model):
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png'])],
         blank=True, null=True
     )
-    
+
     # Vehicle Information
     vin = models.CharField(max_length=50, blank=True, null=True)
     vehicle_name = models.CharField(max_length=100, blank=True, null=True)
     plate_number = models.CharField(max_length=20, blank=True, null=True)
     vehicle_model = models.CharField(max_length=100, blank=True, null=True)
     vehicle_color = models.CharField(max_length=50, blank=True, null=True)
-    
+
     # Vehicle Photos
     vehicle_photo_front = models.ImageField(
         upload_to='driver/vehicle_photos/front/',
@@ -596,11 +596,11 @@ class DriverProfile(models.Model):
         upload_to='driver/vehicle_photos/left/',
         blank=True, null=True
     )
-    
+
     # Bank Information
     bank_name = models.CharField(max_length=100, blank=True, null=True)
     account_number = models.CharField(max_length=20, blank=True, null=True)
-    
+
     # Legacy fields for backward compatibility
     government_id = models.FileField(
         upload_to='driver/ids/',
@@ -640,7 +640,7 @@ class DriverProfile(models.Model):
     approved_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     # Enhanced fields for better driver management
     vehicle_info = models.TextField(blank=True)
     license_number = models.CharField(max_length=50, blank=True)
@@ -651,7 +651,7 @@ class DriverProfile(models.Model):
     rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
     total_rides = models.PositiveIntegerField(default=0)
     total_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=0.00) # noqa
-    
+
     # Enhanced location tracking fields with spatial support
     # Note: For development with SQLite, we'll use regular fields
     # For production with PostgreSQL, uncomment the PointField
@@ -659,13 +659,13 @@ class DriverProfile(models.Model):
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True) # noqa
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True) # noqa
     last_location_update = models.DateTimeField(null=True, blank=True)
-    
+
     # Additional spatial tracking fields
     current_ride = models.ForeignKey(
-        'rides.Ride', 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True, 
+        'rides.Ride',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='assigned_driver'
     )
     is_online = models.BooleanField(default=False)
@@ -692,7 +692,7 @@ class DriverProfile(models.Model):
         """
         from django.utils import timezone
         from ogamechanic.modules.location_service import LocationService # noqa
-        
+
         self.latitude = lat
         self.longitude = lon
         self.last_location_update = timezone.now()
@@ -704,7 +704,7 @@ class DriverProfile(models.Model):
         """
         if not self.latitude or not self.longitude:
             return float('inf')
-        
+
         from ogamechanic.modules.location_service import LocationService
         return LocationService.haversine_distance(
             float(self.latitude), float(self.longitude), lat, lon
@@ -777,8 +777,8 @@ class BankAccount(models.Model):
     is_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     paystack_recipient_code = models.CharField(
-        max_length=100, 
-        blank=True, 
+        max_length=100,
+        blank=True,
         null=True,
         help_text=_('Paystack recipient code for transfers')
     )
@@ -848,11 +848,11 @@ class Wallet(models.Model):
         """Credit the wallet by a given amount."""
         if amount <= 0:
             raise ValueError("Amount must be positive")
-        
+
         self.balance = models.F('balance') + amount
         self.save(update_fields=['balance'])
         self.refresh_from_db(fields=['balance'])
-        
+
         # Create transaction record
         Transaction.objects.create(
             wallet=self,
@@ -866,14 +866,14 @@ class Wallet(models.Model):
         """Debit the wallet by a given amount."""
         if amount <= 0:
             raise ValueError("Amount must be positive")
-        
+
         if self.balance < amount:
             raise ValueError("Insufficient balance")
-        
+
         self.balance = models.F('balance') - amount
         self.save(update_fields=['balance'])
         self.refresh_from_db(fields=['balance'])
-        
+
         # Create transaction record
         Transaction.objects.create(
             wallet=self,
@@ -886,7 +886,7 @@ class Wallet(models.Model):
     def get_daily_transactions_total(self):
         """Get total transactions for today."""
         from django.utils import timezone
-        
+
         today = timezone.now().date()
         return self.transactions.filter(
             created_at__date=today
@@ -897,7 +897,7 @@ class Wallet(models.Model):
     def get_monthly_transactions_total(self):
         """Get total transactions for current month."""
         from django.utils import timezone
-        
+
         now = timezone.now()
         return self.transactions.filter(
             created_at__year=now.year,
@@ -910,18 +910,18 @@ class Wallet(models.Model):
         """Check if wallet can perform transaction within limits."""
         if not self.is_active:
             return False, "Wallet is inactive"
-        
+
         if self.balance < amount:
             return False, "Insufficient balance"
-        
+
         daily_total = self.get_daily_transactions_total()
         if daily_total + amount > self.daily_limit:
             return False, "Daily transaction limit exceeded"
-        
+
         monthly_total = self.get_monthly_transactions_total()
         if monthly_total + amount > self.monthly_limit:
             return False, "Monthly transaction limit exceeded"
-        
+
         return True, "Transaction allowed"
 
 

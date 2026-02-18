@@ -1150,12 +1150,12 @@ class SwitchRoleView(APIView):
             print(
                 f"User current roles: {[r.name for r in user.roles.all()]}"
             )
-            
+
             if not user.roles.filter(id=role.id).exists():
                 user.roles.add(role)
                 role_added = True
                 print(f"Role {role_name} added to user {user.email}")
-                
+
                 # Create basic profile for newly added role
                 if role_name == "merchant":
                     from users.models import MerchantProfile
@@ -1192,33 +1192,33 @@ class SwitchRoleView(APIView):
                 profile_required = not profile_exists
                 profile_endpoint = "/api/users/profile/merchant/"
                 print(f"Merchant profile exists for {user.email}: {profile_exists}")
-                
+
                 # Create basic merchant profile if it doesn't exist (fallback)
                 if not profile_exists:
                     from users.models import MerchantProfile
                     MerchantProfile.objects.create(user=user)
                     profile_exists = True
                     print(f"Fallback: Created merchant profile for user {user.email}")
-                    
+
             elif role_name == "mechanic":
                 profile_exists = hasattr(user, "mechanic_profile")
                 profile_required = not profile_exists
                 profile_endpoint = "/api/users/profile/mechanic/"
                 print(f"Mechanic profile exists for {user.email}: {profile_exists}")
-                
+
                 # Create basic mechanic profile if it doesn't exist (fallback)
                 if not profile_exists:
                     from users.models import MechanicProfile
                     MechanicProfile.objects.create(user=user)
                     profile_exists = True
                     print(f"Fallback: Created mechanic profile for user {user.email}")
-                    
+
             elif role_name == "driver":
                 profile_exists = hasattr(user, "driver_profile")
                 profile_required = not profile_exists
                 profile_endpoint = "/api/users/profile/driver/"
                 logger.info(f"Driver profile exists for {user.email}: {profile_exists}")
-                
+
                 # Create basic driver profile if it doesn't exist (fallback)
                 if not profile_exists:
                     from users.models import DriverProfile

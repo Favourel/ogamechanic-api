@@ -1051,7 +1051,7 @@ class TrainingSessionParticipantListView(APIView):
         if training_session.participants.filter(participant=request.user).exists():  # noqa
             return Response(
                 api_response(
-                    message="You are already registered for this session.", status=False  # noqa    
+                    message="You are already registered for this session.", status=False  # noqa
                 ),
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -1373,7 +1373,7 @@ class MechanicDetailView(APIView):
                             type=openapi.TYPE_BOOLEAN, example=False
                         ),
                         "message": openapi.Schema(
-                            type=openapi.TYPE_STRING, 
+                            type=openapi.TYPE_STRING,
                             example="Mechanic not found."
                         ),
                     },

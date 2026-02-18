@@ -9,38 +9,38 @@ User = get_user_model()
 
 class ChatConsumer(AsyncWebsocketConsumer):
     """WebSocket consumer for real-time chat functionality"""
-    
+
     async def connect(self):
         """Handle WebSocket connection"""
         self.user = self.scope["user"]
         self.chat_room_id = self.scope['url_route']['kwargs']['chat_room_id']
-        
+
         if not self.user.is_authenticated:
             await self.close()
             return
-        
+
         # Verify user is participant in this chat room
         is_participant = await self.is_chat_room_participant()
         if not is_participant:
             await self.close()
             return
-        
+
         # Join the chat room group
         self.room_group_name = f'chat_{self.chat_room_id}'
         await self.channel_layer.group_add(
             self.room_group_name,
             self.channel_name
         )
-        
+
         await self.accept()
-        
+
         # Send connection confirmation
         await self.send(text_data=json.dumps({
             'type': 'connection_established',
             'message': 'Connected to chat room',
             'chat_room_id': self.chat_room_id
         }))
-    
+
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection"""
         # Leave the chat room group
@@ -48,38 +48,38 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.room_group_name,
             self.channel_name
         )
-    
+
     async def receive(self, text_data):
         """Handle incoming WebSocket messages"""
         try:
             text_data_json = json.loads(text_data)
             message_type = text_data_json.get('type', 'chat_message')
-            
+
             if message_type == 'chat_message':
                 await self.handle_chat_message(text_data_json)
             elif message_type == 'typing':
                 await self.handle_typing(text_data_json)
             elif message_type == 'read_messages':
                 await self.handle_read_messages(text_data_json)
-                
+
         except json.JSONDecodeError:
             await self.send(text_data=json.dumps({
                 'type': 'error',
                 'message': 'Invalid JSON format'
             }))
-    
+
     async def handle_chat_message(self, data):
         """Handle incoming chat messages"""
         content = data.get('content', '').strip()
         message_type = data.get('message_type', 'text')
         file_url = data.get('file_url', None)
-        
+
         if not content and message_type == 'text':
             return
-        
+
         # Save message to database
         message = await self.save_message(content, message_type, file_url)
-        
+
         # Send message to chat room group
         await self.channel_layer.group_send(
             self.room_group_name,
@@ -101,14 +101,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 }
             }
         )
-        
+
         # Create notifications for other participants
         await self.create_notifications(message)
-    
+
     async def handle_typing(self, data):
         """Handle typing indicators"""
         is_typing = data.get('is_typing', False)
-        
+
         await self.channel_layer.group_send(
             self.room_group_name,
             {
@@ -118,12 +118,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'is_typing': is_typing
             }
         )
-    
+
     async def handle_read_messages(self, data):
         """Handle marking messages as read"""
         message_ids = data.get('message_ids', [])
         await self.mark_messages_as_read(message_ids)
-        
+
         await self.channel_layer.group_send(
             self.room_group_name,
             {
@@ -132,14 +132,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'message_ids': message_ids
             }
         )
-    
+
     async def chat_message(self, event):
         """Send chat message to WebSocket"""
         await self.send(text_data=json.dumps({
             'type': 'chat_message',
             'message': event['message']
         }))
-    
+
     async def user_typing(self, event):
         """Send typing indicator to WebSocket"""
         await self.send(text_data=json.dumps({
@@ -148,7 +148,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'user_email': event['user_email'],
             'is_typing': event['is_typing']
         }))
-    
+
     async def messages_read(self, event):
         """Send read confirmation to WebSocket"""
         await self.send(text_data=json.dumps({
@@ -156,7 +156,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'user_id': event['user_id'],
             'message_ids': event['message_ids']
         }))
-    
+
     @database_sync_to_async
     def is_chat_room_participant(self):
         """Check if user is participant in the chat room"""
@@ -165,7 +165,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return chat_room.participants.filter(id=self.user.id).exists()
         except ChatRoom.DoesNotExist:
             return False
-    
+
     @database_sync_to_async
     def save_message(self, content, message_type, file_url):
         """Save message to database"""
@@ -177,13 +177,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
             message_type=message_type,
             file_url=file_url
         )
-    
+
     @database_sync_to_async
     def create_notifications(self, message):
         """Create notifications for other participants"""
         chat_room = message.chat_room
         other_participants = chat_room.participants.exclude(id=self.user.id)
-        
+
         notifications = []
         for participant in other_participants:
             notification = ChatNotification(
@@ -192,9 +192,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 message=message
             )
             notifications.append(notification)
-        
+
         ChatNotification.objects.bulk_create(notifications)
-    
+
     @database_sync_to_async
     def mark_messages_as_read(self, message_ids):
         """Mark messages as read"""
@@ -205,15 +205,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 id=self.user.id
             )
         )
-        
+
         for message in messages:
             message.mark_as_read(self.user)
-    
+
     @database_sync_to_async
     def get_chat_room_participants(self):
         """Get chat room participants"""
         chat_room = ChatRoom.objects.get(id=self.chat_room_id)
-        return chat_room.participants 
+        return chat_room.participants
 
 
 class CallConsumer(AsyncWebsocketConsumer):
@@ -280,4 +280,4 @@ class CallConsumer(AsyncWebsocketConsumer):
         # Relay the signaling message to the WebSocket client
         payload = event["payload"]
         payload["from_id"] = event["from_id"]
-        await self.send(text_data=json.dumps(payload)) 
+        await self.send(text_data=json.dumps(payload))

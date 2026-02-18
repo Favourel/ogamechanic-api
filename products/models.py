@@ -417,7 +417,7 @@ class ProductVehicleCompatibility(models.Model):
             if self.model.parent_make_id != self.make.id:
                 raise ValidationError(
                     "Selected model does not belong to the selected make.")
-        
+
         # if self.year_from and self.year_to and self.year_from > self.year_to:
         #     raise ValidationError("Year from cannot be greater than year to.") # noqa
 
@@ -486,7 +486,7 @@ class Order(models.Model):
 
 
 class OrderItem(models.Model):
-    order = models.ForeignKey(Order, 
+    order = models.ForeignKey(Order,
                               on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)
@@ -516,7 +516,7 @@ class Cart(models.Model):
 
 
 class CartItem(models.Model):
-    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, 
+    cart = models.ForeignKey(Cart, on_delete=models.CASCADE,
                              related_name='items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)

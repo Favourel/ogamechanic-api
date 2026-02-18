@@ -12,11 +12,11 @@ class RideAdmin(admin.ModelAdmin):
         'status', 'requested_at', 'customer', 'driver'
     )
     search_fields = (
-        'id', 'customer__email', 'driver__email', 'pickup_address', 
+        'id', 'customer__email', 'driver__email', 'pickup_address',
         'dropoff_address'
     )
     readonly_fields = (
-        'requested_at', 'accepted_at', 'started_at', 'completed_at', 
+        'requested_at', 'accepted_at', 'started_at', 'completed_at',
         'cancelled_at'
     )
     autocomplete_fields = ('customer', 'driver')
@@ -34,11 +34,11 @@ class CourierRequestAdmin(admin.ModelAdmin):
         'status', 'requested_at', 'customer', 'driver'
     )
     search_fields = (
-        'id', 'customer__email', 'driver__email', 'pickup_address', 
+        'id', 'customer__email', 'driver__email', 'pickup_address',
         'dropoff_address', 'item_description'
     )
     readonly_fields = (
-        'requested_at', 'accepted_at', 'started_at', 'completed_at', 
+        'requested_at', 'accepted_at', 'started_at', 'completed_at',
         'cancelled_at'
     )
     autocomplete_fields = ('customer', 'driver')

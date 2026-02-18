@@ -14,13 +14,13 @@ def maintain_indexes():
     try:
         # Analyze index usage and bloat
         call_command('monitor_indexes', '--analyze')
-        
+
         # Run VACUUM ANALYZE on tables
         call_command('monitor_indexes', '--vacuum')
-        
+
         # Rebuild indexes with high bloat
         call_command('monitor_indexes', '--reindex')
-        
+
         logger.info("Index maintenance completed successfully")
     except Exception as e:
         logger.error(f"Error during index maintenance: {str(e)}")
@@ -36,8 +36,8 @@ def maintain_asset_indexes():
     try:
         # Run asset-specific index analysis and maintenance
         call_command('monitor_indexes', '--asset-specific')
-        
+
         logger.info("Asset index maintenance completed successfully")
     except Exception as e:
         logger.error(f"Error during asset index maintenance: {str(e)}")
-        raise 
+        raise

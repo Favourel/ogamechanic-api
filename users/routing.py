@@ -8,11 +8,11 @@ websocket_urlpatterns = [
         consumers.NotificationConsumer.as_asgi(),
         name='notifications'
     ),
-    
+
     # Admin/group notifications
     re_path(
         r'ws/admin/notifications/$',
         consumers.NotificationGroupConsumer.as_asgi(),
         name='admin_notifications'
     ),
-] 
+]

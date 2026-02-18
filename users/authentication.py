@@ -18,10 +18,10 @@ class LockoutBackend(ModelBackend):
     def authenticate(self, request, username=None, email=None, phone_number=None, password=None, **kwargs): # noqa
         # Use email, phone_number, or username for authentication
         auth_identifier = email or phone_number or username
-        
+
         if not auth_identifier or not password:
             return None
-            
+
         try:
             # Try to find user by email or phone number
             user = None
@@ -31,18 +31,18 @@ class LockoutBackend(ModelBackend):
             else:
                 # Try phone number
                 user = User.objects.get(phone_number=auth_identifier)
-            
+
             if user and user.check_password(password):
                 # Check if account is locked
                 if user.is_locked():
                     return None
-                    
+
                 # Login successful - reset failed attempts
                 if user.failed_login_attempts > 0:
                     user.failed_login_attempts = 0
                     user.locked_until = None
                     user.save()
-                
+
                 return user
         except User.DoesNotExist:
             pass
@@ -56,7 +56,7 @@ class LockoutBackend(ModelBackend):
             else:
                 # Try phone number
                 user_obj = User.objects.get(phone_number=auth_identifier)
-            
+
             if user_obj:
                 user_obj.failed_login_attempts += 1
                 user_obj.last_failed_login = timezone.now()
@@ -71,7 +71,7 @@ class LockoutBackend(ModelBackend):
                 ip_address = None
                 if request and hasattr(request, 'META'):
                     ip_address = request.META.get('REMOTE_ADDR')
-                
+
                 UserActivityLog.objects.create(
                     user=user_obj,
                     action='login_failed',

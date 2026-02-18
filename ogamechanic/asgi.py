@@ -36,8 +36,8 @@ django_asgi_app = get_asgi_application()
 
 # Combine all WebSocket URL patterns
 all_websocket_urlpatterns = (
-    websocket_urlpatterns + 
-    notification_websocket_urlpatterns + 
+    websocket_urlpatterns +
+    notification_websocket_urlpatterns +
     rides_websocket_urlpatterns
 )
 

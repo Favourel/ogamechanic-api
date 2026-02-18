@@ -16,20 +16,20 @@ class RentalBookingModelTest(TestCase):
         from users.models import Role
         self.customer_role = Role.objects.create(name='customer')
         self.merchant_role = Role.objects.create(name='merchant')
-        
+
         # Create users
         self.customer = User.objects.create_user(
             email='customer@test.com',
             password='testpass123'
         )
         self.customer.roles.add(self.customer_role)
-        
+
         self.merchant = User.objects.create_user(
             email='merchant@test.com',
             password='testpass123'
         )
         self.merchant.roles.add(self.merchant_role)
-        
+
         # Create category and product
         self.category = Category.objects.create(name='Cars')
         self.product = Product.objects.create(
@@ -40,7 +40,7 @@ class RentalBookingModelTest(TestCase):
             price=Decimal('100.00'),
             is_rental=True
         )
-        
+
         # Create rental booking
         self.rental_booking = RentalBooking.objects.create(
             customer=self.customer,
@@ -71,12 +71,12 @@ class RentalBookingModelTest(TestCase):
         self.assertTrue(self.rental_booking.confirm_booking())
         self.assertEqual(self.rental_booking.status, 'confirmed')
         self.assertIsNotNone(self.rental_booking.confirmed_at)
-        
+
         # Test start rental
         self.assertTrue(self.rental_booking.start_rental())
         self.assertEqual(self.rental_booking.status, 'active')
         self.assertIsNotNone(self.rental_booking.started_at)
-        
+
         # Test complete rental
         self.assertTrue(self.rental_booking.complete_rental())
         self.assertEqual(self.rental_booking.status, 'completed')
@@ -101,20 +101,20 @@ class RentalReviewModelTest(TestCase):
         from users.models import Role
         self.customer_role = Role.objects.create(name='customer')
         self.merchant_role = Role.objects.create(name='merchant')
-        
+
         # Create users
         self.customer = User.objects.create_user(
             email='customer@test.com',
             password='testpass123'
         )
         self.customer.roles.add(self.customer_role)
-        
+
         self.merchant = User.objects.create_user(
             email='merchant@test.com',
             password='testpass123'
         )
         self.merchant.roles.add(self.merchant_role)
-        
+
         # Create category and product
         self.category = Category.objects.create(name='Cars')
         self.product = Product.objects.create(
@@ -125,7 +125,7 @@ class RentalReviewModelTest(TestCase):
             price=Decimal('100.00'),
             is_rental=True
         )
-        
+
         # Create rental booking
         self.rental_booking = RentalBooking.objects.create(
             customer=self.customer,
@@ -137,7 +137,7 @@ class RentalReviewModelTest(TestCase):
             pickup_location='Test Pickup Location',
             return_location='Test Return Location'
         )
-        
+
         # Create rental review
         self.rental_review = RentalReview.objects.create(
             rental=self.rental_booking,
@@ -165,14 +165,14 @@ class RentalPeriodModelTest(TestCase):
         # Create roles
         from users.models import Role
         self.merchant_role = Role.objects.create(name='merchant')
-        
+
         # Create merchant
         self.merchant = User.objects.create_user(
             email='merchant@test.com',
             password='testpass123'
         )
         self.merchant.roles.add(self.merchant_role)
-        
+
         # Create category and product
         self.category = Category.objects.create(name='Cars')
         self.product = Product.objects.create(
@@ -183,7 +183,7 @@ class RentalPeriodModelTest(TestCase):
             price=Decimal('100.00'),
             is_rental=True
         )
-        
+
         # Create rental period
         self.rental_period = RentalPeriod.objects.create(
             product=self.product,

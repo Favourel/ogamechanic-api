@@ -9,7 +9,7 @@ from cryptography.fernet import Fernet
 from django.conf import settings
 from django.utils.crypto import get_random_string
 from users.models import Notification
-# from home.models import SiteSetting 
+# from home.models import SiteSetting
 
 
 def log_request(*args):
@@ -28,7 +28,7 @@ def decrypt_text(text: str):
     key = base64.urlsafe_b64encode(settings.SECRET_KEY.encode()[:32])
     fernet = Fernet(key)
     decrypt = fernet.decrypt(text.encode())
-    return decrypt.decode()  
+    return decrypt.decode()
 
 
 def generate_random_password():
@@ -199,7 +199,7 @@ def incoming_request_checks(request, require_data_field: bool = True) -> tuple:
                     if hasattr(request, "FILES") and k in request.FILES:
                         continue
                     top_level_fields[k] = v
-                
+
                 if top_level_fields:
                     if not isinstance(data, dict):
                         data = {}
@@ -220,21 +220,21 @@ def incoming_request_checks(request, require_data_field: bool = True) -> tuple:
         # Normalize nested JSON fields (IMPROVED SECTION)
         try:
             import json as _json
-            
+
             # List of fields that should be parsed as JSON
             json_fields = [
-                'expertise_details', 
+                'expertise_details',
                 # 'vehicle_make_ids'
                 ]
-            
+
             for key in json_fields:
                 if key in data:
                     value = data[key]
-                    
+
                     # If it's already a list/dict, keep it
                     if isinstance(value, (list, dict)):
                         continue
-                    
+
                     # If it's a string, try to parse it
                     if isinstance(value, str):
                         if value.strip() == "":
@@ -249,39 +249,39 @@ def incoming_request_checks(request, require_data_field: bool = True) -> tuple:
                     else:
                         # Unexpected type, set to empty list
                         data[key] = []
-            
+
             # Coerce vehicle_make_ids elements to integers
             # if 'vehicle_make_ids' in data and isinstance(data['vehicle_make_ids'], list):
             #     try:
             #         data['vehicle_make_ids'] = [int(item) for item in data['vehicle_make_ids']]
             #     except (ValueError, TypeError):
             #         return False, "vehicle_make_ids must contain only integer values"
-            
+
             # Validate expertise_details structure
             if 'expertise_details' in data and isinstance(data['expertise_details'], list):
                 for idx, detail in enumerate(data['expertise_details']):
                     if not isinstance(detail, dict):
                         return False, f"expertise_details[{idx}] must be an object"
-                    
+
                     # Ensure vehicle_make_id is an integer
                     if 'vehicle_make_id' in detail:
                         try:
                             detail['vehicle_make_id'] = int(detail['vehicle_make_id'])
                         except (ValueError, TypeError):
                             return False, f"expertise_details[{idx}].vehicle_make_id must be an integer"
-                    
+
                     # Ensure years_of_experience is an integer
                     if 'years_of_experience' in detail:
                         try:
                             detail['years_of_experience'] = int(detail['years_of_experience'])
                         except (ValueError, TypeError):
                             return False, f"expertise_details[{idx}].years_of_experience must be an integer"
-                            
+
         except Exception as e:
             return False, f"Error processing request data: {str(e)}"
 
         return True, data
-        
+
     except Exception as err:
         return False, f"Request processing error: {str(err)}"
 

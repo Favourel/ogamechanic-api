@@ -18,7 +18,7 @@ class CustomEmailBackend(EmailBackend):
             ssl_certfile=None,
             **kwargs,
     ):
-        super().__init__(host, port, username, password, use_tls, 
+        super().__init__(host, port, username, password, use_tls,
                          fail_silently, use_ssl, timeout, ssl_keyfile,
                          ssl_certfile, **kwargs)
         self.source_address = None

@@ -48,9 +48,9 @@ class NotificationService:
     """
     Service class for handling all types of notifications
     """
-    
+
     @staticmethod
-    def create_notification(user, title, message, notification_type='info', 
+    def create_notification(user, title, message, notification_type='info',
                           related_object=None, related_object_type=None,
                           role=None): # noqa
         """
@@ -69,7 +69,7 @@ class NotificationService:
         # Use provided role or fall back to user's active role
         if role is None and hasattr(user, 'active_role'):
             role = user.active_role
-        
+
         notification = Notification.objects.create(
             user=user,
             role=role,
@@ -77,7 +77,7 @@ class NotificationService:
             message=message,
             notification_type=notification_type
         )
-        
+
         # Send real-time notification if user is online
         if hasattr(NotificationService, 'send_realtime_notification'):
             try:
@@ -86,7 +86,7 @@ class NotificationService:
                 )
             except Exception:
                 pass  # Fail silently for real-time notifications
-        
+
         # Send email notification if user has email notifications enabled
         if (hasattr(user, 'email_notifications') and
                 user.email_notifications and
@@ -97,7 +97,7 @@ class NotificationService:
                 )
             except Exception:
                 pass  # Fail silently for email notifications
-        
+
         # Send push notification if user has devices
         if hasattr(user, 'devices'):
             try:
@@ -108,9 +108,9 @@ class NotificationService:
                         )
             except Exception:
                 pass  # Fail silently for push notifications
-        
+
         return notification
-    
+
     @staticmethod
     def create_bulk_notifications(users, title, message,
                                 notification_type='info', role=None): # noqa
@@ -128,7 +128,7 @@ class NotificationService:
         for user in users:
             # Use provided role or fall back to user's active role
             user_role = role if role else getattr(user, 'active_role', None)
-            
+
             notification = Notification.objects.create(
                 user=user,
                 role=user_role,
@@ -137,21 +137,21 @@ class NotificationService:
                 notification_type=notification_type
             )
             notifications.append(notification)
-        
+
         # Send bulk email notifications
         from users.services import send_bulk_email_notifications
         send_bulk_email_notifications.delay(
             [user.id for user in users], title, message, notification_type
         )
-        
+
         # Send bulk push notifications
         from users.services import send_bulk_push_notifications
         send_bulk_push_notifications.delay(
             [user.id for user in users], title, message, notification_type
         )
-        
+
         return notifications
-    
+
     @staticmethod
     def send_realtime_notification(user, notification):
         """
@@ -160,7 +160,7 @@ class NotificationService:
         try:
             from channels.layers import get_channel_layer
             from asgiref.sync import async_to_sync
-            
+
             channel_layer = get_channel_layer()
             async_to_sync(channel_layer.group_send)(
                 f"notifications_{user.id}",
@@ -178,7 +178,7 @@ class NotificationService:
             )
         except Exception as e:
             print(f"Failed to send real-time notification: {e}")
-    
+
     @staticmethod
     def get_notification_template(notification_type, context=None):
         """
@@ -198,9 +198,9 @@ class NotificationService:
             'warning': 'emails/warning_notification.html',
             'error': 'emails/error_notification.html',
         }
-        
+
         return templates.get(notification_type, templates['info'])
-    
+
     @staticmethod
     def get_email_subject(notification_type, title):
         """
@@ -220,7 +220,7 @@ class NotificationService:
             'warning': f'Warning: {title}',
             'error': f'Error: {title}',
         }
-        
+
         return subjects.get(notification_type, f'Notification: {title}')
 
 
@@ -231,7 +231,7 @@ def send_email_notification(user_id, title, message, notification_type='info'): 
     """
     try:
         user = User.objects.get(id=user_id)
-        
+
         # Get email template
         template = NotificationService.get_notification_template(notification_type) # noqa
         context = {
@@ -241,11 +241,11 @@ def send_email_notification(user_id, title, message, notification_type='info'): 
             'notification_type': notification_type,
             'timestamp': timezone.now()
         }
-        
+
         # Render email content
         html_content = render_to_string(template, context)
         text_content = strip_tags(html_content)
-        
+
         # Send email
         send_mail(
             subject=NotificationService.get_email_subject(notification_type, title), # noqa
@@ -255,14 +255,14 @@ def send_email_notification(user_id, title, message, notification_type='info'): 
             recipient_list=[user.email],
             fail_silently=False,
         )
-        
+
         # Mark notification as sent
         user.notifications.filter(
-            title=title, 
-            message=message, 
+            title=title,
+            message=message,
             is_sent=False
         ).update(is_sent=True)
-        
+
     except Exception as e:
         print(f"Failed to send email notification: {e}")
 
@@ -274,10 +274,10 @@ def send_bulk_email_notifications(user_ids, title, message, notification_type='i
     """
     try:
         users = User.objects.filter(id__in=user_ids, email_notifications=True)
-        
+
         # Get email template
         template = NotificationService.get_notification_template(notification_type) # noqa
-        
+
         for user in users:
             context = {
                 'user': user,
@@ -286,11 +286,11 @@ def send_bulk_email_notifications(user_ids, title, message, notification_type='i
                 'notification_type': notification_type,
                 'timestamp': timezone.now()
             }
-            
+
             # Render email content
             html_content = render_to_string(template, context)
             text_content = strip_tags(html_content)
-            
+
             # Send email
             send_mail(
                 subject=NotificationService.get_email_subject(notification_type, title), # noqa
@@ -300,7 +300,7 @@ def send_bulk_email_notifications(user_ids, title, message, notification_type='i
                 recipient_list=[user.email],
                 fail_silently=True,
             )
-        
+
         # Mark notifications as sent
         Notification.objects.filter(
             user__id__in=user_ids,
@@ -308,7 +308,7 @@ def send_bulk_email_notifications(user_ids, title, message, notification_type='i
             message=message,
             is_sent=False
         ).update(is_sent=True)
-        
+
     except Exception as e:
         print(f"Failed to send bulk email notifications: {e}")
 
@@ -321,13 +321,13 @@ def send_push_notification(user_id, title, message, notification_type='info'):
     try:
         user = User.objects.get(id=user_id)
         devices = user.devices.filter(is_active=True)
-        
+
         if not devices.exists():
             return
-        
+
         # Import FCM here to avoid circular imports
         from firebase_admin import messaging
-        
+
         # Prepare notification data
         notification_data = {
             'title': title,
@@ -336,7 +336,7 @@ def send_push_notification(user_id, title, message, notification_type='info'):
             'timestamp': str(timezone.now()),
             'click_action': 'FLUTTER_NOTIFICATION_CLICK'
         }
-        
+
         # Send to all user devices
         for device in devices:
             try:
@@ -348,15 +348,15 @@ def send_push_notification(user_id, title, message, notification_type='info'):
                     data=notification_data,
                     token=device.fcm_token,
                 )
-                
+
                 messaging.send(message)
-                
+
             except Exception as e:
                 print(f"Failed to send push notification to device {device.id}: {e}") # noqa
                 # Mark device as inactive if FCM token is invalid
                 device.is_active = False
                 device.save()
-        
+
     except Exception as e:
         print(f"Failed to send push notification: {e}")
 
@@ -368,10 +368,10 @@ def send_bulk_push_notifications(user_ids, title, message, notification_type='in
     """
     try:
         users = User.objects.filter(id__in=user_ids)
-        
+
         # Import FCM here to avoid circular imports
         from firebase_admin import messaging
-        
+
         # Prepare notification data
         notification_data = {
             'title': title,
@@ -380,16 +380,16 @@ def send_bulk_push_notifications(user_ids, title, message, notification_type='in
             'timestamp': str(timezone.now()),
             'click_action': 'FLUTTER_NOTIFICATION_CLICK'
         }
-        
+
         # Group devices by FCM token
         tokens = []
         for user in users:
             user_tokens = user.devices.filter(is_active=True).values_list('fcm_token', flat=True) # noqa
             tokens.extend(user_tokens)
-        
+
         if not tokens:
             return
-        
+
         # Send to all devices
         try:
             message = messaging.MulticastMessage(
@@ -400,22 +400,22 @@ def send_bulk_push_notifications(user_ids, title, message, notification_type='in
                 data=notification_data,
                 tokens=tokens,
             )
-            
+
             response = messaging.send_multicast(message)
-            
+
             # Handle failed tokens
             if response.failure_count > 0:
                 failed_tokens = []
                 for i, result in enumerate(response.responses):
                     if not result.success:
                         failed_tokens.append(tokens[i])
-                
+
                 # Mark failed devices as inactive
                 Device.objects.filter(fcm_token__in=failed_tokens).update(is_active=False) # noqa
-        
+
         except Exception as e:
             print(f"Failed to send bulk push notifications: {e}")
-        
+
     except Exception as e:
         print(f"Failed to send bulk push notifications: {e}")
 
@@ -430,7 +430,7 @@ def send_daily_digest():
             notification_frequency='daily',
             in_app_notifications=True
         )
-        
+
         for user in users:
             # Get unread notifications from the last 24 hours
             yesterday = timezone.now() - timezone.timedelta(days=1)
@@ -438,7 +438,7 @@ def send_daily_digest():
                 created_at__gte=yesterday,
                 is_read=False
             ).order_by('-created_at')
-            
+
             if notifications.exists():
                 # Create digest notification
                 NotificationService.create_notification(
@@ -447,7 +447,7 @@ def send_daily_digest():
                     message=f"You have {notifications.count()} unread notifications from the last 24 hours.", # noqa
                     notification_type='info'
                 )
-        
+
     except Exception as e:
         print(f"Failed to send daily digest: {e}")
 
@@ -462,7 +462,7 @@ def send_weekly_digest():
             notification_frequency='weekly',
             in_app_notifications=True
         )
-        
+
         for user in users:
             # Get unread notifications from the last 7 days
             week_ago = timezone.now() - timezone.timedelta(days=7)
@@ -470,7 +470,7 @@ def send_weekly_digest():
                 created_at__gte=week_ago,
                 is_read=False
             ).order_by('-created_at')
-            
+
             if notifications.exists():
                 # Create digest notification
                 NotificationService.create_notification(
@@ -479,7 +479,7 @@ def send_weekly_digest():
                     message=f"You have {notifications.count()} unread notifications from the last week.", # noqa
                     notification_type='info'
                 )
-        
+
     except Exception as e:
         print(f"Failed to send weekly digest: {e}")
 
@@ -487,7 +487,7 @@ def send_weekly_digest():
 # Business-specific notification methods
 class OrderNotificationService:
     """Service for order-related notifications"""
-    
+
     @staticmethod
     def order_created(order):
         """Notify customer when order is created"""
@@ -497,7 +497,7 @@ class OrderNotificationService:
             message=f"Your order #{order.id} has been created successfully.",
             notification_type='success'
         )
-    
+
     @staticmethod
     def order_status_updated(order):
         """Notify customer when order status changes"""
@@ -507,16 +507,16 @@ class OrderNotificationService:
             'completed': "Your order has been completed.",
             'cancelled': "Your order has been cancelled."
         }
-        
+
         message = status_messages.get(order.status, f"Your order status has been updated to {order.status}.") # noqa
-        
+
         NotificationService.create_notification(
             user=order.customer,
             title=f"Order {order.status.title()}",
             message=message,
             notification_type='order_status'
         )
-    
+
     @staticmethod
     def order_review_received(order, review):
         """Notify merchant when order receives a review"""
@@ -530,7 +530,7 @@ class OrderNotificationService:
 
 class RideNotificationService:
     """Service for ride-related notifications"""
-    
+
     @staticmethod
     def ride_requested(ride):
         """Notify driver when ride is requested"""
@@ -540,7 +540,7 @@ class RideNotificationService:
             message=f"You have a new ride request from {ride.customer.email}.",
             notification_type='info'
         )
-    
+
     @staticmethod
     def ride_status_updated(ride):
         """Notify customer when ride status changes"""
@@ -550,16 +550,16 @@ class RideNotificationService:
             'completed': "Your ride has been completed.",
             'cancelled': "Your ride has been cancelled."
         }
-        
+
         message = status_messages.get(ride.status, f"Your ride status has been updated to {ride.status}.") # noqa
-        
+
         NotificationService.create_notification(
             user=ride.customer,
             title=f"Ride {ride.status.title()}",
             message=message,
             notification_type='ride_status'
         )
-    
+
     @staticmethod
     def driver_location_updated(ride):
         """Notify customer when driver location is updated"""
@@ -573,7 +573,7 @@ class RideNotificationService:
 
 class RentalNotificationService:
     """Service for rental-related notifications"""
-    
+
     @staticmethod
     def rental_booked(rental):
         """Notify customer when rental is booked"""
@@ -583,7 +583,7 @@ class RentalNotificationService:
             message=f"Your rental booking #{rental.booking_reference} has been created successfully.", # noqa
             notification_type='success'
         )
-    
+
     @staticmethod
     def rental_status_updated(rental):
         """Notify customer when rental status changes"""
@@ -593,9 +593,9 @@ class RentalNotificationService:
             'completed': "Your rental has been completed.",
             'cancelled': "Your rental has been cancelled."
         }
-        
+
         message = status_messages.get(rental.status, f"Your rental status has been updated to {rental.status}.") # noqa
-        
+
         NotificationService.create_notification(
             user=rental.customer,
             title=f"Rental {rental.status.title()}",
@@ -606,7 +606,7 @@ class RentalNotificationService:
 
 class MechanicNotificationService:
     """Service for mechanic-related notifications"""
-    
+
     @staticmethod
     def repair_requested(repair):
         """Notify mechanic when repair is requested"""
@@ -616,7 +616,7 @@ class MechanicNotificationService:
             message=f"You have a new repair request from {repair.customer.email}.", # noqa
             notification_type='info'
         )
-    
+
     @staticmethod
     def repair_status_updated(repair):
         """Notify customer when repair status changes"""
@@ -626,9 +626,9 @@ class MechanicNotificationService:
             'completed': "Your repair has been completed.",
             'cancelled': "Your repair has been cancelled."
         }
-        
+
         message = status_messages.get(repair.status, f"Your repair status has been updated to {repair.status}.") # noqa
-        
+
         NotificationService.create_notification(
             user=repair.customer,
             title=f"Repair {repair.status.title()}",
@@ -639,7 +639,7 @@ class MechanicNotificationService:
 
 class VerificationNotificationService:
     """Service for verification-related notifications"""
-    
+
     @staticmethod
     def profile_approved(user, profile_type):
         """Notify user when profile is approved"""
@@ -649,17 +649,17 @@ class VerificationNotificationService:
             message=f"Your {profile_type} profile has been approved. You can now use all features.", # noqa
             notification_type='success'
         )
-    
+
     @staticmethod
     def profile_rejected(user, profile_type, reason=""):
         """Notify user when profile is rejected"""
         message = f"Your {profile_type} profile has been rejected."
         if reason:
             message += f" Reason: {reason}"
-        
+
         NotificationService.create_notification(
             user=user,
             title="Profile Rejected",
             message=message,
             notification_type='warning'
-        ) 
+        )

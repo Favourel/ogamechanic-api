@@ -23,7 +23,7 @@ class LocationService:
     """
     Enhanced location service with GeoDjango spatial operations
     """
-    
+
     @staticmethod
     def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         """
@@ -32,7 +32,7 @@ class LocationService:
         """
         # Convert decimal degrees to radians
         lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-        
+
         # Haversine formula
         dlat = lat2 - lat1
         dlon = lon2 - lon1
@@ -69,7 +69,7 @@ class LocationService:
         return -90 <= lat <= 90 and -180 <= lon <= 180
 
     @staticmethod
-    def get_directions(origin_lat: float, origin_lon: float, 
+    def get_directions(origin_lat: float, origin_lon: float,
                       dest_lat: float, dest_lon: float) -> Dict[str, Any]:
         """
         Get directions from Google Maps API with enhanced spatial data
@@ -104,11 +104,11 @@ class LocationService:
             if data['status'] == 'OK' and data['routes']:
                 route = data['routes'][0]
                 leg = route['legs'][0]
-                
+
                 # Extract polyline points
                 polyline = route['overview_polyline']['points']
                 route_points = LocationService._decode_polyline(polyline)
-                
+
                 return {
                     'distance_km': round(leg['distance']['value'] / 1000, 2),
                     'duration_min': int(leg['duration']['value'] / 60),
@@ -154,12 +154,12 @@ class LocationService:
         index = 0
         lat = 0
         lng = 0
-        
+
         while index < len(polyline):
             # Decode latitude
             shift = 0
             result = 0
-            
+
             while True:
                 byte = ord(polyline[index]) - 63
                 index += 1
@@ -167,13 +167,13 @@ class LocationService:
                 shift += 5
                 if not byte >= 0x20:
                     break
-            
+
             lat += (~(result >> 1) if (result & 1) else (result >> 1))
-            
+
             # Decode longitude
             shift = 0
             result = 0
-            
+
             while True:
                 byte = ord(polyline[index]) - 63
                 index += 1
@@ -181,11 +181,11 @@ class LocationService:
                 shift += 5
                 if not byte >= 0x20:
                     break
-            
+
             lng += (~(result >> 1) if (result & 1) else (result >> 1))
-            
+
             points.append({'lat': lat * 1e-5, 'lng': lng * 1e-5})
-        
+
         return points
 
     @staticmethod
@@ -252,14 +252,14 @@ class LocationService:
         Find nearby drivers using spatial queries
         """
         from users.models import User, DriverProfile
-        
+
         if not LocationService.validate_coordinates(lat, lon):
             return []
 
         try:
             # Create a point for the search location
             search_point = LocationService.create_point(lat, lon)
-            
+
             # Find drivers within radius using spatial query
             nearby_drivers = DriverProfile.objects.filter(
                 location__distance_lte=(search_point, D(km=radius_km))
@@ -292,14 +292,14 @@ class LocationService:
         Update driver location with spatial data
         """
         from users.models import User, DriverProfile
-        
+
         if not LocationService.validate_coordinates(lat, lon):
             return False
 
         try:
             driver = User.objects.get(id=driver_id, role__name='driver')
             profile, created = DriverProfile.objects.get_or_create(user=driver)
-            
+
             # Update location with Point geometry
             profile.location = LocationService.create_point(lat, lon)
             profile.latitude = lat
@@ -309,7 +309,7 @@ class LocationService:
 
             # Send real-time update
             LocationService.send_location_update(driver_id, lat, lon)
-            
+
             return True
         except Exception as e:
             logger.error(f"Error updating driver location: {e}")
@@ -333,15 +333,15 @@ class LocationService:
         )
 
     @staticmethod
-    def calculate_route_eta(origin_lat: float, origin_lon: float, 
-                           dest_lat: float, dest_lon: float, 
+    def calculate_route_eta(origin_lat: float, origin_lon: float,
+                           dest_lat: float, dest_lon: float,
                            current_lat: float = None, current_lon: float = None) -> Dict[str, Any]:
         """
         Calculate ETA and route details with spatial analysis
         """
         # Get route from origin to destination
         route_info = LocationService.get_directions(origin_lat, origin_lon, dest_lat, dest_lon)
-        
+
         # If current location is provided, calculate remaining time
         if current_lat and current_lon:
             current_to_dest = LocationService.get_directions(current_lat, current_lon, dest_lat, dest_lon)
@@ -367,7 +367,7 @@ class LocationService:
         return f"location_data_{lat_rounded}_{lon_rounded}_{radius}"
 
     @staticmethod
-    def cache_location_data(lat: float, lon: float, data: Dict[str, Any], 
+    def cache_location_data(lat: float, lon: float, data: Dict[str, Any],
                           radius: float = 1.0, timeout: int = 300) -> None:
         """
         Cache location data for performance
@@ -389,7 +389,7 @@ class LocationService:
         Create spatial index for efficient location queries
         """
         center_point = LocationService.create_point(lat, lon)
-        
+
         return {
             'center': center_point,
             'radius': D(km=radius_km),
@@ -411,13 +411,13 @@ class LocationService:
 
         total_distance = 0
         speeds = []
-        
+
         for i in range(len(points) - 1):
             lat1, lon1 = points[i]
             lat2, lon2 = points[i + 1]
             distance = LocationService.haversine_distance(lat1, lon1, lat2, lon2)
             total_distance += distance
-            
+
             # Calculate speed (assuming 1-minute intervals)
             if distance > 0:
                 speed = distance * 60  # km/h
@@ -434,7 +434,7 @@ class RealTimeLocationTracker:
     """
     Real-time location tracking with spatial operations
     """
-    
+
     def __init__(self, user_id: int):
         self.user_id = user_id
         self.tracking_points = []
@@ -468,7 +468,7 @@ class RealTimeLocationTracker:
             return False
 
     @staticmethod
-    def update_tracking_location(user_id: int, lat: float, lon: float, 
+    def update_tracking_location(user_id: int, lat: float, lon: float,
                                timestamp: Optional[str] = None) -> bool:
         """
         Update tracking location with spatial validation
@@ -479,28 +479,28 @@ class RealTimeLocationTracker:
         try:
             # Update driver location
             LocationService.update_driver_location(user_id, lat, lon)
-            
+
             # Store tracking point
             point = {
                 'lat': lat,
                 'lon': lon,
                 'timestamp': timestamp or timezone.now().isoformat()
             }
-            
+
             # Cache recent tracking points
             cache_key = f"tracking_points_{user_id}"
             points = cache.get(cache_key, [])
             points.append(point)
-            
+
             # Keep only last 100 points
             if len(points) > 100:
                 points = points[-100:]
-            
+
             cache.set(cache_key, points, 3600)
-            
+
             # Send real-time update
             RealTimeLocationTracker.send_tracking_update(user_id, point)
-            
+
             return True
         except Exception as e:
             logger.error(f"Error updating tracking location: {e}")
@@ -529,14 +529,14 @@ class RealTimeLocationTracker:
         try:
             cache_key = f"tracking_points_{user_id}"
             points = cache.get(cache_key, [])
-            
+
             if not points:
                 return []
 
             # Calculate spatial metrics
             coordinates = [(p['lat'], p['lon']) for p in points]
             metrics = LocationService.calculate_spatial_metrics(coordinates)
-            
+
             return {
                 'points': points,
                 'metrics': metrics,
@@ -551,7 +551,7 @@ class MapIntegrationService:
     """
     Enhanced map integration service with spatial features
     """
-    
+
     @staticmethod
     def get_map_embed_url(lat: float, lon: float, zoom: int = 15) -> str:
         """
@@ -563,7 +563,7 @@ class MapIntegrationService:
         return f"https://www.google.com/maps?q={lat},{lon}&z={zoom}"
 
     @staticmethod
-    def get_static_map_url(lat: float, lon: float, zoom: int = 15, 
+    def get_static_map_url(lat: float, lon: float, zoom: int = 15,
                           size: str = "600x400") -> str:
         """
         Get Google Maps static image URL
@@ -575,7 +575,7 @@ class MapIntegrationService:
         return f"https://www.google.com/maps?q={lat},{lon}&z={zoom}"
 
     @staticmethod
-    def get_route_map_url(origin_lat: float, origin_lon: float, 
+    def get_route_map_url(origin_lat: float, origin_lon: float,
                           dest_lat: float, dest_lon: float,
                           size: str = "600x400") -> str:
         """
@@ -650,4 +650,4 @@ def calculate_spatial_metrics_task(points: List[Tuple[float, float]]):
     """
     Background task for calculating spatial metrics
     """
-    return LocationService.calculate_spatial_metrics(points) 
+    return LocationService.calculate_spatial_metrics(points)

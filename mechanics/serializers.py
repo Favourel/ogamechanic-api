@@ -30,15 +30,15 @@ class RepairRequestSerializer(serializers.ModelSerializer):
         model = RepairRequest
         fields = [
             'id', 'customer', 'mechanic', 'mechanic_id',
-            'service_type', 
-            'vehicle_make', 
+            'service_type',
+            'vehicle_make',
             'vehicle_model', 'vehicle_year',
-            'vehicle_registration', 
+            'vehicle_registration',
             'problem_description',
             # 'symptoms',
             'estimated_cost', 'service_address', 'service_latitude',
             'service_longitude', 'schedule', 'preferred_date', 'preferred_time_slot',
-            'status', 
+            'status',
             'priority',
             'requested_at', 'accepted_at',
             'started_at', 'completed_at', 'cancelled_at',
@@ -66,7 +66,7 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             'is_active',
             'can_be_cancelled', 'notified_mechanics', 'can_accept'
         ]
-    
+
     def get_can_accept(self, obj):
         """Check if current user (mechanic) can accept this request"""
         request = self.context.get('request')
@@ -243,10 +243,10 @@ class TrainingSessionParticipantSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         participant_id = validated_data.pop('participant_id')
         session_id = validated_data.pop('session_id')
-        
+
         validated_data['participant_id'] = participant_id
         validated_data['session_id'] = session_id
-        
+
         return super().create(validated_data)
 
 
@@ -269,7 +269,7 @@ class MechanicReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = MechanicReview
         fields = [
-            'id', 'mechanic', 'user', 'rating', 'comment', 
+            'id', 'mechanic', 'user', 'rating', 'comment',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'mechanic', 'user', 'created_at', 'updated_at']  # noqa
@@ -302,7 +302,7 @@ class MechanicVehicleExpertiseSerializer(serializers.ModelSerializer):
     """Serializer for MechanicVehicleExpertise model"""
     vehicle_make = VehicleMakeSerializer(read_only=True)
     vehicle_make_id = serializers.IntegerField(write_only=True)
-    
+
     class Meta:
         model = MechanicVehicleExpertise
         fields = [
@@ -323,45 +323,45 @@ class MechanicVehicleExpertiseSerializer(serializers.ModelSerializer):
         required=False,
         help_text="Optional details for each vehicle make expertise"
     )
-    
+
     def validate_vehicle_make_ids(self, value):
         """Validate that all vehicle make IDs exist and are active"""
         from .models import VehicleMake
-        
+
         vehicle_makes = VehicleMake.objects.filter(
             id__in=value, is_active=True
         )
-        
+
         if len(vehicle_makes) != len(value):
             invalid_ids = set(value) - set(vehicle_makes.values_list('id', flat=True))  # noqa
             raise serializers.ValidationError(
                 f"Invalid or inactive vehicle make IDs: {list(invalid_ids)}"
             )
-        
+
         return value
-    
+
     def validate_expertise_details(self, value):
         """Validate expertise details if provided"""
         if not value:
             return value
-            
+
         # Check that each detail has required fields
         for detail in value:
             if 'vehicle_make_id' not in detail:
                 raise serializers.ValidationError(
                     "Each expertise detail must include 'vehicle_make_id'"
                 )
-            
+
             if 'years_of_experience' in detail:
                 years = detail['years_of_experience']
                 if not isinstance(years, int) or years < 0:
                     raise serializers.ValidationError(
                         "Years of experience must be a non-negative integer"
                     )
-            
+
             if 'certification_level' in detail:
                 valid_levels = [
-                    'basic', 'intermediate', 'advanced', 'expert', 'certified']  
+                    'basic', 'intermediate', 'advanced', 'expert', 'certified']
                 if detail['certification_level'] not in valid_levels:
                     raise serializers.ValidationError(
                         f"Invalid certification level. Must be one of: {valid_levels}"  # noqa

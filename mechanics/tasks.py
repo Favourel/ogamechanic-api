@@ -60,7 +60,7 @@ def find_and_notify_mechanics_task(self, repair_request_id, radius_km=10.0):
 
         mechanics_within_radius = []
         logger.info(
-            "Initialized mechanics_within_radius list (length=%d)", 
+            "Initialized mechanics_within_radius list (length=%d)",
             len(mechanics_within_radius)
         )
 

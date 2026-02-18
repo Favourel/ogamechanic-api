@@ -1830,8 +1830,10 @@ class DashboardOverviewView(APIView):
         # E-commerce revenue
         ecommerce_revenue = (
             apply_date_filter(
-                Order.objects.filter(status__in=["paid", "shipped", "completed"])
-            ).aggregate(total=Sum("total_amount"))["total"] or 0
+                Order.objects.filter(
+                    status__in=["paid", "shipped", "completed"])
+            ).aggregate(total=Sum("total_amount"))["total"]
+            or 0
         )
         revenue_breakdown["ecommerce"] = float(ecommerce_revenue)
 
@@ -1839,9 +1841,12 @@ class DashboardOverviewView(APIView):
         rides_revenue = 0
         try:
             from rides.models import Ride
+
             rides_revenue = (
-                apply_date_filter(Ride.objects.filter(status="completed"), "requested_at")
-                .aggregate(total=Sum("fare"))["total"] or 0
+                apply_date_filter(
+                    Ride.objects.filter(status="completed"), "requested_at"
+                ).aggregate(total=Sum("fare"))["total"]
+                or 0
             )
             revenue_breakdown["rides"] = float(rides_revenue)
         except ImportError:
@@ -1851,9 +1856,13 @@ class DashboardOverviewView(APIView):
         courier_revenue = 0
         try:
             from couriers.models import DeliveryRequest
+
             courier_revenue = (
-                apply_date_filter(DeliveryRequest.objects.filter(status="delivered"), "requested_at")
-                .aggregate(total=Sum("total_fare"))["total"] or 0
+                apply_date_filter(
+                    DeliveryRequest.objects.filter(
+                        status="delivered"), "requested_at"
+                ).aggregate(total=Sum("total_fare"))["total"]
+                or 0
             )
             revenue_breakdown["couriers"] = float(courier_revenue)
         except ImportError:
@@ -1863,9 +1872,13 @@ class DashboardOverviewView(APIView):
         mechanic_revenue = 0
         try:
             from mechanics.models import RepairRequest
+
             mechanic_revenue = (
-                apply_date_filter(RepairRequest.objects.filter(status="completed"), "requested_at")
-                .aggregate(total=Sum("actual_cost"))["total"] or 0
+                apply_date_filter(
+                    RepairRequest.objects.filter(
+                        status="completed"), "requested_at"
+                ).aggregate(total=Sum("actual_cost"))["total"]
+                or 0
             )
             revenue_breakdown["mechanics"] = float(mechanic_revenue)
         except ImportError:
@@ -1875,10 +1888,14 @@ class DashboardOverviewView(APIView):
         rental_revenue = 0
         try:
             from rentals.models import RentalBooking
+
             rental_revenue = (
                 apply_date_filter(
-                    RentalBooking.objects.filter(status__in=["completed", "active"]), "booked_at"
-                ).aggregate(total=Sum("total_amount"))["total"] or 0
+                    RentalBooking.objects.filter(
+                        status__in=["completed", "active"]),
+                    "booked_at",
+                ).aggregate(total=Sum("total_amount"))["total"]
+                or 0
             )
             revenue_breakdown["rentals"] = float(rental_revenue)
         except ImportError:
@@ -1890,11 +1907,15 @@ class DashboardOverviewView(APIView):
         # 2. USER METRICS
         # ====================================================================
         total_users = User.objects.count()
-        new_users = apply_date_filter(User.objects, "date_joined").count() if start_date else 0
-        
+        new_users = (
+            apply_date_filter(
+                User.objects, "date_joined").count() if start_date else 0
+        )
+
         # Active users (logged in recently - last 30 days)
         thirty_days_ago = timezone.now() - timedelta(days=30)
-        active_users = User.objects.filter(last_login__gte=thirty_days_ago).count()
+        active_users = User.objects.filter(
+            last_login__gte=thirty_days_ago).count()
 
         # ====================================================================
         # 3. SERVICE PROVIDER COUNTS
@@ -1913,19 +1934,27 @@ class DashboardOverviewView(APIView):
         # Add rides, deliveries, mechanics to total orders
         try:
             from rides.models import Ride
-            total_orders += apply_date_filter(Ride.objects, "requested_at").count()
+
+            total_orders += apply_date_filter(Ride.objects,
+                                              "requested_at").count()
         except ImportError:
             pass
 
         try:
             from couriers.models import DeliveryRequest
-            total_orders += apply_date_filter(DeliveryRequest.objects, "requested_at").count()
+
+            total_orders += apply_date_filter(
+                DeliveryRequest.objects, "requested_at"
+            ).count()
         except ImportError:
             pass
 
         try:
             from mechanics.models import RepairRequest
-            total_orders += apply_date_filter(RepairRequest.objects, "requested_at").count()
+
+            total_orders += apply_date_filter(
+                RepairRequest.objects, "requested_at"
+            ).count()
         except ImportError:
             pass
 
@@ -1942,22 +1971,31 @@ class DashboardOverviewView(APIView):
         # Pending service requests
         try:
             from rides.models import Ride
+
             pending_tasks += apply_date_filter(
-                Ride.objects.filter(status__in=["initiated", "requested", "accepted"]), "requested_at"
+                Ride.objects.filter(
+                    status__in=["initiated", "requested", "accepted"]),
+                "requested_at",
             ).count()
         except ImportError:
             pass
 
         try:
             from couriers.models import DeliveryRequest
+
             pending_tasks += apply_date_filter(
-                DeliveryRequest.objects.filter(status__in=["pending", "assigned", "picked_up", "in_transit"]), "requested_at"
+                DeliveryRequest.objects.filter(
+                    status__in=["pending", "assigned",
+                                "picked_up", "in_transit"]
+                ),
+                "requested_at",
             ).count()
         except ImportError:
             pass
 
         try:
             from mechanics.models import RepairRequest
+
             pending_tasks += apply_date_filter(
                 RepairRequest.objects.filter(status="pending"), "requested_at"
             ).count()
@@ -1965,9 +2003,12 @@ class DashboardOverviewView(APIView):
             pass
 
         # Pending approvals
-        pending_tasks += MerchantProfile.objects.filter(is_approved=False).count()
-        pending_tasks += DriverProfile.objects.filter(is_approved=False).count()
-        pending_tasks += MechanicProfile.objects.filter(is_approved=False).count()
+        pending_tasks += MerchantProfile.objects.filter(
+            is_approved=False).count()
+        pending_tasks += DriverProfile.objects.filter(
+            is_approved=False).count()
+        pending_tasks += MechanicProfile.objects.filter(
+            is_approved=False).count()
 
         # ====================================================================
         # 6. CONVERSION RATE
@@ -1986,8 +2027,12 @@ class DashboardOverviewView(APIView):
         # Service conversions
         try:
             from rides.models import Ride
-            rides_total = apply_date_filter(Ride.objects, "requested_at").count()
-            rides_completed = apply_date_filter(Ride.objects.filter(status="completed"), "requested_at").count()
+
+            rides_total = apply_date_filter(
+                Ride.objects, "requested_at").count()
+            rides_completed = apply_date_filter(
+                Ride.objects.filter(status="completed"), "requested_at"
+            ).count()
             total_requests += rides_total
             completed_requests += rides_completed
         except ImportError:
@@ -1995,14 +2040,22 @@ class DashboardOverviewView(APIView):
 
         try:
             from couriers.models import DeliveryRequest
-            courier_total = apply_date_filter(DeliveryRequest.objects, "requested_at").count()
-            courier_completed = apply_date_filter(DeliveryRequest.objects.filter(status="delivered"), "requested_at").count()
+
+            courier_total = apply_date_filter(
+                DeliveryRequest.objects, "requested_at"
+            ).count()
+            courier_completed = apply_date_filter(
+                DeliveryRequest.objects.filter(
+                    status="delivered"), "requested_at"
+            ).count()
             total_requests += courier_total
             completed_requests += courier_completed
         except ImportError:
             pass
 
-        conversion_rate = (completed_requests / total_requests * 100) if total_requests > 0 else 0
+        conversion_rate = (
+            (completed_requests / total_requests * 100) if total_requests > 0 else 0
+        )
 
         # ====================================================================
         # 7. AVERAGE RATING
@@ -2011,10 +2064,9 @@ class DashboardOverviewView(APIView):
         rating_count = 0
 
         # Product ratings
-        product_ratings = (
-            apply_date_filter(ProductReview.objects, "created_at")
-            .aggregate(avg=Avg("rating"), count=Count("id"))
-        )
+        product_ratings = apply_date_filter(
+            ProductReview.objects, "created_at"
+        ).aggregate(avg=Avg("rating"), count=Count("id"))
         if product_ratings["count"]:
             avg_rating += float(product_ratings["avg"] or 0)
             rating_count += 1
@@ -2022,9 +2074,9 @@ class DashboardOverviewView(APIView):
         # Service ratings (ride ratings)
         try:
             from rides.models import RideRating
-            ride_ratings = (
-                apply_date_filter(RideRating.objects, "rated_at")
-                .aggregate(avg=Avg("overall_rating"), count=Count("id"))
+
+            ride_ratings = apply_date_filter(RideRating.objects, "rated_at").aggregate(
+                avg=Avg("overall_rating"), count=Count("id")
             )
             if ride_ratings["count"]:
                 avg_rating += float(ride_ratings["avg"] or 0)
@@ -2048,13 +2100,18 @@ class DashboardOverviewView(APIView):
 
         # Order cancellations
         total_all_requests += apply_date_filter(Order.objects).count()
-        total_cancelled += apply_date_filter(Order.objects.filter(status="cancelled")).count()
+        total_cancelled += apply_date_filter(
+            Order.objects.filter(status="cancelled")
+        ).count()
 
         # Service cancellations
         try:
             from rides.models import Ride
+
             rides_all = apply_date_filter(Ride.objects, "requested_at").count()
-            rides_cancelled = apply_date_filter(Ride.objects.filter(status="cancelled"), "requested_at").count()
+            rides_cancelled = apply_date_filter(
+                Ride.objects.filter(status="cancelled"), "requested_at"
+            ).count()
             total_all_requests += rides_all
             total_cancelled += rides_cancelled
         except ImportError:
@@ -2062,14 +2119,24 @@ class DashboardOverviewView(APIView):
 
         try:
             from couriers.models import DeliveryRequest
-            courier_all = apply_date_filter(DeliveryRequest.objects, "requested_at").count()
-            courier_cancelled = apply_date_filter(DeliveryRequest.objects.filter(status="cancelled"), "requested_at").count()
+
+            courier_all = apply_date_filter(
+                DeliveryRequest.objects, "requested_at"
+            ).count()
+            courier_cancelled = apply_date_filter(
+                DeliveryRequest.objects.filter(
+                    status="cancelled"), "requested_at"
+            ).count()
             total_all_requests += courier_all
             total_cancelled += courier_cancelled
         except ImportError:
             pass
 
-        cancellation_rate = (total_cancelled / total_all_requests * 100) if total_all_requests > 0 else 0
+        cancellation_rate = (
+            (total_cancelled / total_all_requests * 100)
+            if total_all_requests > 0
+            else 0
+        )
 
         return Response(
             api_response(
@@ -2230,24 +2297,27 @@ class UserActivityAnalyticsView(APIView):
                             properties={
                                 "date": openapi.Schema(type=openapi.TYPE_STRING),
                                 "count": openapi.Schema(type=openapi.TYPE_INTEGER),
-                            }
-                        )
+                            },
+                        ),
                     ),
                     "action_breakdown": openapi.Schema(
                         type=openapi.TYPE_OBJECT,
-                        additional_properties=openapi.Schema(type=openapi.TYPE_INTEGER)
+                        additional_properties=openapi.Schema(
+                            type=openapi.TYPE_INTEGER),
                     ),
                     "category_breakdown": openapi.Schema(
                         type=openapi.TYPE_OBJECT,
-                        additional_properties=openapi.Schema(type=openapi.TYPE_INTEGER)
+                        additional_properties=openapi.Schema(
+                            type=openapi.TYPE_INTEGER),
                     ),
                     "severity_breakdown": openapi.Schema(
                         type=openapi.TYPE_OBJECT,
-                        additional_properties=openapi.Schema(type=openapi.TYPE_INTEGER)
+                        additional_properties=openapi.Schema(
+                            type=openapi.TYPE_INTEGER),
                     ),
                     "top_users": openapi.Schema(
                         type=openapi.TYPE_ARRAY,
-                        items=openapi.Schema(type=openapi.TYPE_OBJECT)
+                        items=openapi.Schema(type=openapi.TYPE_OBJECT),
                     ),
                 },
             )
@@ -2255,7 +2325,7 @@ class UserActivityAnalyticsView(APIView):
     )
     def get(self, request):
         from users.models import UserActivityLog
-        
+
         status_, data = get_incoming_request_checks(request)
         if not status_:
             return Response(
@@ -2287,8 +2357,7 @@ class UserActivityAnalyticsView(APIView):
 
         # Activity timeline for line chart (grouped by date)
         activity_timeline = (
-            queryset
-            .annotate(date=TruncDate("timestamp"))
+            queryset.annotate(date=TruncDate("timestamp"))
             .values("date")
             .annotate(count=Count("id"))
             .order_by("date")
@@ -2296,8 +2365,7 @@ class UserActivityAnalyticsView(APIView):
 
         # Action breakdown
         action_breakdown = (
-            queryset
-            .values("action")
+            queryset.values("action")
             .annotate(count=Count("id"))
             .order_by("-count")[:10]
         )
@@ -2307,10 +2375,8 @@ class UserActivityAnalyticsView(APIView):
 
         # Category breakdown
         category_breakdown = (
-            queryset
-            .values("category")
-            .annotate(count=Count("id"))
-            .order_by("-count")
+            queryset.values("category").annotate(
+                count=Count("id")).order_by("-count")
         )
         category_breakdown_dict = {
             item["category"]: item["count"] for item in category_breakdown
@@ -2318,10 +2384,8 @@ class UserActivityAnalyticsView(APIView):
 
         # Severity breakdown
         severity_breakdown = (
-            queryset
-            .values("severity")
-            .annotate(count=Count("id"))
-            .order_by("-count")
+            queryset.values("severity").annotate(
+                count=Count("id")).order_by("-count")
         )
         severity_breakdown_dict = {
             item["severity"]: item["count"] for item in severity_breakdown
@@ -2518,8 +2582,7 @@ class ConsolidatedAnalyticsView(APIView):
 
         # Top merchants by sales
         top_merchants = (
-            OrderItem.objects.filter(
-                order__status__in=paid_statuses)
+            OrderItem.objects.filter(order__status__in=paid_statuses)
             .values(
                 "product__merchant__id",
                 "product__merchant__email",
@@ -2586,8 +2649,7 @@ class ServiceAnalyticsView(APIView):
                 required=False,
             ),
         ],
-        responses={
-            200: openapi.Response("Service analytics data")},
+        responses={200: openapi.Response("Service analytics data")},
     )
     def get(self, request):
         status_, data = get_incoming_request_checks(request)
@@ -2609,18 +2671,25 @@ class ServiceAnalyticsView(APIView):
         # Only include requested service type
         if not service_type or service_type == "rides":
             analytics_data["rides"] = self._get_ride_analytics(start_date)
-        
+
         if not service_type or service_type == "couriers":
-            analytics_data["couriers"] = self._get_courier_analytics(start_date)
-        
+            analytics_data["couriers"] = self._get_courier_analytics(
+                start_date)
+
         if not service_type or service_type == "rentals":
             analytics_data["rentals"] = self._get_rental_analytics(start_date)
-        
+
         if not service_type or service_type == "mechanics":
-            analytics_data["mechanics"] = self._get_mechanic_analytics(start_date)
+            analytics_data["mechanics"] = self._get_mechanic_analytics(
+                start_date)
 
         # If specific service type requested, only return that
-        if service_type and service_type in ["rides", "couriers", "rentals", "mechanics"]:
+        if service_type and service_type in [
+            "rides",
+            "couriers",
+            "rentals",
+            "mechanics",
+        ]:
             # Return only the requested service
             filtered_data = {service_type: analytics_data[service_type]}
             return Response(
@@ -2753,7 +2822,7 @@ class ServiceAnalyticsView(APIView):
         """Get mechanic service analytics"""
         try:
             from mechanics.models import (
-                RepairRequest, 
+                RepairRequest,
                 # TrainingSession
             )
 
@@ -2770,8 +2839,7 @@ class ServiceAnalyticsView(APIView):
 
             # Repair requests timeline for line chart (grouped by date)
             repair_timeline = (
-                repairs
-                .annotate(date=TruncDate("requested_at"))
+                repairs.annotate(date=TruncDate("requested_at"))
                 .values("date")
                 .annotate(count=Count("id"))
                 .order_by("date")
@@ -2839,21 +2907,24 @@ class RevenueAnalyticsView(APIView):
 
         # Parse date range
         start_date, end_date = self._parse_date_range(request)
-        
+
         # Validate date range
         if start_date and end_date and start_date > end_date:
             return Response(
-                api_response(message="Start date cannot be after end date", status=False),
+                api_response(
+                    message="Start date cannot be after end date", status=False
+                ),
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
 
         # Get individual revenue sources
         revenue_sources = self._get_revenue_by_source(start_date, end_date)
-        
+
         # Get individual timelines for each service
         period = request.query_params.get("period", "30d")
-        revenue_timelines = self._get_revenue_timelines(start_date, end_date, period)
-        
+        revenue_timelines = self._get_revenue_timelines(
+            start_date, end_date, period)
+
         # Calculate total revenue
         total_revenue = sum(revenue_sources.values())
 
@@ -2876,14 +2947,17 @@ class RevenueAnalyticsView(APIView):
     def _parse_date_range(self, request):
         """Parse date range from request parameters"""
         from datetime import datetime
-        
+
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
-        
+
         if start_date_str:
             try:
-                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-                start_date = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+                start_date = datetime.strptime(
+                    start_date_str, "%Y-%m-%d").date()
+                start_date = timezone.make_aware(
+                    datetime.combine(start_date, datetime.min.time())
+                )
             except ValueError:
                 return None, None
         else:
@@ -2891,16 +2965,18 @@ class RevenueAnalyticsView(APIView):
             period = request.query_params.get("period", "30d")
             days = self._parse_period(period)
             start_date = timezone.now() - timedelta(days=days)
-        
+
         if end_date_str:
             try:
                 end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-                end_date = timezone.make_aware(datetime.combine(end_date, datetime.max.time()))
+                end_date = timezone.make_aware(
+                    datetime.combine(end_date, datetime.max.time())
+                )
             except ValueError:
                 return None, None
         else:
             end_date = timezone.now()
-        
+
         return start_date, end_date
 
     def _get_revenue_by_source(self, start_date, end_date):
@@ -2912,7 +2988,7 @@ class RevenueAnalyticsView(APIView):
             Order.objects.filter(
                 created_at__gte=start_date,
                 created_at__lte=end_date,
-                status__in=["paid", "shipped", "completed"]
+                status__in=["paid", "shipped", "completed"],
             ).aggregate(total=Sum("total_amount"))["total"]
             or 0
         )
@@ -2921,11 +2997,12 @@ class RevenueAnalyticsView(APIView):
         # Rides revenue if available
         try:
             from rides.models import Ride
+
             rides_revenue = (
                 Ride.objects.filter(
                     requested_at__gte=start_date,
                     requested_at__lte=end_date,
-                    status="completed"
+                    status="completed",
                 ).aggregate(total=Sum("fare"))["total"]
                 or 0
             )
@@ -2936,11 +3013,12 @@ class RevenueAnalyticsView(APIView):
         # Courier revenue if available
         try:
             from couriers.models import DeliveryRequest
+
             courier_revenue = (
                 DeliveryRequest.objects.filter(
                     requested_at__gte=start_date,
                     requested_at__lte=end_date,
-                    status="delivered"
+                    status="delivered",
                 ).aggregate(total=Sum("total_fare"))["total"]
                 or 0
             )
@@ -2951,11 +3029,12 @@ class RevenueAnalyticsView(APIView):
         # Rental revenue if available
         try:
             from rentals.models import RentalBooking
+
             rental_revenue = (
                 RentalBooking.objects.filter(
                     booked_at__gte=start_date,
                     booked_at__lte=end_date,
-                    status__in=["completed", "active"]
+                    status__in=["completed", "active"],
                 ).aggregate(total=Sum("total_amount"))["total"]
                 or 0
             )
@@ -2982,6 +3061,7 @@ class RevenueAnalyticsView(APIView):
         # Rides timeline if available
         try:
             from rides.models import Ride
+
             timelines["rides"] = self._get_service_timeline(
                 Ride.objects.filter(status="completed"),
                 "requested_at",
@@ -2996,6 +3076,7 @@ class RevenueAnalyticsView(APIView):
         # Couriers timeline if available
         try:
             from couriers.models import DeliveryRequest
+
             timelines["couriers"] = self._get_service_timeline(
                 DeliveryRequest.objects.filter(status="delivered"),
                 "requested_at",
@@ -3010,8 +3091,10 @@ class RevenueAnalyticsView(APIView):
         # Rentals timeline if available
         try:
             from rentals.models import RentalBooking
+
             timelines["rentals"] = self._get_service_timeline(
-                RentalBooking.objects.filter(status__in=["completed", "active"]),
+                RentalBooking.objects.filter(
+                    status__in=["completed", "active"]),
                 "booked_at",
                 "total_amount",
                 start_date,
@@ -3023,14 +3106,16 @@ class RevenueAnalyticsView(APIView):
 
         return timelines
 
-    def _get_service_timeline(self, queryset, date_field, amount_field, start_date, end_date, period):
+    def _get_service_timeline(
+        self, queryset, date_field, amount_field, start_date, end_date, period
+    ):
         """Generic method to get revenue timeline for any service"""
         filtered_queryset = queryset.filter(
-            **{f'{date_field}__gte': start_date, f'{date_field}__lte': end_date}
+            **{f"{date_field}__gte": start_date, f"{date_field}__lte": end_date}
         )
 
         # Determine granularity based on period
-        if period in ['90d', '1y']:
+        if period in ["90d", "1y"]:
             # Monthly granularity for longer periods
             timeline = (
                 filtered_queryset.annotate(period=TruncMonth(date_field))
@@ -3038,7 +3123,7 @@ class RevenueAnalyticsView(APIView):
                 .annotate(revenue=Sum(amount_field))
                 .order_by("period")
             )
-        elif period == '7d':
+        elif period == "7d":
             # Daily granularity for short period
             timeline = (
                 filtered_queryset.annotate(period=TruncDate(date_field))
@@ -3057,7 +3142,7 @@ class RevenueAnalyticsView(APIView):
         return [
             {
                 "period": item["period"].isoformat(),
-                "revenue": float(item["revenue"] or 0)
+                "revenue": float(item["revenue"] or 0),
             }
             for item in timeline
         ]
@@ -3200,7 +3285,7 @@ class GeographicHeatMapView(APIView):
     """
     Geographic heat map showing locations of all user roles:
     - Merchants
-    - Mechanics  
+    - Mechanics
     - Drivers
     - Active rides
     - Active deliveries
@@ -3262,7 +3347,9 @@ class GeographicHeatMapView(APIView):
                         "summary": openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                "total_locations": openapi.Schema(type=openapi.TYPE_INTEGER),
+                                "total_locations": openapi.Schema(
+                                    type=openapi.TYPE_INTEGER
+                                ),
                                 "role_counts": openapi.Schema(type=openapi.TYPE_OBJECT),
                             },
                         ),
@@ -3282,22 +3369,28 @@ class GeographicHeatMapView(APIView):
         # Parse parameters
         limit = self._parse_limit(request.query_params.get("limit", "20"))
         role_filter = request.query_params.get("role", "all").lower()
-        active_only = request.query_params.get("active_only", "false").lower() == "true"
+        active_only = request.query_params.get(
+            "active_only", "false").lower() == "true"
 
         result = {}
         role_counts = {}
 
         # Get data based on role filter
         if role_filter in ["all", "merchant"]:
-            result["merchants"], merchant_count = self._get_merchants(limit, active_only)
+            result["merchants"], merchant_count = self._get_merchants(
+                limit, active_only
+            )
             role_counts["merchants"] = merchant_count
 
         if role_filter in ["all", "mechanic"]:
-            result["mechanics"], mechanic_count = self._get_mechanics(limit, active_only)
+            result["mechanics"], mechanic_count = self._get_mechanics(
+                limit, active_only
+            )
             role_counts["mechanics"] = mechanic_count
 
         if role_filter in ["all", "driver"]:
-            result["drivers"], driver_count = self._get_drivers(limit, active_only)
+            result["drivers"], driver_count = self._get_drivers(
+                limit, active_only)
             role_counts["drivers"] = driver_count
 
         if role_filter in ["all", "rides"]:
@@ -3305,7 +3398,9 @@ class GeographicHeatMapView(APIView):
             role_counts["active_rides"] = ride_count
 
         if role_filter in ["all", "deliveries"]:
-            result["active_deliveries"], delivery_count = self._get_active_deliveries(limit)
+            result["active_deliveries"], delivery_count = self._get_active_deliveries(
+                limit
+            )
             role_counts["active_deliveries"] = delivery_count
 
         # Calculate summary
@@ -3339,37 +3434,40 @@ class GeographicHeatMapView(APIView):
         """Get merchant locations"""
         try:
             from users.models import MerchantProfile
-            
+
             queryset = MerchantProfile.objects.all()
-            
+
             if active_only:
                 # Filter for merchants with recent activity
                 queryset = queryset.filter(
                     user__is_active=True,
-                    updated_at__gte=timezone.now() - timedelta(days=7)
+                    updated_at__gte=timezone.now() - timedelta(days=7),
                 )
-            
+
             merchants = queryset.select_related("user")[:limit]
-            
+
             merchant_data = []
             for merchant in merchants:
                 # MerchantProfile has location (text) but no latitude/longitude
                 if merchant.location or merchant.business_address:
-                    merchant_data.append({
-                        "id": str(merchant.id),
-                        "user_id": str(merchant.user.id),
-                        "name": f"{merchant.user.first_name} {merchant.user.last_name}",
-                        "email": merchant.user.email,
-                        "business_name": getattr(merchant, 'business_name', 'N/A'),
-                        "location": {
-                            "address": merchant.location or merchant.business_address,
-                            "latitude": None,
-                            "longitude": None,
-                        },
-                        "is_active": merchant.user.is_active,
-                        "last_updated": merchant.updated_at.isoformat(),
-                    })
-            
+                    merchant_data.append(
+                        {
+                            "id": str(merchant.id),
+                            "user_id": str(merchant.user.id),
+                            "name": f"{merchant.user.first_name} {merchant.user.last_name}",
+                            "email": merchant.user.email,
+                            "business_name": getattr(merchant, "business_name", "N/A"),
+                            "location": {
+                                "address": merchant.location
+                                or merchant.business_address,
+                                "latitude": None,
+                                "longitude": None,
+                            },
+                            "is_active": merchant.user.is_active,
+                            "last_updated": merchant.updated_at.isoformat(),
+                        }
+                    )
+
             return merchant_data, len(merchant_data)
         except ImportError:
             return [], 0
@@ -3378,38 +3476,40 @@ class GeographicHeatMapView(APIView):
         """Get mechanic locations"""
         try:
             from users.models import MechanicProfile
-            
+
             queryset = MechanicProfile.objects.all()
-            
+
             if active_only:
                 # Filter for approved and recently active mechanics
                 queryset = queryset.filter(
                     is_approved=True,
                     user__is_active=True,
-                    updated_at__gte=timezone.now() - timedelta(days=7)
+                    updated_at__gte=timezone.now() - timedelta(days=7),
                 )
-            
+
             mechanics = queryset.select_related("user")[:limit]
-            
+
             mechanic_data = []
             for mechanic in mechanics:
                 if mechanic.latitude and mechanic.longitude:
-                    mechanic_data.append({
-                        "id": str(mechanic.id),
-                        "user_id": str(mechanic.user.id),
-                        "name": f"{mechanic.user.first_name} {mechanic.user.last_name}",
-                        "email": mechanic.user.email,
-                        "location": {
-                            "latitude": float(mechanic.latitude),
-                            "longitude": float(mechanic.longitude),
-                            "address": mechanic.location,
-                        },
-                        "is_approved": mechanic.is_approved,
-                        "is_active": mechanic.user.is_active,
-                        "specialization": getattr(mechanic, 'specialization', None),
-                        "last_updated": mechanic.updated_at.isoformat(),
-                    })
-            
+                    mechanic_data.append(
+                        {
+                            "id": str(mechanic.id),
+                            "user_id": str(mechanic.user.id),
+                            "name": f"{mechanic.user.first_name} {mechanic.user.last_name}",
+                            "email": mechanic.user.email,
+                            "location": {
+                                "latitude": float(mechanic.latitude),
+                                "longitude": float(mechanic.longitude),
+                                "address": mechanic.location,
+                            },
+                            "is_approved": mechanic.is_approved,
+                            "is_active": mechanic.user.is_active,
+                            "specialization": getattr(mechanic, "specialization", None),
+                            "last_updated": mechanic.updated_at.isoformat(),
+                        }
+                    )
+
             return mechanic_data, len(mechanic_data)
         except ImportError:
             return [], 0
@@ -3418,38 +3518,40 @@ class GeographicHeatMapView(APIView):
         """Get driver locations"""
         try:
             from users.models import DriverProfile
-            
+
             queryset = DriverProfile.objects.all()
-            
+
             if active_only:
                 # Filter for approved and recently active drivers
                 queryset = queryset.filter(
                     is_approved=True,
                     user__is_active=True,
-                    updated_at__gte=timezone.now() - timedelta(days=7)
+                    updated_at__gte=timezone.now() - timedelta(days=7),
                 )
-            
+
             drivers = queryset.select_related("user")[:limit]
-            
+
             driver_data = []
             for driver in drivers:
                 if driver.latitude and driver.longitude:
-                    driver_data.append({
-                        "id": str(driver.id),
-                        "user_id": str(driver.user.id),
-                        "name": f"{driver.user.first_name} {driver.user.last_name}",
-                        "email": driver.user.email,
-                        "location": {
-                            "latitude": float(driver.latitude),
-                            "longitude": float(driver.longitude),
-                            "address": driver.location,
-                        },
-                        "is_approved": driver.is_approved,
-                        "is_active": driver.user.is_active,
-                        "vehicle_type": getattr(driver, 'vehicle_type', None),
-                        "last_updated": driver.updated_at.isoformat(),
-                    })
-            
+                    driver_data.append(
+                        {
+                            "id": str(driver.id),
+                            "user_id": str(driver.user.id),
+                            "name": f"{driver.user.first_name} {driver.user.last_name}",
+                            "email": driver.user.email,
+                            "location": {
+                                "latitude": float(driver.latitude),
+                                "longitude": float(driver.longitude),
+                                "address": driver.location,
+                            },
+                            "is_approved": driver.is_approved,
+                            "is_active": driver.user.is_active,
+                            "vehicle_type": getattr(driver, "vehicle_type", None),
+                            "last_updated": driver.updated_at.isoformat(),
+                        }
+                    )
+
             return driver_data, len(driver_data)
         except ImportError:
             return [], 0
@@ -3458,48 +3560,86 @@ class GeographicHeatMapView(APIView):
         """Get active ride locations"""
         try:
             from rides.models import Ride
-            
+
             rides = Ride.objects.filter(
                 status__in=["accepted", "in_progress"]
             ).select_related("driver", "customer")[:limit]
-            
+
             ride_data = []
             for ride in rides:
                 # Use current location if available, otherwise pickup location
-                lat = ride.current_latitude if hasattr(ride, 'current_latitude') and ride.current_latitude else ride.pickup_latitude
-                lng = ride.current_longitude if hasattr(ride, 'current_longitude') and ride.current_longitude else ride.pickup_longitude
-                
+                lat = (
+                    ride.current_latitude
+                    if hasattr(ride, "current_latitude") and ride.current_latitude
+                    else ride.pickup_latitude
+                )
+                lng = (
+                    ride.current_longitude
+                    if hasattr(ride, "current_longitude") and ride.current_longitude
+                    else ride.pickup_longitude
+                )
+
                 if lat and lng:
-                    ride_data.append({
-                        "id": str(ride.id),
-                        "type": "ride",
-                        "status": ride.status,
-                        "driver": {
-                            "id": str(ride.driver.id) if ride.driver else None,
-                            "name": f"{ride.driver.first_name} {ride.driver.last_name}" if ride.driver else None,
-                        },
-                        "customer": {
-                            "id": str(ride.customer.id) if ride.customer else None,
-                            "name": f"{ride.customer.first_name} {ride.customer.last_name}" if ride.customer else None,
-                        },
-                        "location": {
-                            "latitude": float(lat),
-                            "longitude": float(lng),
-                        },
-                        "pickup_location": {
-                            "latitude": float(ride.pickup_latitude) if ride.pickup_latitude else None,
-                            "longitude": float(ride.pickup_longitude) if ride.pickup_longitude else None,
-                            "address": ride.pickup_address,
-                        },
-                        "dropoff_location": {
-                            "latitude": float(ride.dropoff_latitude) if ride.dropoff_latitude else None,
-                            "longitude": float(ride.dropoff_longitude) if ride.dropoff_longitude else None,
-                            "address": ride.dropoff_address,
-                        },
-                        "fare": float(ride.fare) if ride.fare else 0,
-                        "requested_at": ride.requested_at.isoformat() if ride.requested_at else None,
-                    })
-            
+                    ride_data.append(
+                        {
+                            "id": str(ride.id),
+                            "type": "ride",
+                            "status": ride.status,
+                            "driver": {
+                                "id": str(ride.driver.id) if ride.driver else None,
+                                "name": (
+                                    f"{ride.driver.first_name} {ride.driver.last_name}"
+                                    if ride.driver
+                                    else None
+                                ),
+                            },
+                            "customer": {
+                                "id": str(ride.customer.id) if ride.customer else None,
+                                "name": (
+                                    f"{ride.customer.first_name} {ride.customer.last_name}"
+                                    if ride.customer
+                                    else None
+                                ),
+                            },
+                            "location": {
+                                "latitude": float(lat),
+                                "longitude": float(lng),
+                            },
+                            "pickup_location": {
+                                "latitude": (
+                                    float(ride.pickup_latitude)
+                                    if ride.pickup_latitude
+                                    else None
+                                ),
+                                "longitude": (
+                                    float(ride.pickup_longitude)
+                                    if ride.pickup_longitude
+                                    else None
+                                ),
+                                "address": ride.pickup_address,
+                            },
+                            "dropoff_location": {
+                                "latitude": (
+                                    float(ride.dropoff_latitude)
+                                    if ride.dropoff_latitude
+                                    else None
+                                ),
+                                "longitude": (
+                                    float(ride.dropoff_longitude)
+                                    if ride.dropoff_longitude
+                                    else None
+                                ),
+                                "address": ride.dropoff_address,
+                            },
+                            "fare": float(ride.fare) if ride.fare else 0,
+                            "requested_at": (
+                                ride.requested_at.isoformat()
+                                if ride.requested_at
+                                else None
+                            ),
+                        }
+                    )
+
             return ride_data, len(ride_data)
         except ImportError:
             return [], 0
@@ -3508,48 +3648,97 @@ class GeographicHeatMapView(APIView):
         """Get active delivery locations"""
         try:
             from couriers.models import DeliveryRequest
-            
+
             deliveries = DeliveryRequest.objects.filter(
                 status__in=["assigned", "picked_up", "in_transit"]
             ).select_related("driver", "customer")[:limit]
-            
+
             delivery_data = []
             for delivery in deliveries:
                 # Use current location if available, otherwise pickup location
-                lat = delivery.current_latitude if hasattr(delivery, 'current_latitude') and delivery.current_latitude else delivery.pickup_latitude
-                lng = delivery.current_longitude if hasattr(delivery, 'current_longitude') and delivery.current_longitude else delivery.pickup_longitude
-                
+                lat = (
+                    delivery.current_latitude
+                    if hasattr(delivery, "current_latitude")
+                    and delivery.current_latitude
+                    else delivery.pickup_latitude
+                )
+                lng = (
+                    delivery.current_longitude
+                    if hasattr(delivery, "current_longitude")
+                    and delivery.current_longitude
+                    else delivery.pickup_longitude
+                )
+
                 if lat and lng:
-                    delivery_data.append({
-                        "id": str(delivery.id),
-                        "type": "delivery",
-                        "status": delivery.status,
-                        "driver": {
-                            "id": str(delivery.driver.id) if delivery.driver else None,
-                            "name": f"{delivery.driver.first_name} {delivery.driver.last_name}" if delivery.driver else None,
-                        },
-                        "customer": {
-                            "id": str(delivery.customer.id) if delivery.customer else None,
-                            "name": f"{delivery.customer.first_name} {delivery.customer.last_name}" if delivery.customer else None,
-                        },
-                        "location": {
-                            "latitude": float(lat),
-                            "longitude": float(lng),
-                        },
-                        "pickup_location": {
-                            "latitude": float(delivery.pickup_latitude) if delivery.pickup_latitude else None,
-                            "longitude": float(delivery.pickup_longitude) if delivery.pickup_longitude else None,
-                            "address": delivery.pickup_address,
-                        },
-                        "dropoff_location": {
-                            "latitude": float(delivery.delivery_latitude) if delivery.delivery_latitude else None,
-                            "longitude": float(delivery.delivery_longitude) if delivery.delivery_longitude else None,
-                            "address": delivery.delivery_address,
-                        },
-                        "total_fare": float(delivery.total_fare) if delivery.total_fare else 0,
-                        "requested_at": delivery.requested_at.isoformat() if delivery.requested_at else None,
-                    })
-            
+                    delivery_data.append(
+                        {
+                            "id": str(delivery.id),
+                            "type": "delivery",
+                            "status": delivery.status,
+                            "driver": {
+                                "id": (
+                                    str(delivery.driver.id) if delivery.driver else None
+                                ),
+                                "name": (
+                                    f"{delivery.driver.first_name} {delivery.driver.last_name}"
+                                    if delivery.driver
+                                    else None
+                                ),
+                            },
+                            "customer": {
+                                "id": (
+                                    str(delivery.customer.id)
+                                    if delivery.customer
+                                    else None
+                                ),
+                                "name": (
+                                    f"{delivery.customer.first_name} {delivery.customer.last_name}"
+                                    if delivery.customer
+                                    else None
+                                ),
+                            },
+                            "location": {
+                                "latitude": float(lat),
+                                "longitude": float(lng),
+                            },
+                            "pickup_location": {
+                                "latitude": (
+                                    float(delivery.pickup_latitude)
+                                    if delivery.pickup_latitude
+                                    else None
+                                ),
+                                "longitude": (
+                                    float(delivery.pickup_longitude)
+                                    if delivery.pickup_longitude
+                                    else None
+                                ),
+                                "address": delivery.pickup_address,
+                            },
+                            "dropoff_location": {
+                                "latitude": (
+                                    float(delivery.delivery_latitude)
+                                    if delivery.delivery_latitude
+                                    else None
+                                ),
+                                "longitude": (
+                                    float(delivery.delivery_longitude)
+                                    if delivery.delivery_longitude
+                                    else None
+                                ),
+                                "address": delivery.delivery_address,
+                            },
+                            "total_fare": (
+                                float(
+                                    delivery.total_fare) if delivery.total_fare else 0
+                            ),
+                            "requested_at": (
+                                delivery.requested_at.isoformat()
+                                if delivery.requested_at
+                                else None
+                            ),
+                        }
+                    )
+
             return delivery_data, len(delivery_data)
         except ImportError:
             return [], 0
@@ -4176,7 +4365,7 @@ class MerchantReviewManagementView(APIView):
 
         try:
             review = MechanicReview.objects.get(id=review_id)
-            if hasattr(review, 'is_approved'):
+            if hasattr(review, "is_approved"):
                 review.is_approved = approved
                 review.save()
 
@@ -4186,9 +4375,9 @@ class MerchantReviewManagementView(APIView):
                     message=f"Mechanic review {action} successfully",
                     status=True,
                     data={
-                        'review_id': str(review.id),
-                        'is_approved': getattr(review, 'is_approved', True)
-                    }
+                        "review_id": str(review.id),
+                        "is_approved": getattr(review, "is_approved", True),
+                    },
                 )
             )
         except MechanicReview.DoesNotExist:
@@ -4458,7 +4647,7 @@ class DriverReviewManagementView(APIView):
 
         try:
             review = DriverReview.objects.get(id=review_id)
-            if hasattr(review, 'is_approved'):
+            if hasattr(review, "is_approved"):
                 review.is_approved = approved
                 review.save()
 
@@ -4468,9 +4657,9 @@ class DriverReviewManagementView(APIView):
                     message=f"Driver review {action} successfully",
                     status=True,
                     data={
-                        'review_id': str(review.id),
-                        'is_approved': getattr(review, 'is_approved', True)
-                    }
+                        "review_id": str(review.id),
+                        "is_approved": getattr(review, "is_approved", True),
+                    },
                 )
             )
         except DriverReview.DoesNotExist:
@@ -4522,7 +4711,7 @@ class AdminChatMessageView(APIView):
         from django.contrib.auth import get_user_model
 
         User = get_user_model()
-        
+
         room_id = request.query_params.get("room_id")
         read_status = request.query_params.get("read")
         limit = int(request.query_params.get("limit", 20))
@@ -4530,26 +4719,36 @@ class AdminChatMessageView(APIView):
 
         # Get admin users
         admin_users = User.objects.filter(is_staff=True)
-        
+
         # Get chat rooms that include admin users
-        admin_chat_rooms = ChatRoom.objects.filter(participants__in=admin_users).distinct()
-        
+        admin_chat_rooms = ChatRoom.objects.filter(
+            participants__in=admin_users
+        ).distinct()
+
         # Filter by specific room if provided
         if room_id:
             try:
-                specific_room = ChatRoom.objects.get(id=room_id, participants__in=admin_users)
+                specific_room = ChatRoom.objects.get(
+                    id=room_id, participants__in=admin_users
+                )
                 admin_chat_rooms = ChatRoom.objects.filter(id=specific_room.id)
             except ChatRoom.DoesNotExist:
                 return Response(
-                    api_response(message="Chat room not found or not accessible", status=False),
-                    status=404
+                    api_response(
+                        message="Chat room not found or not accessible", status=False
+                    ),
+                    status=404,
                 )
-        
+
         # Get messages from these chat rooms
-        queryset = Message.objects.filter(
-            chat_room__in=admin_chat_rooms,
-            message_type__in=["text", "image", "file"]
-        ).select_related("sender").order_by("created_at")
+        queryset = (
+            Message.objects.filter(
+                chat_room__in=admin_chat_rooms,
+                message_type__in=["text", "image", "file"],
+            )
+            .select_related("sender")
+            .order_by("created_at")
+        )
 
         if read_status is not None:
             is_read = read_status.lower() == "true"
@@ -4634,12 +4833,13 @@ class AdminChatMessageView(APIView):
 
             # Get chat rooms that include admin users
             admin_chat_rooms = ChatRoom.objects.filter(
-                participants__in=admin_users).distinct()
+                participants__in=admin_users
+            ).distinct()
 
             message = Message.objects.get(
                 id=message_id,
                 chat_room__in=admin_chat_rooms,
-                message_type__in=["text", "image", "file"]
+                message_type__in=["text", "image", "file"],
             )
             message.read_at = timezone.now()
             message.save()
@@ -4691,12 +4891,13 @@ class AdminChatMessageView(APIView):
 
             # Get chat rooms that include admin users
             admin_chat_rooms = ChatRoom.objects.filter(
-                participants__in=admin_users).distinct()
+                participants__in=admin_users
+            ).distinct()
 
             original_message = Message.objects.get(
                 id=message_id,
                 chat_room__in=admin_chat_rooms,
-                message_type__in=["text", "image", "file"]
+                message_type__in=["text", "image", "file"],
             )
 
             # Create admin reply in the same chat room
@@ -4731,11 +4932,12 @@ class ContactMessageListView(APIView):
     """
     API endpoint for admins to view and manage contact messages
     """
+
     permission_classes = [IsAuthenticated]
 
     def get_permissions(self):
         """Check if user is admin"""
-        if self.request.method in ['GET', 'PUT', 'PATCH']:
+        if self.request.method in ["GET", "PUT", "PATCH"]:
             return [IsAuthenticated()]  # Allow authenticated users to view
         return [IsAuthenticated()]
 
@@ -4748,27 +4950,29 @@ class ContactMessageListView(APIView):
         """,
         manual_parameters=[
             openapi.Parameter(
-                'status',
+                "status",
                 openapi.IN_QUERY,
                 description="Filter by status (pending, in_progress, resolved, closed)",
                 type=openapi.TYPE_STRING,
-                enum=['pending', 'in_progress', 'resolved', 'closed']
+                enum=["pending", "in_progress", "resolved", "closed"],
             ),
             openapi.Parameter(
-                'is_read',
+                "is_read",
                 openapi.IN_QUERY,
                 description="Filter by read status (true/false)",
-                type=openapi.TYPE_BOOLEAN
+                type=openapi.TYPE_BOOLEAN,
             ),
             openapi.Parameter(
-                'search',
+                "search",
                 openapi.IN_QUERY,
                 description="Search in name, email, or message content",
-                type=openapi.TYPE_STRING
+                type=openapi.TYPE_STRING,
             ),
         ],
         responses={
-            200: openapi.Response("Contact messages list", ContactMessageSerializer(many=True)),
+            200: openapi.Response(
+                "Contact messages list", ContactMessageSerializer(many=True)
+            ),
             401: "Unauthorized",
         },
     )
@@ -4777,38 +4981,39 @@ class ContactMessageListView(APIView):
         List contact messages with filtering
         """
         from users.models import ContactMessage
+        from django.db import models
 
         queryset = ContactMessage.objects.all()
 
         # Apply filters
-        status_filter = request.query_params.get('status')
+        status_filter = request.query_params.get("status")
         if status_filter:
             queryset = queryset.filter(status=status_filter)
 
-        is_read_filter = request.query_params.get('is_read')
+        is_read_filter = request.query_params.get("is_read")
         if is_read_filter is not None:
-            is_read = is_read_filter.lower() in ('true', '1', 'yes')
+            is_read = is_read_filter.lower() in ("true", "1", "yes")
             queryset = queryset.filter(is_read=is_read)
 
-        search_query = request.query_params.get('search')
+        search_query = request.query_params.get("search")
         if search_query:
             queryset = queryset.filter(
-                models.Q(first_name__icontains=search_query) |
-                models.Q(last_name__icontains=search_query) |
-                models.Q(email__icontains=search_query) |
-                models.Q(message__icontains=search_query) |
-                models.Q(company_name__icontains=search_query)
+                models.Q(first_name__icontains=search_query)
+                | models.Q(last_name__icontains=search_query)
+                | models.Q(email__icontains=search_query)
+                | models.Q(message__icontains=search_query)
+                | models.Q(company_name__icontains=search_query)
             )
 
         # Order by creation date (newest first)
-        queryset = queryset.order_by('-created_at')
+        queryset = queryset.order_by("-created_at")
 
         serializer = ContactMessageSerializer(queryset, many=True)
         return Response(
             api_response(
                 message="Contact messages retrieved successfully",
                 status=True,
-                data=serializer.data
+                data=serializer.data,
             )
         )
 
@@ -4828,59 +5033,60 @@ class ContactMessageListView(APIView):
     #     },
     # )
     # def patch(self, request, message_id=None):
-        """
-        Update a specific contact message (status, notes, etc.)
-        """
-        from users.models import ContactMessage
+    # """
+    # Update a specific contact message (status, notes, etc.)
+    # """
+    # from users.models import ContactMessage
 
-        if not message_id:
-            return Response(
-                api_response(message="Message ID is required", status=False),
-                status=400
-            )
+    # if not message_id:
+    #     return Response(
+    #         api_response(message="Message ID is required", status=False),
+    #         status=400
+    #     )
 
-        try:
-            message = ContactMessage.objects.get(id=message_id)
-        except ContactMessage.DoesNotExist:
-            return Response(
-                api_response(message="Contact message not found", status=False),
-                status=404
-            )
+    # try:
+    #     message = ContactMessage.objects.get(id=message_id)
+    # except ContactMessage.DoesNotExist:
+    #     return Response(
+    #         api_response(message="Contact message not found", status=False),
+    #         status=404
+    #     )
 
-        serializer = ContactMessageAdminSerializer(
-            message,
-            data=request.data,
-            partial=True
-        )
+    # serializer = ContactMessageAdminSerializer(
+    #     message,
+    #     data=request.data,
+    #     partial=True
+    # )
 
-        if serializer.is_valid():
-            updated_message = serializer.save()
+    # if serializer.is_valid():
+    #     updated_message = serializer.save()
 
-            # Log the update
-            logger.info(f"Contact message {message_id} updated by {request.user.email}")
+    #     # Log the update
+    #     logger.info(f"Contact message {message_id} updated by {request.user.email}")
 
-            return Response(
-                api_response(
-                    message="Contact message updated successfully",
-                    status=True,
-                    data=ContactMessageSerializer(updated_message).data
-                )
-            )
+    #     return Response(
+    #         api_response(
+    #             message="Contact message updated successfully",
+    #             status=True,
+    #             data=ContactMessageSerializer(updated_message).data
+    #         )
+    #     )
 
-        return Response(
-            api_response(
-                message="Validation failed",
-                status=False,
-                errors=serializer.errors
-            ),
-            status=400
-        )
+    # return Response(
+    #     api_response(
+    #         message="Validation failed",
+    #         status=False,
+    #         errors=serializer.errors
+    #     ),
+    #     status=400
+    # )
 
 
 class ContactMessageDetailView(APIView):
     """
     API endpoint for admins to view and update individual contact messages
     """
+
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
@@ -4906,8 +5112,9 @@ class ContactMessageDetailView(APIView):
             message = ContactMessage.objects.get(id=message_id)
         except ContactMessage.DoesNotExist:
             return Response(
-                api_response(message="Contact message not found", status=False),
-                status=404
+                api_response(
+                    message="Contact message not found", status=False),
+                status=404,
             )
 
         # Mark as read if not already read
@@ -4920,7 +5127,7 @@ class ContactMessageDetailView(APIView):
             api_response(
                 message="Contact message retrieved successfully",
                 status=True,
-                data=serializer.data
+                data=serializer.data,
             )
         )
 
@@ -4938,7 +5145,8 @@ class PrimaryUserProfileSummaryView(APIView):
 
         if not user.roles.filter(name="primary_user").exists():
             return None, Response(
-                api_response(message="User is not a primary user", status=False),
+                api_response(
+                    message="User is not a primary user", status=False),
                 status=400,
             )
 
@@ -4959,7 +5167,9 @@ class PrimaryUserProfileSummaryView(APIView):
                 start_date = parse_date(from_param)
                 if start_date is not None:
                     start_dt = timezone.make_aware(
-                        timezone.datetime.combine(start_date, timezone.datetime.min.time())
+                        timezone.datetime.combine(
+                            start_date, timezone.datetime.min.time()
+                        )
                     )
 
         if to_param:
@@ -4968,7 +5178,9 @@ class PrimaryUserProfileSummaryView(APIView):
                 end_date = parse_date(to_param)
                 if end_date is not None:
                     end_dt = timezone.make_aware(
-                        timezone.datetime.combine(end_date, timezone.datetime.max.time())
+                        timezone.datetime.combine(
+                            end_date, timezone.datetime.max.time()
+                        )
                     )
 
         return start_dt, end_dt
@@ -4996,7 +5208,9 @@ class PrimaryUserProfileSummaryView(APIView):
                 "phone_number": user.phone_number,
                 "is_active": user.is_active,
                 "is_verified": user.is_verified,
-                "date_joined": user.date_joined.isoformat() if user.date_joined else None,
+                "date_joined": (
+                    user.date_joined.isoformat() if user.date_joined else None
+                ),
                 "last_login": user.last_login.isoformat() if user.last_login else None,
             },
             "patronage": {},
@@ -5020,13 +5234,15 @@ class PrimaryUserProfileSummaryView(APIView):
                 "completed": repairs.filter(status="completed").count(),
                 "cancelled": repairs.filter(status="cancelled").count(),
                 "last_request_at": (
-                    repairs.order_by("-requested_at").values_list("requested_at", flat=True).first()
+                    repairs.order_by("-requested_at")
+                    .values_list("requested_at", flat=True)
+                    .first()
                 ),
             }
             if summary["patronage"]["mechanic"]["last_request_at"]:
-                summary["patronage"]["mechanic"]["last_request_at"] = (
-                    summary["patronage"]["mechanic"]["last_request_at"].isoformat()
-                )
+                summary["patronage"]["mechanic"]["last_request_at"] = summary[
+                    "patronage"
+                ]["mechanic"]["last_request_at"].isoformat()
         except ImportError:
             summary["patronage"]["mechanic"] = None
 
@@ -5045,20 +5261,25 @@ class PrimaryUserProfileSummaryView(APIView):
                 "delivered": deliveries.filter(status="delivered").count(),
                 "cancelled": deliveries.filter(status="cancelled").count(),
                 "active": deliveries.filter(
-                    status__in=["pending", "assigned", "picked_up", "in_transit"]
+                    status__in=["pending", "assigned",
+                                "picked_up", "in_transit"]
                 ).count(),
                 "total_spend": float(
-                    deliveries.filter(payment_status="paid").aggregate(total=Sum("total_fare")).get("total")
+                    deliveries.filter(payment_status="paid")
+                    .aggregate(total=Sum("total_fare"))
+                    .get("total")
                     or 0
                 ),
                 "last_requested_at": (
-                    deliveries.order_by("-requested_at").values_list("requested_at", flat=True).first()
+                    deliveries.order_by("-requested_at")
+                    .values_list("requested_at", flat=True)
+                    .first()
                 ),
             }
             if summary["patronage"]["courier"]["last_requested_at"]:
-                summary["patronage"]["courier"]["last_requested_at"] = (
-                    summary["patronage"]["courier"]["last_requested_at"].isoformat()
-                )
+                summary["patronage"]["courier"]["last_requested_at"] = summary[
+                    "patronage"
+                ]["courier"]["last_requested_at"].isoformat()
         except ImportError:
             summary["patronage"]["courier"] = None
 
@@ -5076,18 +5297,25 @@ class PrimaryUserProfileSummaryView(APIView):
                 "total": rides.count(),
                 "completed": rides.filter(status="completed").count(),
                 "cancelled": rides.filter(status="cancelled").count(),
-                "active": rides.filter(status__in=["requested", "accepted", "in_progress"]).count(),
+                "active": rides.filter(
+                    status__in=["requested", "accepted", "in_progress"]
+                ).count(),
                 "total_spend": float(
-                    rides.filter(status="completed").aggregate(total=Sum("fare")).get("total") or 0
+                    rides.filter(status="completed")
+                    .aggregate(total=Sum("fare"))
+                    .get("total")
+                    or 0
                 ),
                 "last_requested_at": (
-                    rides.order_by("-requested_at").values_list("requested_at", flat=True).first()
+                    rides.order_by("-requested_at")
+                    .values_list("requested_at", flat=True)
+                    .first()
                 ),
             }
             if summary["patronage"]["rides"]["last_requested_at"]:
-                summary["patronage"]["rides"]["last_requested_at"] = (
-                    summary["patronage"]["rides"]["last_requested_at"].isoformat()
-                )
+                summary["patronage"]["rides"]["last_requested_at"] = summary[
+                    "patronage"
+                ]["rides"]["last_requested_at"].isoformat()
         except ImportError:
             summary["patronage"]["rides"] = None
 
@@ -5107,19 +5335,22 @@ class PrimaryUserProfileSummaryView(APIView):
                 "cancelled": rentals.filter(status="cancelled").count(),
                 "active": rentals.filter(status__in=["confirmed", "active"]).count(),
                 "total_spend": float(
-                    rentals.filter(status__in=["confirmed", "active", "completed"]).aggregate(
-                        total=Sum("total_amount")
-                    ).get("total")
+                    rentals.filter(
+                        status__in=["confirmed", "active", "completed"])
+                    .aggregate(total=Sum("total_amount"))
+                    .get("total")
                     or 0
                 ),
                 "last_booked_at": (
-                    rentals.order_by("-booked_at").values_list("booked_at", flat=True).first()
+                    rentals.order_by("-booked_at")
+                    .values_list("booked_at", flat=True)
+                    .first()
                 ),
             }
             if summary["patronage"]["rentals"]["last_booked_at"]:
-                summary["patronage"]["rentals"]["last_booked_at"] = (
-                    summary["patronage"]["rentals"]["last_booked_at"].isoformat()
-                )
+                summary["patronage"]["rentals"]["last_booked_at"] = summary[
+                    "patronage"
+                ]["rentals"]["last_booked_at"].isoformat()
         except ImportError:
             summary["patronage"]["rentals"] = None
 
@@ -5136,19 +5367,21 @@ class PrimaryUserProfileSummaryView(APIView):
                 "completed": orders.filter(status="completed").count(),
                 "cancelled": orders.filter(status="cancelled").count(),
                 "total_spend": float(
-                    orders.filter(status__in=["paid", "shipped", "completed"]).aggregate(
-                        total=Sum("total_amount")
-                    ).get("total")
+                    orders.filter(status__in=["paid", "shipped", "completed"])
+                    .aggregate(total=Sum("total_amount"))
+                    .get("total")
                     or 0
                 ),
                 "last_order_at": (
-                    orders.order_by("-created_at").values_list("created_at", flat=True).first()
+                    orders.order_by("-created_at")
+                    .values_list("created_at", flat=True)
+                    .first()
                 ),
             }
             if summary["patronage"]["products"]["last_order_at"]:
-                summary["patronage"]["products"]["last_order_at"] = (
-                    summary["patronage"]["products"]["last_order_at"].isoformat()
-                )
+                summary["patronage"]["products"]["last_order_at"] = summary[
+                    "patronage"
+                ]["products"]["last_order_at"].isoformat()
         except Exception:
             summary["patronage"]["products"] = None
 
@@ -5198,7 +5431,9 @@ class PrimaryUserMechanicTabView(PrimaryUserProfileTabBaseView):
         start_dt, end_dt = self._parse_date_range(request)
         limit, offset = self._pagination(request)
 
-        queryset = RepairRequest.objects.filter(customer=user).select_related("mechanic", "customer")
+        queryset = RepairRequest.objects.filter(customer=user).select_related(
+            "mechanic", "customer"
+        )
         if start_dt:
             queryset = queryset.filter(requested_at__gte=start_dt)
         if end_dt:
@@ -5209,7 +5444,7 @@ class PrimaryUserMechanicTabView(PrimaryUserProfileTabBaseView):
             queryset = queryset.filter(status=status_filter)
 
         total_count = queryset.count()
-        repairs = queryset.order_by("-requested_at")[offset : offset + limit]
+        repairs = queryset.order_by("-requested_at")[offset: offset + limit]
 
         items = []
         for r in repairs:
@@ -5221,11 +5456,17 @@ class PrimaryUserMechanicTabView(PrimaryUserProfileTabBaseView):
                     "vehicle_make": r.vehicle_make,
                     "vehicle_model": r.vehicle_model,
                     "vehicle_year": r.vehicle_year,
-                    "estimated_cost": float(r.estimated_cost) if r.estimated_cost else None,
+                    "estimated_cost": (
+                        float(r.estimated_cost) if r.estimated_cost else None
+                    ),
                     "actual_cost": float(r.actual_cost) if r.actual_cost else None,
-                    "requested_at": r.requested_at.isoformat() if r.requested_at else None,
+                    "requested_at": (
+                        r.requested_at.isoformat() if r.requested_at else None
+                    ),
                     "accepted_at": r.accepted_at.isoformat() if r.accepted_at else None,
-                    "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                    "completed_at": (
+                        r.completed_at.isoformat() if r.completed_at else None
+                    ),
                     "mechanic": self._serialize_user_brief(r.mechanic),
                 }
             )
@@ -5262,7 +5503,9 @@ class PrimaryUserCourierTabView(PrimaryUserProfileTabBaseView):
         start_dt, end_dt = self._parse_date_range(request)
         limit, offset = self._pagination(request)
 
-        queryset = DeliveryRequest.objects.filter(customer=user).select_related("driver", "customer")
+        queryset = DeliveryRequest.objects.filter(customer=user).select_related(
+            "driver", "customer"
+        )
         if start_dt:
             queryset = queryset.filter(requested_at__gte=start_dt)
         if end_dt:
@@ -5273,7 +5516,7 @@ class PrimaryUserCourierTabView(PrimaryUserProfileTabBaseView):
             queryset = queryset.filter(status=status_filter)
 
         total_count = queryset.count()
-        deliveries = queryset.order_by("-requested_at")[offset : offset + limit]
+        deliveries = queryset.order_by("-requested_at")[offset: offset + limit]
 
         items = []
         for d in deliveries:
@@ -5284,9 +5527,13 @@ class PrimaryUserCourierTabView(PrimaryUserProfileTabBaseView):
                     "payment_status": d.payment_status,
                     "payment_method": d.payment_method,
                     "total_fare": float(d.total_fare) if d.total_fare else 0,
-                    "requested_at": d.requested_at.isoformat() if d.requested_at else None,
+                    "requested_at": (
+                        d.requested_at.isoformat() if d.requested_at else None
+                    ),
                     "assigned_at": d.assigned_at.isoformat() if d.assigned_at else None,
-                    "delivered_at": d.delivered_at.isoformat() if d.delivered_at else None,
+                    "delivered_at": (
+                        d.delivered_at.isoformat() if d.delivered_at else None
+                    ),
                     "pickup_address": d.pickup_address,
                     "delivery_address": d.delivery_address,
                     "driver": self._serialize_user_brief(d.driver),
@@ -5325,7 +5572,9 @@ class PrimaryUserRidesTabView(PrimaryUserProfileTabBaseView):
         start_dt, end_dt = self._parse_date_range(request)
         limit, offset = self._pagination(request)
 
-        queryset = Ride.objects.filter(customer=user).select_related("driver", "customer")
+        queryset = Ride.objects.filter(customer=user).select_related(
+            "driver", "customer"
+        )
         if start_dt:
             queryset = queryset.filter(requested_at__gte=start_dt)
         if end_dt:
@@ -5336,7 +5585,7 @@ class PrimaryUserRidesTabView(PrimaryUserProfileTabBaseView):
             queryset = queryset.filter(status=status_filter)
 
         total_count = queryset.count()
-        rides = queryset.order_by("-requested_at")[offset : offset + limit]
+        rides = queryset.order_by("-requested_at")[offset: offset + limit]
 
         items = []
         for r in rides:
@@ -5345,10 +5594,14 @@ class PrimaryUserRidesTabView(PrimaryUserProfileTabBaseView):
                     "id": str(r.id),
                     "status": r.status,
                     "fare": float(r.fare) if r.fare else 0,
-                    "requested_at": r.requested_at.isoformat() if r.requested_at else None,
+                    "requested_at": (
+                        r.requested_at.isoformat() if r.requested_at else None
+                    ),
                     "accepted_at": r.accepted_at.isoformat() if r.accepted_at else None,
                     "started_at": r.started_at.isoformat() if r.started_at else None,
-                    "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                    "completed_at": (
+                        r.completed_at.isoformat() if r.completed_at else None
+                    ),
                     "pickup_address": r.pickup_address,
                     "dropoff_address": r.dropoff_address,
                     "driver": self._serialize_user_brief(r.driver),
@@ -5387,7 +5640,9 @@ class PrimaryUserRentalsTabView(PrimaryUserProfileTabBaseView):
         start_dt, end_dt = self._parse_date_range(request)
         limit, offset = self._pagination(request)
 
-        queryset = RentalBooking.objects.filter(customer=user).select_related("customer", "product")
+        queryset = RentalBooking.objects.filter(customer=user).select_related(
+            "customer", "product"
+        )
         if start_dt:
             queryset = queryset.filter(booked_at__gte=start_dt)
         if end_dt:
@@ -5398,7 +5653,7 @@ class PrimaryUserRentalsTabView(PrimaryUserProfileTabBaseView):
             queryset = queryset.filter(status=status_filter)
 
         total_count = queryset.count()
-        rentals = queryset.order_by("-booked_at")[offset : offset + limit]
+        rentals = queryset.order_by("-booked_at")[offset: offset + limit]
 
         items = []
         for rb in rentals:
@@ -5461,7 +5716,7 @@ class PrimaryUserProductsTabView(PrimaryUserProfileTabBaseView):
             queryset = queryset.filter(status=status_filter)
 
         total_count = queryset.count()
-        orders = queryset.order_by("-created_at")[offset : offset + limit]
+        orders = queryset.order_by("-created_at")[offset: offset + limit]
 
         items = []
         for o in orders:
@@ -5525,7 +5780,7 @@ class PrimaryUserActivityLogTabView(PrimaryUserProfileTabBaseView):
             queryset = queryset.filter(severity__iexact=severity_filter)
 
         total_count = queryset.count()
-        logs = queryset.order_by("-timestamp")[offset : offset + limit]
+        logs = queryset.order_by("-timestamp")[offset: offset + limit]
 
         items = []
         for log in logs:
@@ -5575,21 +5830,23 @@ class EmailSubscriptionListView(APIView):
         """,
         manual_parameters=[
             openapi.Parameter(
-                'status',
+                "status",
                 openapi.IN_QUERY,
                 description="Filter by status (active, unsubscribed)",
                 type=openapi.TYPE_STRING,
-                enum=['active', 'unsubscribed']
+                enum=["active", "unsubscribed"],
             ),
             openapi.Parameter(
-                'search',
+                "search",
                 openapi.IN_QUERY,
                 description="Search by email, first name, or last name",
-                type=openapi.TYPE_STRING
+                type=openapi.TYPE_STRING,
             ),
         ],
         responses={
-            200: openapi.Response("Subscribers list", EmailSubscriptionSerializer(many=True)),
+            200: openapi.Response(
+                "Subscribers list", EmailSubscriptionSerializer(many=True)
+            ),
             401: "Unauthorized",
         },
     )
@@ -5598,19 +5855,19 @@ class EmailSubscriptionListView(APIView):
 
         queryset = EmailSubscription.objects.all()
 
-        status_filter = request.query_params.get('status')
+        status_filter = request.query_params.get("status")
         if status_filter:
             queryset = queryset.filter(status=status_filter)
 
-        search_query = request.query_params.get('search')
+        search_query = request.query_params.get("search")
         if search_query:
             queryset = queryset.filter(
-                models.Q(email__icontains=search_query) |
-                models.Q(first_name__icontains=search_query) |
-                models.Q(last_name__icontains=search_query)
+                models.Q(email__icontains=search_query)
+                | models.Q(first_name__icontains=search_query)
+                | models.Q(last_name__icontains=search_query)
             )
 
-        queryset = queryset.order_by('-subscribed_at')
+        queryset = queryset.order_by("-subscribed_at")
         serializer = EmailSubscriptionSerializer(queryset, many=True)
 
         return Response(
@@ -5621,22 +5878,22 @@ class EmailSubscriptionListView(APIView):
             )
         )
 
-    # @swagger_auto_schema(
-    #     operation_summary="Update Contact Message",
-    #     operation_description="""
-    #     **Update contact message details**
+        # @swagger_auto_schema(
+        #     operation_summary="Update Contact Message",
+        #     operation_description="""
+        #     **Update contact message details**
 
-    #     This endpoint allows admins to update contact message status, response notes, etc.
-    #     """,
-    #     request_body=ContactMessageAdminSerializer,
-    #     responses={
-    #         200: openapi.Response("Contact message updated", ContactMessageSerializer),
-    #         400: "Bad Request",
-    #         404: "Not Found",
-    #         401: "Unauthorized",
-    #     },
-    # )
-    # def put(self, request, message_id):
+        #     This endpoint allows admins to update contact message status, response notes, etc.
+        #     """,
+        #     request_body=ContactMessageAdminSerializer,
+        #     responses={
+        #         200: openapi.Response("Contact message updated", ContactMessageSerializer),
+        #         400: "Bad Request",
+        #         404: "Not Found",
+        #         401: "Unauthorized",
+        #     },
+        # )
+        # def put(self, request, message_id):
         """
         Update a contact message
         """
@@ -5646,8 +5903,9 @@ class EmailSubscriptionListView(APIView):
             message = ContactMessage.objects.get(id=message_id)
         except ContactMessage.DoesNotExist:
             return Response(
-                api_response(message="Contact message not found", status=False),
-                status=404
+                api_response(
+                    message="Contact message not found", status=False),
+                status=404,
             )
 
         serializer = ContactMessageAdminSerializer(message, data=request.data)
@@ -5656,21 +5914,1050 @@ class EmailSubscriptionListView(APIView):
             updated_message = serializer.save()
 
             # Log the update
-            logger.info(f"Contact message {message_id} updated by {request.user.email}")
+            logger.info(
+                f"Contact message {message_id} updated by {request.user.email}")
 
             return Response(
                 api_response(
                     message="Contact message updated successfully",
                     status=True,
-                    data=ContactMessageSerializer(updated_message).data
+                    data=ContactMessageSerializer(updated_message).data,
                 )
             )
 
         return Response(
             api_response(
-                message="Validation failed",
-                status=False,
-                errors=serializer.errors
+                message="Validation failed", status=False, errors=serializer.errors
             ),
-            status=400
+            status=400,
         )
+
+
+class MerchantProviderDetailView(APIView):
+    """
+    Admin detailed view for merchant providers.
+    Shows profile, KPIs, and provider activities.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    @swagger_auto_schema(
+        operation_summary="Get Merchant Provider Details",
+        operation_description="""
+        Retrieve detailed information about a merchant provider including profile, KPIs, and activities.
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                "activity",
+                openapi.IN_QUERY,
+                description="Type of activity to return: orders, products, reviews, activity_logs",
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+            openapi.Parameter(
+                "limit",
+                openapi.IN_QUERY,
+                description="Number of items to return",
+                type=openapi.TYPE_INTEGER,
+                default=50,
+            ),
+            openapi.Parameter(
+                "offset",
+                openapi.IN_QUERY,
+                description="Offset for pagination",
+                type=openapi.TYPE_INTEGER,
+                default=0,
+            ),
+            openapi.Parameter(
+                "from",
+                openapi.IN_QUERY,
+                description="Start date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "to",
+                openapi.IN_QUERY,
+                description="End date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+        ],
+        responses={
+            200: openapi.Response("Merchant provider details"),
+            400: "Bad Request",
+            404: "Not Found",
+        },
+    )
+    def get(self, request, user_id):
+        from uuid import UUID
+        from users.models import User, MerchantProfile, Product, Order, MerchantReview
+        from users.serializers import MerchantProfileSerializer
+        from django.db.models import Sum, Avg
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                api_response(message="User not found", status=False),
+                status=404,
+            )
+
+        if not user.roles.filter(name="merchant").exists():
+            return Response(
+                api_response(message="User is not a merchant", status=False),
+                status=400,
+            )
+
+        profile = getattr(user, "merchant_profile", None)
+        if not profile:
+            return Response(
+                api_response(message="Merchant profile not found", status=False),
+                status=404,
+            )
+
+        # Compute KPIs
+        kpis = self._compute_merchant_kpis(user)
+
+        # Get activity
+        activity = request.query_params.get("activity")
+        if not activity:
+            return Response(
+                api_response(message="activity query param is required", status=False),
+                status=400,
+            )
+
+        activities_data = self._get_merchant_activities(user, activity, request)
+
+        # Serialize profile
+        profile_serializer = MerchantProfileSerializer(
+            profile, context={"request": request}
+        )
+
+        return Response(
+            api_response(
+                message="Merchant provider details retrieved successfully",
+                status=True,
+                data={
+                    "profile": profile_serializer.data,
+                    "kpis": kpis,
+                    "activities": activities_data,
+                },
+            )
+        )
+
+    def _compute_merchant_kpis(self, user):
+        from users.models import Product, Order, MerchantReview
+        from django.db.models import Sum, Avg
+
+        # Total products
+        total_products = Product.objects.filter(merchant=user).count()
+
+        # Total orders (distinct orders containing merchant's products)
+        total_orders = (
+            Order.objects.filter(orderitem__product__merchant=user).distinct().count()
+        )
+
+        # Total sales
+        total_sales = (
+            Order.objects.filter(
+                orderitem__product__merchant=user,
+                status__in=["paid", "shipped", "completed"],
+            )
+            .distinct()
+            .aggregate(total=Sum("total_amount"))["total"]
+            or 0
+        )
+
+        # Average rating
+        avg_rating = (
+            MerchantReview.objects.filter(merchant=user).aggregate(
+                avg=Avg("rating")
+            )["avg"]
+            or 0
+        )
+
+        # Last order date
+        last_order = (
+            Order.objects.filter(orderitem__product__merchant=user)
+            .order_by("-created_at")
+            .first()
+        )
+        last_order_date = (
+            last_order.created_at.isoformat() if last_order else None
+        )
+
+        return {
+            "total_products": total_products,
+            "total_orders": total_orders,
+            "total_sales": float(total_sales),
+            "avg_rating": float(avg_rating),
+            "last_order_date": last_order_date,
+        }
+
+    def _get_merchant_activities(self, user, activity, request):
+        if activity == "orders":
+            return self._get_merchant_orders(user, request)
+        elif activity == "products":
+            return self._get_merchant_products(user, request)
+        elif activity == "reviews":
+            return self._get_merchant_reviews(user, request)
+        elif activity == "activity_logs":
+            return self._get_merchant_activity_logs(user, request)
+        else:
+            return {"error": "Invalid activity type"}
+
+    def _get_merchant_orders(self, user, request):
+        from users.models import Order
+        from django.db.models import Sum
+
+        queryset = Order.objects.filter(
+            orderitem__product__merchant=user
+        ).distinct()
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(created_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(created_at__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        orders = queryset.order_by("-created_at")[offset : offset + limit]
+
+        orders_data = []
+        for order in orders:
+            orders_data.append(
+                {
+                    "id": str(order.id),
+                    "customer": {
+                        "id": str(order.customer.id),
+                        "name": f"{order.customer.first_name} {order.customer.last_name}",
+                        "email": order.customer.email,
+                    },
+                    "total_amount": float(order.total_amount),
+                    "status": order.status,
+                    "created_at": order.created_at.isoformat(),
+                }
+            )
+
+        return {
+            "type": "orders",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "orders": orders_data,
+        }
+
+    def _get_merchant_products(self, user, request):
+        from users.models import Product
+
+        queryset = Product.objects.filter(merchant=user)
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(created_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(created_at__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        products = queryset.order_by("-created_at")[offset : offset + limit]
+
+        products_data = []
+        for product in products:
+            products_data.append(
+                {
+                    "id": str(product.id),
+                    "name": product.name,
+                    "price": float(product.price),
+                    "is_active": product.is_active,
+                    "created_at": product.created_at.isoformat(),
+                }
+            )
+
+        return {
+            "type": "products",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "products": products_data,
+        }
+
+    def _get_merchant_reviews(self, user, request):
+        from users.models import MerchantReview
+
+        queryset = MerchantReview.objects.filter(merchant=user)
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(created_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(created_at__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        reviews = queryset.order_by("-created_at")[offset: offset + limit]
+
+        reviews_data = []
+        for review in reviews:
+            reviews_data.append(
+                {
+                    "id": str(review.id),
+                    "customer": {
+                        "id": str(review.customer.id),
+                        "name": f"{review.customer.first_name} {review.customer.last_name}",
+                    },
+                    "rating": review.rating,
+                    "comment": review.comment,
+                    "is_approved": review.is_approved,
+                    "created_at": review.created_at.isoformat(),
+                }
+            )
+
+        return {
+            "type": "reviews",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "reviews": reviews_data,
+        }
+
+    def _get_merchant_activity_logs(self, user, request):
+        from users.models import UserActivityLog
+
+        queryset = UserActivityLog.objects.filter(user=user)
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(timestamp__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(timestamp__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        logs = queryset.order_by("-timestamp")[offset: offset + limit]
+
+        logs_data = []
+        for log in logs:
+            logs_data.append(
+                {
+                    "id": str(log.id),
+                    "action": log.action,
+                    "category": log.category,
+                    "severity": log.severity,
+                    "success": log.success,
+                    "description": log.description,
+                    "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+                }
+            )
+
+        return {
+            "type": "activity_logs",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "activity_logs": logs_data,
+        }
+
+
+class MechanicProviderDetailView(APIView):
+    """
+    Admin detailed view for mechanic providers.
+    Shows profile, KPIs, and provider activities.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    @swagger_auto_schema(
+        operation_summary="Get Mechanic Provider Details",
+        operation_description="""
+        Retrieve detailed information about a mechanic provider including profile, KPIs, and activities.
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                "activity",
+                openapi.IN_QUERY,
+                description="Type of activity to return: repairs, reviews, expertise, activity_logs",
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+            openapi.Parameter(
+                "limit",
+                openapi.IN_QUERY,
+                description="Number of items to return",
+                type=openapi.TYPE_INTEGER,
+                default=50,
+            ),
+            openapi.Parameter(
+                "offset",
+                openapi.IN_QUERY,
+                description="Offset for pagination",
+                type=openapi.TYPE_INTEGER,
+                default=0,
+            ),
+            openapi.Parameter(
+                "from",
+                openapi.IN_QUERY,
+                description="Start date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "to",
+                openapi.IN_QUERY,
+                description="End date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+        ],
+        responses={
+            200: openapi.Response("Mechanic provider details"),
+            400: "Bad Request",
+            404: "Not Found",
+        },
+    )
+    def get(self, request, user_id):
+        from users.models import User, MechanicProfile, MechanicReview
+        from users.serializers import MechanicProfileSerializer
+        from django.db.models import Sum, Avg
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                api_response(message="User not found", status=False),
+                status=404,
+            )
+
+        if not user.roles.filter(name="mechanic").exists():
+            return Response(
+                api_response(message="User is not a mechanic", status=False),
+                status=400,
+            )
+
+        profile = getattr(user, "mechanic_profile", None)
+        if not profile:
+            return Response(
+                api_response(message="Mechanic profile not found", status=False),
+                status=404,
+            )
+
+        # Compute KPIs
+        kpis = self._compute_mechanic_kpis(user)
+
+        # Get activity
+        activity = request.query_params.get("activity")
+        if not activity:
+            return Response(
+                api_response(message="activity query param is required", status=False),
+                status=400,
+            )
+
+        activities_data = self._get_mechanic_activities(user, activity, request)
+
+        # Serialize profile
+        profile_serializer = MechanicProfileSerializer(
+            profile, context={"request": request}
+        )
+
+        return Response(
+            api_response(
+                message="Mechanic provider details retrieved successfully",
+                status=True,
+                data={
+                    "profile": profile_serializer.data,
+                    "kpis": kpis,
+                    "activities": activities_data,
+                },
+            )
+        )
+
+    def _compute_mechanic_kpis(self, user):
+        from mechanics.models import RepairRequest
+        from users.models import MechanicReview
+        from django.db.models import Sum, Avg
+
+        # Total repairs
+        repairs = RepairRequest.objects.filter(mechanic=user)
+        total_repairs = repairs.count()
+
+        # Total earnings
+        total_earnings = (
+            repairs.filter(status="completed").aggregate(
+                total=Sum("actual_cost")
+            )["total"]
+            or 0
+        )
+
+        # Average rating
+        avg_rating = (
+            MechanicReview.objects.filter(mechanic=user).aggregate(
+                avg=Avg("rating")
+            )["avg"]
+            or 0
+        )
+
+        # Completion rate
+        completed_repairs = repairs.filter(status="completed").count()
+        completion_rate = (
+            (completed_repairs / total_repairs * 100) if total_repairs > 0 else 0
+        )
+
+        # Last repair date
+        last_repair = repairs.order_by("-requested_at").first()
+        last_repair_date = (
+            last_repair.requested_at.isoformat() if last_repair else None
+        )
+
+        return {
+            "total_repairs": total_repairs,
+            "total_earnings": float(total_earnings),
+            "avg_rating": float(avg_rating),
+            "completion_rate": float(completion_rate),
+            "last_repair_date": last_repair_date,
+        }
+
+    def _get_mechanic_activities(self, user, activity, request):
+        if activity == "repairs":
+            return self._get_mechanic_repairs(user, request)
+        elif activity == "reviews":
+            return self._get_mechanic_reviews(user, request)
+        elif activity == "expertise":
+            return self._get_mechanic_expertise(user, request)
+        elif activity == "activity_logs":
+            return self._get_mechanic_activity_logs(user, request)
+        else:
+            return {"error": "Invalid activity type"}
+
+    def _get_mechanic_repairs(self, user, request):
+        from mechanics.models import RepairRequest
+
+        queryset = RepairRequest.objects.filter(mechanic=user)
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(requested_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(requested_at__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        repairs = queryset.order_by("-requested_at")[offset: offset + limit]
+
+        repairs_data = []
+        for repair in repairs:
+            repairs_data.append(
+                {
+                    "id": str(repair.id),
+                    "customer": {
+                        "id": str(repair.customer.id),
+                        "name": f"{repair.customer.first_name} {repair.customer.last_name}",
+                    },
+                    "vehicle_make": repair.vehicle_make,
+                    "vehicle_model": repair.vehicle_model,
+                    "problem_description": repair.problem_description,
+                    "status": repair.status,
+                    "estimated_cost": float(repair.estimated_cost) if repair.estimated_cost else None,
+                    "actual_cost": float(repair.actual_cost) if repair.actual_cost else None,
+                    "requested_at": repair.requested_at.isoformat(),
+                    "completed_at": repair.completed_at.isoformat() if repair.completed_at else None,
+                }
+            )
+
+        return {
+            "type": "repairs",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "repairs": repairs_data,
+        }
+
+    def _get_mechanic_reviews(self, user, request):
+        from users.models import MechanicReview
+
+        queryset = MechanicReview.objects.filter(mechanic=user)
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(created_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(created_at__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        reviews = queryset.order_by("-created_at")[offset: offset + limit]
+
+        reviews_data = []
+        for review in reviews:
+            reviews_data.append(
+                {
+                    "id": str(review.id),
+                    "customer": {
+                        "id": str(review.customer.id),
+                        "name": f"{review.customer.first_name} {review.customer.last_name}",
+                    },
+                    "rating": review.rating,
+                    "comment": review.comment,
+                    "is_approved": review.is_approved,
+                    "created_at": review.created_at.isoformat(),
+                }
+            )
+
+        return {
+            "type": "reviews",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "reviews": reviews_data,
+        }
+
+    def _get_mechanic_expertise(self, user, request):
+        # Return mechanic's bio as expertise
+        profile = getattr(user, "mechanic_profile", None)
+        expertise = profile.bio if profile and profile.bio else "No expertise information available."
+
+        return {
+            "type": "expertise",
+            "expertise": expertise,
+        }
+
+    def _get_mechanic_activity_logs(self, user, request):
+        from users.models import UserActivityLog
+
+        queryset = UserActivityLog.objects.filter(user=user)
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(timestamp__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(timestamp__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        logs = queryset.order_by("-timestamp")[offset: offset + limit]
+
+        logs_data = []
+        for log in logs:
+            logs_data.append(
+                {
+                    "id": str(log.id),
+                    "action": log.action,
+                    "category": log.category,
+                    "severity": log.severity,
+                    "success": log.success,
+                    "description": log.description,
+                    "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+                }
+            )
+
+        return {
+            "type": "activity_logs",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "activity_logs": logs_data,
+        }
+
+
+class DriverProviderDetailView(APIView):
+    """
+    Admin detailed view for driver providers.
+    Shows profile, KPIs, and provider activities.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    @swagger_auto_schema(
+        operation_summary="Get Driver Provider Details",
+        operation_description="""
+        Retrieve detailed information about a driver provider including profile, KPIs, and activities.
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                "activity",
+                openapi.IN_QUERY,
+                description="Type of activity to return: rides, deliveries, reviews, activity_logs",
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+            openapi.Parameter(
+                "limit",
+                openapi.IN_QUERY,
+                description="Number of items to return",
+                type=openapi.TYPE_INTEGER,
+                default=50,
+            ),
+            openapi.Parameter(
+                "offset",
+                openapi.IN_QUERY,
+                description="Offset for pagination",
+                type=openapi.TYPE_INTEGER,
+                default=0,
+            ),
+            openapi.Parameter(
+                "from",
+                openapi.IN_QUERY,
+                description="Start date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "to",
+                openapi.IN_QUERY,
+                description="End date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+        ],
+        responses={
+            200: openapi.Response("Driver provider details"),
+            400: "Bad Request",
+            404: "Not Found",
+        },
+    )
+    def get(self, request, user_id):
+        from users.models import User, DriverProfile, DriverReview
+        from users.serializers import DriverProfileSerializer
+        from django.db.models import Sum, Avg
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                api_response(message="User not found", status=False),
+                status=404,
+            )
+
+        if not (user.roles.filter(name="driver").exists() or user.roles.filter(name="rider").exists()):
+            return Response(
+                api_response(message="User is not a driver or rider", status=False),
+                status=400,
+            )
+
+        profile = getattr(user, "driver_profile", None)
+        if not profile:
+            return Response(
+                api_response(message="Driver profile not found", status=False),
+                status=404,
+            )
+
+        # Compute KPIs
+        kpis = self._compute_driver_kpis(user)
+
+        # Get activity
+        activity = request.query_params.get("activity")
+        if not activity:
+            return Response(
+                api_response(message="activity query param is required", status=False),
+                status=400,
+            )
+
+        activities_data = self._get_driver_activities(user, activity, request)
+
+        # Serialize profile
+        profile_serializer = DriverProfileSerializer(
+            profile, context={"request": request}
+        )
+
+        return Response(
+            api_response(
+                message="Driver provider details retrieved successfully",
+                status=True,
+                data={
+                    "profile": profile_serializer.data,
+                    "kpis": kpis,
+                    "activities": activities_data,
+                },
+            )
+        )
+
+    def _pagination(self, request):
+        limit = int(request.query_params.get("limit", 50))
+        offset = int(request.query_params.get("offset", 0))
+        return limit, offset
+
+    def _parse_date_range(self, request):
+        from django.utils import timezone
+        from datetime import datetime
+
+        start_dt = None
+        end_dt = None
+
+        start_date_str = request.query_params.get("from")
+        end_date_str = request.query_params.get("to")
+
+        if start_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                start_dt = timezone.make_aware(
+                    datetime.combine(start_date, datetime.min.time())
+                )
+            except ValueError:
+                pass
+
+        if end_date_str:
+            try:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                end_dt = timezone.make_aware(
+                    datetime.combine(end_date, datetime.max.time())
+                )
+            except ValueError:
+                pass
+
+        return start_dt, end_dt
+
+    def _compute_driver_kpis(self, user):
+        from rides.models import Ride
+        from couriers.models import DeliveryRequest
+        from users.models import DriverReview
+        from django.db.models import Sum, Avg
+
+        # Total rides
+        rides = Ride.objects.filter(driver=user)
+        total_rides = rides.count()
+
+        # Total deliveries
+        deliveries = DeliveryRequest.objects.filter(driver=user)
+        total_deliveries = deliveries.count()
+
+        # Total earnings
+        total_earnings_rides = (
+            rides.filter(status="completed").aggregate(
+                total=Sum("fare")
+            )["total"]
+            or 0
+        )
+        total_earnings_deliveries = (
+            deliveries.filter(status="delivered").aggregate(
+                total=Sum("total_fare")
+            )["total"]
+            or 0
+        )
+        total_earnings = total_earnings_rides + total_earnings_deliveries
+
+        # Average rating
+        avg_rating = (
+            DriverReview.objects.filter(driver=user).aggregate(
+                avg=Avg("rating")
+            )["avg"]
+            or 0
+        )
+
+        # Completion rate
+        completed_rides = rides.filter(status="completed").count()
+        delivered_deliveries = deliveries.filter(status="delivered").count()
+        total_activities = total_rides + total_deliveries
+        completed_activities = completed_rides + delivered_deliveries
+        completion_rate = (
+            (completed_activities / total_activities * 100) if total_activities > 0 else 0
+        )
+
+        # Last activity date
+        last_ride = rides.order_by("-requested_at").first()
+        last_delivery = deliveries.order_by("-requested_at").first()
+        last_activity_date = None
+        if last_ride and last_delivery:
+            last_activity_date = max(last_ride.requested_at, last_delivery.requested_at)
+        elif last_ride:
+            last_activity_date = last_ride.requested_at
+        elif last_delivery:
+            last_activity_date = last_delivery.requested_at
+        last_activity_date = (
+            last_activity_date.isoformat() if last_activity_date else None
+        )
+
+        return {
+            "total_rides": total_rides,
+            "total_deliveries": total_deliveries,
+            "total_earnings": float(total_earnings),
+            "avg_rating": float(avg_rating),
+            "completion_rate": float(completion_rate),
+            "last_activity_date": last_activity_date,
+        }
+
+    def _get_driver_activities(self, user, activity, request):
+        if activity == "rides":
+            return self._get_driver_rides(user, request)
+        elif activity == "deliveries":
+            return self._get_driver_deliveries(user, request)
+        elif activity == "reviews":
+            return self._get_driver_reviews(user, request)
+        elif activity == "activity_logs":
+            return self._get_driver_activity_logs(user, request)
+        else:
+            return {"error": "Invalid activity type"}
+
+    def _get_driver_rides(self, user, request):
+        from rides.models import Ride
+
+        queryset = Ride.objects.filter(driver=user)
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(requested_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(requested_at__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        rides = queryset.order_by("-requested_at")[offset: offset + limit]
+
+        rides_data = []
+        for ride in rides:
+            rides_data.append(
+                {
+                    "id": str(ride.id),
+                    "customer": {
+                        "id": str(ride.customer.id),
+                        "name": f"{ride.customer.first_name} {ride.customer.last_name}",
+                    },
+                    "fare": float(ride.fare) if ride.fare else 0,
+                    "status": ride.status,
+                    "pickup_address": ride.pickup_address,
+                    "dropoff_address": ride.dropoff_address,
+                    "requested_at": ride.requested_at.isoformat(),
+                    "completed_at": ride.completed_at.isoformat() if ride.completed_at else None,
+                }
+            )
+
+        return {
+            "type": "rides",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "rides": rides_data,
+        }
+
+    def _get_driver_deliveries(self, user, request):
+        from couriers.models import DeliveryRequest
+
+        queryset = DeliveryRequest.objects.filter(driver=user)
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(requested_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(requested_at__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        deliveries = queryset.order_by("-requested_at")[offset: offset + limit]
+
+        deliveries_data = []
+        for delivery in deliveries:
+            deliveries_data.append(
+                {
+                    "id": str(delivery.id),
+                    "customer": {
+                        "id": str(delivery.customer.id),
+                        "name": f"{delivery.customer.first_name} {delivery.customer.last_name}",
+                    },
+                    "total_fare": float(delivery.total_fare) if delivery.total_fare else 0,
+                    "status": delivery.status,
+                    "pickup_address": delivery.pickup_address,
+                    "delivery_address": delivery.delivery_address,
+                    "requested_at": delivery.requested_at.isoformat(),
+                    "delivered_at": delivery.delivered_at.isoformat() if delivery.delivered_at else None,
+                }
+            )
+
+        return {
+            "type": "deliveries",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "deliveries": deliveries_data,
+        }
+
+    def _get_driver_reviews(self, user, request):
+        from users.models import DriverReview
+
+        queryset = DriverReview.objects.filter(driver=user)
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(created_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(created_at__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        reviews = queryset.order_by("-created_at")[offset: offset + limit]
+
+        reviews_data = []
+        for review in reviews:
+            reviews_data.append(
+                {
+                    "id": str(review.id),
+                    "customer": {
+                        "id": str(review.customer.id),
+                        "name": f"{review.customer.first_name} {review.customer.last_name}",
+                    },
+                    "rating": review.rating,
+                    "comment": review.comment,
+                    "is_approved": review.is_approved,
+                    "created_at": review.created_at.isoformat(),
+                }
+            )
+
+        return {
+            "type": "reviews",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "reviews": reviews_data,
+        }
+
+    def _get_driver_activity_logs(self, user, request):
+        from users.models import UserActivityLog
+
+        queryset = UserActivityLog.objects.filter(user=user)
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(timestamp__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(timestamp__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        logs = queryset.order_by("-timestamp")[offset: offset + limit]
+
+        logs_data = []
+        for log in logs:
+            logs_data.append(
+                {
+                    "id": str(log.id),
+                    "action": log.action,
+                    "category": log.category,
+                    "severity": log.severity,
+                    "success": log.success,
+                    "description": log.description,
+                    "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+                }
+            )
+
+        return {
+            "type": "activity_logs",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "activity_logs": logs_data,
+        }

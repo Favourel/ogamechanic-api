@@ -15,10 +15,10 @@ class CustomEmailValidator(EmailValidator):
 
     def __call__(self, value):
         super().__call__(value)
-        
+
         if not self.allow_disposable:
             if not self.disposable_validator.validate_email(value):
                 raise ValidationError(
                     _('Disposable email addresses are not allowed.'),
                     code='disposable_email'
-                ) 
+                )

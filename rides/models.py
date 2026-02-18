@@ -16,7 +16,7 @@ class Waypoint(models.Model):
         ('dropoff', 'Dropoff'),
         ('waypoint', 'Waypoint'),
     ]
-    
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     address = models.CharField(max_length=255)
     latitude = models.DecimalField(max_digits=9, decimal_places=6)
@@ -26,20 +26,20 @@ class Waypoint(models.Model):
         validators=[MinValueValidator(1)],
         help_text="Order of waypoint in the route (1 = first, 2 = second, etc.)"
     )
-    
+
     # Contact information for pickup/dropoff
     contact_name = models.CharField(max_length=100, blank=True)
     contact_phone = models.CharField(max_length=20, blank=True)
     instructions = models.TextField(blank=True)
-    
+
     # Status tracking
     is_completed = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)
-    
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         ordering = ['sequence_order']
         indexes = [
@@ -47,7 +47,7 @@ class Waypoint(models.Model):
             models.Index(fields=['sequence_order']),
             models.Index(fields=['is_completed']),
         ]
-    
+
     def __str__(self):
         return f"{self.waypoint_type.title()} #{self.sequence_order} - {self.address}"
 
@@ -80,7 +80,7 @@ class Ride(models.Model):
         blank=True,
         related_name='rides_driven'
     )
-    
+
     # Legacy fields for backward compatibility
     pickup_address = models.CharField(max_length=255, blank=True)
     pickup_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
@@ -88,16 +88,16 @@ class Ride(models.Model):
     dropoff_address = models.CharField(max_length=255, blank=True)
     dropoff_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     dropoff_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    
+
     # Enhanced routing with waypoints
     waypoints = models.ManyToManyField(Waypoint, related_name='rides')
     current_waypoint_index = models.PositiveIntegerField(default=0, help_text="Current waypoint being processed")
-    
+
     # Route information
     total_distance_km = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     total_duration_min = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     route_polyline = models.TextField(blank=True, help_text="Encoded polyline for route visualization")
-    
+
     status = models.CharField(
         max_length=32,
         choices=[
@@ -131,23 +131,23 @@ class Ride(models.Model):
         Calculate the total distance in kilometers for all waypoints.
         """
         from math import radians, sin, cos, sqrt, atan2
-        
+
         waypoints = self.waypoints.all().order_by('sequence_order')
         if len(waypoints) < 2:
             return 0
-        
+
         total_distance = 0
         R = 6371  # Earth radius in km
-        
+
         for i in range(len(waypoints) - 1):
             wp1 = waypoints[i]
             wp2 = waypoints[i + 1]
-            
+
             lat1 = float(wp1.latitude)
             lon1 = float(wp1.longitude)
             lat2 = float(wp2.latitude)
             lon2 = float(wp2.longitude)
-            
+
             dlat = radians(lat2 - lat1)
             dlon = radians(lon2 - lon1)
             a = (
@@ -158,29 +158,29 @@ class Ride(models.Model):
             )
             c = 2 * atan2(sqrt(a), sqrt(1 - a))
             total_distance += R * c
-        
+
         return total_distance
 
     def get_current_waypoint(self):
         """Get the current waypoint being processed."""
         return self.waypoints.filter(sequence_order__gt=self.current_waypoint_index).order_by('sequence_order').first()
-    
+
     def get_next_waypoint(self):
         """Get the next waypoint to be processed."""
         return self.waypoints.filter(sequence_order__gt=self.current_waypoint_index).order_by('sequence_order').first()
-    
+
     def get_pickup_waypoints(self):
         """Get all pickup waypoints."""
         return self.waypoints.filter(waypoint_type='pickup').order_by('sequence_order')
-    
+
     def get_dropoff_waypoints(self):
         """Get all dropoff waypoints."""
         return self.waypoints.filter(waypoint_type='dropoff').order_by('sequence_order')
-    
+
     def get_waypoint_by_type(self, waypoint_type):
         """Get waypoints by type."""
         return self.waypoints.filter(waypoint_type=waypoint_type).order_by('sequence_order')
-    
+
     def advance_to_next_waypoint(self):
         """Advance to the next waypoint in the route."""
         next_waypoint = self.get_next_waypoint()
@@ -189,7 +189,7 @@ class Ride(models.Model):
             self.save()
             return next_waypoint
         return None
-    
+
     def mark_waypoint_completed(self, waypoint):
         """Mark a waypoint as completed."""
         if waypoint in self.waypoints.all():
@@ -198,7 +198,7 @@ class Ride(models.Model):
             waypoint.save()
             return True
         return False
-    
+
     def is_route_completed(self):
         """Check if all waypoints in the route are completed."""
         return self.waypoints.filter(is_completed=False).count() == 0
@@ -242,7 +242,7 @@ class CourierRequest(models.Model):
         blank=True,
         related_name='courier_deliveries'
     )
-    
+
     # Legacy fields for backward compatibility
     pickup_address = models.CharField(max_length=255, blank=True)
     pickup_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
@@ -250,16 +250,16 @@ class CourierRequest(models.Model):
     dropoff_address = models.CharField(max_length=255, blank=True)
     dropoff_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     dropoff_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    
+
     # Enhanced routing with waypoints
     waypoints = models.ManyToManyField(Waypoint, related_name='courier_requests')
     current_waypoint_index = models.PositiveIntegerField(default=0, help_text="Current waypoint being processed")
-    
+
     # Route information
     total_distance_km = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     total_duration_min = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     route_polyline = models.TextField(blank=True, help_text="Encoded polyline for route visualization")
-    
+
     item_description = models.TextField()
     item_weight = models.DecimalField(
         max_digits=7,
@@ -293,19 +293,19 @@ class CourierRequest(models.Model):
     def get_current_waypoint(self):
         """Get the current waypoint being processed."""
         return self.waypoints.filter(sequence_order__gt=self.current_waypoint_index).order_by('sequence_order').first()
-    
+
     def get_next_waypoint(self):
         """Get the next waypoint to be processed."""
         return self.waypoints.filter(sequence_order__gt=self.current_waypoint_index).order_by('sequence_order').first()
-    
+
     def get_pickup_waypoints(self):
         """Get all pickup waypoints."""
         return self.waypoints.filter(waypoint_type='pickup').order_by('sequence_order')
-    
+
     def get_dropoff_waypoints(self):
         """Get all dropoff waypoints."""
         return self.waypoints.filter(waypoint_type='dropoff').order_by('sequence_order')
-    
+
     def advance_to_next_waypoint(self):
         """Advance to the next waypoint in the route."""
         next_waypoint = self.get_next_waypoint()
@@ -314,7 +314,7 @@ class CourierRequest(models.Model):
             self.save()
             return next_waypoint
         return None
-    
+
     def mark_waypoint_completed(self, waypoint):
         """Mark a waypoint as completed."""
         if waypoint in self.waypoints.all():
@@ -323,7 +323,7 @@ class CourierRequest(models.Model):
             waypoint.save()
             return True
         return False
-    
+
     def is_route_completed(self):
         """Check if all waypoints in the route are completed."""
         return self.waypoints.filter(is_completed=False).count() == 0

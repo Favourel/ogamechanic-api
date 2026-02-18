@@ -8,13 +8,13 @@ from dotenv import load_dotenv
 def main():
     """Run administrative tasks."""
     load_dotenv()  # Load environment variables from .env file
-    
+
     # Set the Django settings module based on environment
     if os.getenv('env', 'dev') == 'prod':
         os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ogamechanic.settings.prod') # noqa
     else:
         os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ogamechanic.settings.dev') # noqa
-    
+
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

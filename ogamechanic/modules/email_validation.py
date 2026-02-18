@@ -111,24 +111,24 @@ class DisposableEmailValidator:
             raise ValidationError(_('Invalid email format'))
 
         domain = self._extract_domain(email)
-        
+
         # Check local list first
         if domain in self.DISPOSABLE_DOMAINS:
             return False
-            
+
         # Check cache
         cache_key = f'disposable_email_{domain}'
         cached_result = cache.get(cache_key)
         if cached_result is not None:
             return cached_result
-            
+
         # Check APIs if enabled
         if self.use_api:
             for api_name, api_config in self.API_ENDPOINTS.items():
                 api_key = self.api_keys.get(api_name)
                 if not api_key:
                     continue
-                    
+
                 try:
                     is_valid = self._check_api(domain, api_name, api_config, api_key) # noqa
                     if is_valid is not None:  # API check was successful
@@ -136,7 +136,7 @@ class DisposableEmailValidator:
                         return is_valid
                 except Exception:
                     continue  # Try next API if current one fails
-            
+
         return True  # Default to allowing the email if all checks fail
 
     def _is_valid_email_format(self, email: str) -> bool:
@@ -175,7 +175,7 @@ class DisposableEmailValidator:
                 k: v.format(api_key=api_key)
                 for k, v in api_config.get('headers', {}).items()
             }
-            
+
             # Make request
             response = requests.request(
                 api_config['method'],
@@ -186,11 +186,11 @@ class DisposableEmailValidator:
             )
             response.raise_for_status()
             data = response.json()
-            
+
             # Extract result based on API response format
             is_disposable = data.get(api_config['response_key'])
             return not is_disposable if is_disposable is not None else None
-            
+
         except (requests.RequestException, ValueError, KeyError):
             return None
 
@@ -207,4 +207,4 @@ class DisposableEmailValidator:
     @classmethod
     def get_disposable_domains(cls) -> List[str]:
         """Get list of all disposable domains."""
-        return sorted(list(cls.DISPOSABLE_DOMAINS)) 
+        return sorted(list(cls.DISPOSABLE_DOMAINS))

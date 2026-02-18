@@ -162,22 +162,22 @@ class RepairRequest(models.Model):
         """
         if not mechanic.roles.filter(name="mechanic").exists():
             return False
-        
+
         # If request already has a mechanic, cannot reassign
         if self.mechanic and self.mechanic != mechanic:
             return False
-        
+
         # For automatic acceptance (mechanic accepting), check if notified
         if not skip_notification_check:
             if not self.notified_mechanics.filter(id=mechanic.id).exists():
                 return False
-        
+
         self.mechanic = mechanic
         self.status = "accepted"
         self.accepted_at = timezone.now()
         self.save()
         return True
-    
+
     def can_mechanic_accept(self, mechanic):
         """Check if a mechanic can accept this request"""
         return (
@@ -231,17 +231,17 @@ class RepairRequest(models.Model):
         """
         # Track if this is an update (has pk) or new instance
         is_update = self.pk is not None
-        
+
         if is_update:
             # Get the old instance to check if status changed
             try:
                 old_instance = RepairRequest.objects.get(pk=self.pk)
                 old_status = old_instance.status
-                
+
                 # Only update timestamps if status actually changed
                 if old_status != self.status:
                     now = timezone.now()
-                    
+
                     # Update timestamp based on new status
                     if self.status == "accepted" and not self.accepted_at:
                         self.accepted_at = now
@@ -264,7 +264,7 @@ class RepairRequest(models.Model):
                     self.pk
                 )
                 pass
-        
+
         super().save(*args, **kwargs)
 
 

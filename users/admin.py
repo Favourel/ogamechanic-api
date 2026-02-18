@@ -95,7 +95,7 @@ class UserAdmin(BaseUserAdmin):
     ordering = ("-updated_at", "-created_at",)
 
     actions = ["unlock_accounts"]
-    
+
     def get_roles_display(self, obj):
         """Display all roles assigned to the user"""
         roles = obj.roles.all()

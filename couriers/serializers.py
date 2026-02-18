@@ -5,14 +5,14 @@ from .models import DeliveryRequest, DeliveryTracking, CourierRating, DeliveryWa
 class DeliveryWaypointSerializer(serializers.ModelSerializer):
     """Serializer for DeliveryWaypoint model."""
     waypoint_type_display = serializers.CharField(source='get_waypoint_type_display', read_only=True)
-    
+
     class Meta:
         model = DeliveryWaypoint
         fields = [
-            'id', 'address', 'latitude', 'longitude', 'waypoint_type', 
-            'waypoint_type_display', 'sequence_order', 'contact_name', 
-            'contact_phone', 'instructions', 'package_description', 
-            'package_weight', 'package_dimensions', 'is_fragile', 
+            'id', 'address', 'latitude', 'longitude', 'waypoint_type',
+            'waypoint_type_display', 'sequence_order', 'contact_name',
+            'contact_phone', 'instructions', 'package_description',
+            'package_weight', 'package_dimensions', 'is_fragile',
             'requires_signature', 'is_completed', 'completed_at',
             'created_at', 'updated_at'
         ]
@@ -23,16 +23,16 @@ class DeliveryWaypointSerializer(serializers.ModelSerializer):
 
 class DeliveryWaypointCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating delivery waypoints."""
-    
+
     class Meta:
         model = DeliveryWaypoint
         fields = [
-            'address', 'latitude', 'longitude', 'waypoint_type', 
+            'address', 'latitude', 'longitude', 'waypoint_type',
             'sequence_order', 'contact_name', 'contact_phone', 'instructions',
             'package_description', 'package_weight', 'package_dimensions',
             'is_fragile', 'requires_signature'
         ]
-    
+
     def validate_sequence_order(self, value):
         """Validate sequence order is positive."""
         if value <= 0:
@@ -48,13 +48,13 @@ class DeliveryRequestSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
     payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
-    
+
     class Meta:
         model = DeliveryRequest
         fields = [
-            'id', 'customer', 'driver', 'pickup_address', 'pickup_latitude', 
+            'id', 'customer', 'driver', 'pickup_address', 'pickup_latitude',
             'pickup_longitude', 'pickup_contact_name', 'pickup_contact_phone',
-            'pickup_instructions', 'delivery_address', 'delivery_latitude', 
+            'pickup_instructions', 'delivery_address', 'delivery_latitude',
             'delivery_longitude', 'delivery_contact_name', 'delivery_contact_phone',
             'delivery_instructions', 'waypoints', 'current_waypoint_index',
             'total_distance_km', 'total_duration_min', 'route_polyline',
@@ -80,7 +80,7 @@ class DeliveryRequestSerializer(serializers.ModelSerializer):
 class DeliveryRequestCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating delivery requests with multiple waypoints."""
     waypoints = DeliveryWaypointCreateSerializer(many=True, required=False)
-    
+
     class Meta:
         model = DeliveryRequest
         fields = [
@@ -91,11 +91,11 @@ class DeliveryRequestCreateSerializer(serializers.ModelSerializer):
             'package_description', 'package_weight', 'package_dimensions',
             'is_fragile', 'requires_signature', 'payment_method', 'waypoints'
         ]
-    
+
     def create(self, validated_data):
         waypoints_data = validated_data.pop('waypoints', [])
         delivery_request = DeliveryRequest.objects.create(**validated_data)
-        
+
         # Create waypoints if provided
         if waypoints_data:
             for waypoint_data in waypoints_data:
@@ -120,7 +120,7 @@ class DeliveryRequestCreateSerializer(serializers.ModelSerializer):
                     requires_signature=validated_data.get('requires_signature', False)
                 )
                 delivery_request.waypoints.add(pickup_waypoint)
-            
+
             if validated_data.get('delivery_address'):
                 dropoff_waypoint = DeliveryWaypoint.objects.create(
                     address=validated_data['delivery_address'],
@@ -133,24 +133,24 @@ class DeliveryRequestCreateSerializer(serializers.ModelSerializer):
                     instructions=validated_data.get('delivery_instructions', '')
                 )
                 delivery_request.waypoints.add(dropoff_waypoint)
-        
+
         return delivery_request
 
 
 class DeliveryWaypointUpdateSerializer(serializers.ModelSerializer):
     """Serializer for updating delivery waypoint completion status."""
-    
+
     class Meta:
         model = DeliveryWaypoint
         fields = ['is_completed']
-    
+
     def update(self, instance, validated_data):
         from django.utils import timezone
-        
+
         is_completed = validated_data.get('is_completed', False)
         if is_completed and not instance.is_completed:
             instance.completed_at = timezone.now()
-        
+
         instance.is_completed = is_completed
         instance.save()
         return instance
@@ -160,7 +160,7 @@ class DeliveryTrackingSerializer(serializers.ModelSerializer):
     """Serializer for DeliveryTracking model."""
     delivery_request = serializers.StringRelatedField()
     driver = serializers.StringRelatedField()
-    
+
     class Meta:
         model = DeliveryTracking
         fields = [
@@ -176,12 +176,12 @@ class CourierRatingSerializer(serializers.ModelSerializer):
     customer = serializers.StringRelatedField()
     driver = serializers.StringRelatedField()
     average_rating = serializers.ReadOnlyField()
-    
+
     class Meta:
         model = CourierRating
         fields = [
             'id', 'delivery_request', 'customer', 'driver', 'overall_rating',
-            'delivery_speed_rating', 'service_quality_rating', 
+            'delivery_speed_rating', 'service_quality_rating',
             'communication_rating', 'review', 'average_rating',
             'created_at', 'updated_at'
         ]
@@ -193,12 +193,12 @@ class CourierRequestSerializer(serializers.ModelSerializer):
     customer = serializers.StringRelatedField()
     driver = serializers.StringRelatedField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = DeliveryRequest
         fields = [
-            'id', 'customer', 'driver', 'pickup_address', 'pickup_latitude', 
-            'pickup_longitude', 'delivery_address', 'delivery_latitude', 
+            'id', 'customer', 'driver', 'pickup_address', 'pickup_latitude',
+            'pickup_longitude', 'delivery_address', 'delivery_latitude',
             'delivery_longitude', 'package_description', 'package_weight',
             'status', 'status_display', 'fare', 'requested_at', 'accepted_at',
             'started_at', 'completed_at', 'cancelled_at'
@@ -215,7 +215,7 @@ class CourierRequestListSerializer(serializers.ModelSerializer):
     customer = serializers.StringRelatedField()
     driver = serializers.StringRelatedField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = DeliveryRequest
         fields = [
@@ -230,7 +230,7 @@ class DeliveryTrackingSerializer(serializers.ModelSerializer):
     """Serializer for DeliveryTracking model."""
     delivery_request = serializers.StringRelatedField()
     driver = serializers.StringRelatedField()
-    
+
     class Meta:
         model = DeliveryTracking
         fields = [
@@ -246,12 +246,12 @@ class CourierRatingSerializer(serializers.ModelSerializer):
     customer = serializers.StringRelatedField()
     driver = serializers.StringRelatedField()
     average_rating = serializers.ReadOnlyField()
-    
+
     class Meta:
         model = CourierRating
         fields = [
             'id', 'delivery_request', 'customer', 'driver', 'overall_rating',
-            'delivery_speed_rating', 'service_quality_rating', 
+            'delivery_speed_rating', 'service_quality_rating',
             'communication_rating', 'review', 'average_rating',
             'created_at', 'updated_at'
         ]
@@ -260,7 +260,7 @@ class CourierRatingSerializer(serializers.ModelSerializer):
 
 class CourierRequestCreateSerializer(serializers.ModelSerializer):
     """Legacy serializer for creating courier requests."""
-    
+
     class Meta:
         model = DeliveryRequest
         fields = [
@@ -275,11 +275,11 @@ class CourierRequestCreateSerializer(serializers.ModelSerializer):
 
 class CourierRequestStatusUpdateSerializer(serializers.ModelSerializer):
     """Serializer for updating courier request status."""
-    
+
     class Meta:
         model = DeliveryRequest
         fields = ['status']
-    
+
     def validate_status(self, value):
         """Validate status transition."""
         instance = self.instance
@@ -293,26 +293,26 @@ class CourierRequestStatusUpdateSerializer(serializers.ModelSerializer):
                 'cancelled': [],
                 'failed': []
             }
-            
+
             current_status = instance.status
             if value not in valid_transitions.get(current_status, []):
                 raise serializers.ValidationError(
                     f"Invalid status transition from {current_status} to {value}"
                 )
-        
+
         return value
 
 
 class DriverLocationUpdateSerializer(serializers.ModelSerializer):
     """Serializer for updating driver location."""
-    
+
     class Meta:
         model = DeliveryRequest
         fields = ['driver_latitude', 'driver_longitude']
-    
+
     def update(self, instance, validated_data):
         from django.utils import timezone
-        
+
         instance.driver_latitude = validated_data.get('driver_latitude')
         instance.driver_longitude = validated_data.get('driver_longitude')
         instance.last_location_update = timezone.now()

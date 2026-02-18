@@ -3,15 +3,15 @@ from rest_framework.views import APIView
 from rest_framework import permissions, status, parsers
 from rest_framework.response import Response
 from django.db import connection
-from django.db.models import (Q, Sum, Count, F, DecimalField, 
-                              ExpressionWrapper, 
+from django.db.models import (Q, Sum, Count, F, DecimalField,
+                              ExpressionWrapper,
                               Func, Avg, Prefetch, Exists, OuterRef)
-from .models import (Product, Category, ProductImage, 
+from .models import (Product, Category, ProductImage,
                      Order, Cart, CartItem, OrderItem, ProductReview,
                      FollowMerchant, FavoriteProduct)
 from .serializers import (
-    ProductSerializer, ProductCreateSerializer, CategorySerializer, 
-    HomeResponseSerializer, OrderSerializer, CartSerializer, 
+    ProductSerializer, ProductCreateSerializer, CategorySerializer,
+    HomeResponseSerializer, OrderSerializer, CartSerializer,
     ProductReviewSerializer, FollowMerchantSerializer,
     FollowMerchantListSerializer, FavoriteProductSerializer,
     FavoriteProductListSerializer, ProductImageSerializer,
@@ -224,7 +224,7 @@ class ProductListCreateView(APIView):
                 except (ValueError, TypeError):
                     return Response(
                         api_response(
-                            message="Invalid min_price value.", 
+                            message="Invalid min_price value.",
                             status=False),
                         status=400
                     )
@@ -509,7 +509,7 @@ class ProductImageListView(APIView):
                             "ordering": openapi.Schema(
                                 type=openapi.TYPE_INTEGER),
                             "image": openapi.Schema(
-                                type=openapi.TYPE_STRING, 
+                                type=openapi.TYPE_STRING,
                                 format=openapi.FORMAT_BINARY),
                         },
                         required=["image_id"],
@@ -616,7 +616,7 @@ class ProductImageListView(APIView):
         operation_description="Delete a product image. Only the merchant who owns the product can delete.", # noqa
         manual_parameters=[
             openapi.Parameter(
-                'image_id', openapi.IN_QUERY, 
+                'image_id', openapi.IN_QUERY,
                 description="ID of the image to delete",
                 type=openapi.TYPE_INTEGER, required=True
             ),
@@ -978,12 +978,12 @@ class ProductSearchView(APIView):
                 type=openapi.TYPE_STRING
             ),
             openapi.Parameter(
-                'page', openapi.IN_QUERY, 
+                'page', openapi.IN_QUERY,
                 description="Page number for pagination",
                 type=openapi.TYPE_INTEGER, required=False
             ),
             openapi.Parameter(
-                'page_size', openapi.IN_QUERY, 
+                'page_size', openapi.IN_QUERY,
                 description="Number of items per page",
                 type=openapi.TYPE_INTEGER, required=False
             ),
@@ -1348,7 +1348,7 @@ class HomeView(APIView):
                 .order_by("-total_sales", "-created_at")[:10]
             )
             best_selling_spare_parts_data = ProductSerializer(
-                best_selling_spare_parts, many=True, 
+                best_selling_spare_parts, many=True,
                 context={'request': self.request}
             ).data
             response_data['best_selling_spare_parts'] = best_selling_spare_parts_data # noqa
@@ -1442,7 +1442,7 @@ class CartView(APIView):
             if quantity < 1:
                 return Response(
                     api_response(
-                        message="Quantity must be at least 1.", 
+                        message="Quantity must be at least 1.",
                         status=False),
                     status=400
                 )
@@ -1541,7 +1541,7 @@ class CartView(APIView):
             if not product_id or action not in ['increment', 'decrement']:
                 return Response(
                     api_response(
-                        message="product_id and valid action required.", 
+                        message="product_id and valid action required.",
                         status=False),
                     status=400
                 )
@@ -3212,7 +3212,7 @@ class FollowMerchantView(APIView):
                         'status': openapi.Schema(
                             type=openapi.TYPE_BOOLEAN, example=True),
                         'message': openapi.Schema(
-                            type=openapi.TYPE_STRING, 
+                            type=openapi.TYPE_STRING,
                             example="Successfully followed merchant"),
                         'data': openapi.Schema(
                             type=openapi.TYPE_OBJECT,
@@ -3222,7 +3222,7 @@ class FollowMerchantView(APIView):
                                 'merchant': openapi.Schema(
                                     type=openapi.TYPE_OBJECT),
                                 'created_at': openapi.Schema(
-                                    type=openapi.TYPE_STRING, 
+                                    type=openapi.TYPE_STRING,
                                     format=openapi.FORMAT_DATETIME
                                 )
                             }
@@ -3304,10 +3304,10 @@ class FollowMerchantView(APIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN, 
+                            type=openapi.TYPE_BOOLEAN,
                             example=True),
                         'message': openapi.Schema(
-                            type=openapi.TYPE_STRING, 
+                            type=openapi.TYPE_STRING,
                             example="Successfully unfollowed merchant")
                     }
                 )
@@ -3367,10 +3367,10 @@ class FollowedMerchantsListView(APIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN, 
+                            type=openapi.TYPE_BOOLEAN,
                             example=True),
                         'message': openapi.Schema(
-                            type=openapi.TYPE_STRING, 
+                            type=openapi.TYPE_STRING,
                             example="Followed merchants retrieved successfully"), # noqa
                         'data': openapi.Schema(
                             type=openapi.TYPE_ARRAY,
@@ -3412,7 +3412,7 @@ class FollowedMerchantsListView(APIView):
                                         }
                                     ),
                                     'created_at': openapi.Schema(
-                                        type=openapi.TYPE_STRING, 
+                                        type=openapi.TYPE_STRING,
                                         format=openapi.FORMAT_DATETIME
                                     )
                                 }
@@ -3428,7 +3428,7 @@ class FollowedMerchantsListView(APIView):
         followed_merchants = FollowMerchant.objects.filter(
             user=request.user
         ).select_related('merchant', 'merchant__merchant_profile')
-        
+
         serializer = FollowMerchantListSerializer(
             followed_merchants, many=True)
         return Response(
@@ -3479,10 +3479,10 @@ class FavoriteProductView(APIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN, 
+                            type=openapi.TYPE_BOOLEAN,
                             example=True),
                         'message': openapi.Schema(
-                            type=openapi.TYPE_STRING, 
+                            type=openapi.TYPE_STRING,
                             example="Product added to favorites"), # noqa
                         'data': openapi.Schema(
                             type=openapi.TYPE_OBJECT,
@@ -3508,7 +3508,7 @@ class FavoriteProductView(APIView):
                                         #     type=openapi.TYPE_OBJECT),
                                     }),
                                 'created_at': openapi.Schema(
-                                    type=openapi.TYPE_STRING, 
+                                    type=openapi.TYPE_STRING,
                                     format=openapi.FORMAT_DATETIME
                                 )
                             }
@@ -3588,10 +3588,10 @@ class FavoriteProductView(APIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN, 
+                            type=openapi.TYPE_BOOLEAN,
                             example=True),
                         'message': openapi.Schema(
-                            type=openapi.TYPE_STRING, 
+                            type=openapi.TYPE_STRING,
                             example="Product removed from favorites"), # noqa
                     }
                 )
@@ -3651,10 +3651,10 @@ class FavoriteProductsListView(APIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'status': openapi.Schema(
-                            type=openapi.TYPE_BOOLEAN, 
+                            type=openapi.TYPE_BOOLEAN,
                             example=True),
                         'message': openapi.Schema(
-                            type=openapi.TYPE_STRING, 
+                            type=openapi.TYPE_STRING,
                             example="Favorite products retrieved successfully"), # noqa
                         'data': openapi.Schema(
                             type=openapi.TYPE_ARRAY,
@@ -3680,7 +3680,7 @@ class FavoriteProductsListView(APIView):
                                                 type=openapi.TYPE_STRING),
                                         }),
                                     'created_at': openapi.Schema(
-                                        type=openapi.TYPE_STRING, 
+                                        type=openapi.TYPE_STRING,
                                         format=openapi.FORMAT_DATETIME
                                     )
                                 }
@@ -3696,7 +3696,7 @@ class FavoriteProductsListView(APIView):
         favorite_products = FavoriteProduct.objects.filter(
             user=request.user
         ).select_related('product', 'product__merchant', 'product__category')
-        
+
         serializer = FavoriteProductListSerializer(
             favorite_products, many=True)
         return Response(
