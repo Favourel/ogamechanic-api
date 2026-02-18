@@ -7,17 +7,17 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.db.models import Sum, Count, F, DecimalField, ExpressionWrapper, Avg, Q
 from django.db.models.functions import TruncDate, TruncMonth, TruncWeek
+from django.db import models
 from django.utils import timezone
 from django.contrib.auth import authenticate
 from datetime import timedelta
-from decimal import Decimal
 
 from ogamechanic.modules.utils import (
     api_response,
     incoming_request_checks,
     get_incoming_request_checks,
 )
-from users.models import User, MechanicProfile, MerchantProfile, DriverProfile, Role
+from users.models import User, MechanicProfile, MerchantProfile, DriverProfile
 from users.serializers import (
     MechanicProfileSerializer,
     DriverProfileSerializer,
