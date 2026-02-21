@@ -2439,6 +2439,71 @@ class MechanicProfileManagementView(APIView):
         )
 
     @swagger_auto_schema(
+        operation_summary="Update Mechanic Profile",
+        operation_description="Update mechanic profile details and documents.",
+        request_body=MechanicProfileSerializer,
+        responses={
+            200: MechanicProfileSerializer(),
+            400: "Bad Request",
+            403: "Forbidden",
+            404: "Not Found",
+        },
+    )
+    def put(self, request):
+        user = request.user
+        is_staff = getattr(request.user, "is_staff", False)
+
+        # Check if user's active role is mechanic (for own updates)
+        if not (user.active_role and user.active_role.name == "mechanic") and not is_staff:
+            return Response(
+                api_response(
+                    message="User's active role must be 'mechanic' to update mechanic profile, or user must be staff.",
+                    status=False,
+                ),
+                status=403,
+            )
+
+        mechanic_profile = getattr(user, "mechanic_profile", None)
+        if not mechanic_profile:
+            return Response(
+                api_response(
+                    message="Mechanic profile not found.",
+                    status=False,
+                    data={"has_mechanic_profile": False},
+                ),
+                status=404,
+            )
+
+        serializer = MechanicProfileSerializer(
+            mechanic_profile, data=request.data, partial=True, context={"request": request}
+        )
+
+        if serializer.is_valid():
+            updated_profile = serializer.save()
+
+            kyc = _compute_kyc(updated_profile, MECHANIC_KYC_REQUIRED_FIELDS)
+
+            return Response(
+                api_response(
+                    message="Mechanic profile updated successfully.",
+                    status=True,
+                    data={
+                        "has_mechanic_profile": True,
+                        "mechanic_profile": serializer.data,
+                        "kyc": kyc,
+                    },
+                ),
+                status=200,
+            )
+
+        return Response(
+            api_response(
+                message="Validation failed", status=False, errors=serializer.errors
+            ),
+            status=400,
+        )
+
+    @swagger_auto_schema(
         operation_summary="Create Mechanic Profile",
         operation_description="Complete mechanic profile with documents and details. Use step-by-step registration for new mechanic accounts.",  # noqa
         request_body=openapi.Schema(
