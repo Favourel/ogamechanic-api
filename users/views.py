@@ -2247,15 +2247,30 @@ class MerchantProfileManagementView(APIView):
             )
 
         serializer = MerchantProfileSerializer(
-            user.merchant_profile, data=request.data, partial=True
+            user.merchant_profile, data=request.data, partial=True, context={"request": request}
         )
         if serializer.is_valid():
-            serializer.save()
+            updated_profile = serializer.save()
+
+            old_docs = {
+                'cac_document': merchant_profile.cac_document,
+                'selfie': merchant_profile.selfie,
+            }
+            if not is_staff and any(getattr(updated_profile, field) != old_docs[field] for field in old_docs):
+                updated_profile.is_approved = False
+                updated_profile.save(update_fields=['is_approved'])
+
+            kyc = _compute_kyc(updated_profile, MERCHANT_KYC_REQUIRED_FIELDS)
+
             return Response(
                 api_response(
                     message="Merchant profile updated successfully.",
                     status=True,
-                    data=serializer.data,
+                    data={
+                        "has_merchant_profile": True,
+                        "merchant_profile": serializer.data,
+                        "kyc": kyc,
+                    },
                 )
             )
         return Response(
@@ -2480,6 +2495,16 @@ class MechanicProfileManagementView(APIView):
 
         if serializer.is_valid():
             updated_profile = serializer.save()
+
+            old_docs = {
+                'cac_document': mechanic_profile.cac_document,
+                'selfie': mechanic_profile.selfie,
+                'license_front_image': mechanic_profile.license_front_image,
+                'license_back_image': mechanic_profile.license_back_image,
+            }
+            if not is_staff and any(getattr(updated_profile, field) != old_docs[field] for field in old_docs):
+                updated_profile.is_approved = False
+                updated_profile.save(update_fields=['is_approved'])
 
             kyc = _compute_kyc(updated_profile, MECHANIC_KYC_REQUIRED_FIELDS)
 
@@ -3142,6 +3167,7 @@ class DriverProfileManagementView(APIView):
     )
     def put(self, request):
         user = request.user
+        is_staff = getattr(request.user, "is_staff", False)
 
         if not (user.active_role and user.active_role.name in ["driver", "rider"]):
             return Response(
@@ -3165,15 +3191,38 @@ class DriverProfileManagementView(APIView):
             )
 
         serializer = DriverProfileSerializer(
-            user.driver_profile, data=request.data, partial=True
+            user.driver_profile, data=request.data, partial=True, context={"request": request}
         )
         if serializer.is_valid():
-            serializer.save()
+            updated_profile = serializer.save()
+
+            old_docs = {
+                'license_front_image': driver_profile.license_front_image,
+                'license_back_image': driver_profile.license_back_image,
+                'vehicle_photo_front': driver_profile.vehicle_photo_front,
+                'vehicle_photo_back': driver_profile.vehicle_photo_back,
+                'vehicle_photo_right': driver_profile.vehicle_photo_right,
+                'vehicle_photo_left': driver_profile.vehicle_photo_left,
+                'government_id': driver_profile.government_id,
+                'driver_license': driver_profile.driver_license,
+                'vehicle_photo': driver_profile.vehicle_photo,
+                'insurance_document': driver_profile.insurance_document,
+            }
+            if not is_staff and any(getattr(updated_profile, field) != old_docs[field] for field in old_docs):
+                updated_profile.is_approved = False
+                updated_profile.save(update_fields=['is_approved'])
+
+            kyc = _compute_kyc(updated_profile, DRIVER_KYC_REQUIRED_FIELDS)
+
             return Response(
                 api_response(
                     message="Driver profile updated successfully.",
                     status=True,
-                    data=serializer.data,
+                    data={
+                        "has_driver_profile": True,
+                        "driver_profile": serializer.data,
+                        "kyc": kyc,
+                    },
                 )
             )
         return Response(
