@@ -162,7 +162,6 @@ MERCHANT_KYC_REQUIRED_FIELDS = [
     "cac_document",
     "selfie",
     "business_address",
-    "profile_picture",
 ]
 
 MECHANIC_KYC_REQUIRED_FIELDS = [
@@ -1683,10 +1682,6 @@ class MerchantProfileManagementView(APIView):
                                         "business_address": openapi.Schema(
                                             type=openapi.TYPE_STRING
                                         ),
-                                        "profile_picture": openapi.Schema(
-                                            type=openapi.TYPE_STRING,
-                                            description="URL to profile picture",
-                                        ),
                                         "is_approved": openapi.Schema(
                                             type=openapi.TYPE_BOOLEAN, example=False
                                         ),
@@ -1807,10 +1802,10 @@ class MerchantProfileManagementView(APIView):
                 "user": str(target_user.id),
                 "location": merchant_profile.location,
                 "lga": merchant_profile.lga,
-                "profile_picture": (
-                    request.build_absolute_uri(merchant_profile.profile_picture.url)
-                    if getattr(merchant_profile, "profile_picture", None)
-                    and hasattr(merchant_profile.profile_picture, "url")
+                "selfie": (
+                    request.build_absolute_uri(merchant_profile.selfie.url)
+                    if getattr(merchant_profile, "selfie", None)
+                    and hasattr(merchant_profile.selfie, "url")
                     else None
                 ),
                 "is_approved": merchant_profile.is_approved,

@@ -397,9 +397,6 @@ class MerchantProfile(models.Model):
     # Legacy fields for backward compatibility
     is_approved = models.BooleanField(default=False)
     business_address = models.CharField(max_length=255)
-    profile_picture = models.ImageField(
-        upload_to='merchant/profile_pics/', blank=True, null=True
-    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

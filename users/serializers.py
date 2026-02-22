@@ -24,6 +24,9 @@ from .models import UserEmailVerification
 from django.contrib.auth import get_user_model
 
 
+# flake8: noqa: E501
+
+
 User = get_user_model()
 
 
@@ -305,7 +308,6 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
     cac_document = serializers.SerializerMethodField()
     selfie = serializers.SerializerMethodField()
-    profile_picture = serializers.SerializerMethodField()
 
     class Meta:
         model = MerchantProfile
@@ -318,7 +320,6 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             "cac_document",
             "selfie",
             "business_address",
-            "profile_picture",
             "is_approved",
             "created_at",
             "updated_at",
@@ -353,12 +354,6 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
         request = self.context.get('request', None)
         if obj.selfie and hasattr(obj.selfie, 'url'):
             return self._get_absolute_url(obj.selfie.url, request)
-        return None
-
-    def get_profile_picture(self, obj):
-        request = self.context.get('request', None)
-        if obj.profile_picture and hasattr(obj.profile_picture, 'url'):
-            return self._get_absolute_url(obj.profile_picture.url, request)
         return None
 
     def create(self, validated_data):
@@ -1477,7 +1472,8 @@ class ContactMessageCreateSerializer(serializers.ModelSerializer):
         """Basic phone number validation"""
         if not value:
             raise serializers.ValidationError("Contact number is required.")
-        # Remove any non-digit characters for basic validation
+        # Remove any non-digit characters
+        # for basic validation
         digits_only = ''.join(filter(str.isdigit, value))
         if len(digits_only) < 7:
             raise serializers.ValidationError("Please enter a valid contact number.")
