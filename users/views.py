@@ -2221,6 +2221,7 @@ class MerchantProfileManagementView(APIView):
     )
     def put(self, request):
         user = request.user
+        is_staff = getattr(request.user, "is_staff", False)
 
         # Check if user's active role is merchant
         if not (user.active_role and user.active_role.name == "merchant"):
@@ -2248,8 +2249,8 @@ class MerchantProfileManagementView(APIView):
             updated_profile = serializer.save()
 
             old_docs = {
-                'cac_document': merchant_profile.cac_document,
-                'selfie': merchant_profile.selfie,
+                'cac_document': user.merchant_profile.cac_document,
+                'selfie': user.merchant_profile.selfie,
             }
             if not is_staff and any(getattr(updated_profile, field) != old_docs[field] for field in old_docs):
                 updated_profile.is_approved = False
