@@ -182,6 +182,7 @@ DRIVER_KYC_REQUIRED_FIELDS = [
     "gender",
     "address",
     "location",
+    "selfie",
     "license_number",
     "license_issue_date",
     "license_expiry_date",

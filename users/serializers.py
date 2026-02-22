@@ -507,6 +507,7 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "gender",
             "address",
             "location",
+            "selfie",
             "license_number",
             "license_issue_date",
             "license_expiry_date",
@@ -616,10 +617,10 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             return self._get_absolute_url(obj.vehicle_photo.url, request)
         return None
 
-    def get_insurance_document(self, obj):
+    def get_selfie(self, obj):
         request = self.context.get('request', None)
-        if obj.insurance_document and hasattr(obj.insurance_document, 'url'):
-            return self._get_absolute_url(obj.insurance_document.url, request)
+        if obj.selfie and hasattr(obj.selfie, 'url'):
+            return self._get_absolute_url(obj.selfie.url, request)
         return None
 
     def get_rating(self, obj):

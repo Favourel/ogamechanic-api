@@ -553,6 +553,12 @@ class DriverProfile(models.Model):
     gender = models.CharField(max_length=20, choices=GENDER_CHOICES, blank=True, null=True) # noqa
     address = models.CharField(max_length=255)
     location = models.CharField(max_length=255, blank=True, null=True)
+    selfie = models.ImageField(
+        upload_to='driver/selfies/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png'])],
+        blank=True, null=True,
+        help_text="Live photo of driver"
+    )
 
     # License Information
     license_number = models.CharField(max_length=50, blank=True, null=True)
