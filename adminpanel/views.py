@@ -7133,7 +7133,7 @@ class PendingKYCView(APIView):
             profile = item["profile"]
             kyc_fields = item["kyc_fields"]
             kyc_status = _compute_kyc(profile, kyc_fields)
-            if kyc_status["has_all_required"]:
+            if kyc_status["percentage"] == 100.0:
                 final_pending_profiles.append(item)
 
         pending_profiles = final_pending_profiles
