@@ -623,6 +623,12 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             return self._get_absolute_url(obj.selfie.url, request)
         return None
 
+    def get_insurance_document(self, obj):
+        request = self.context.get('request', None)
+        if obj.insurance_document and hasattr(obj.insurance_document, 'url'):
+            return self._get_absolute_url(obj.insurance_document.url, request)
+        return None
+
     def get_rating(self, obj):
         from django.db.models import Avg
         from users.models import DriverReview
