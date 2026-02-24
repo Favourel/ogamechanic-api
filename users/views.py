@@ -2495,9 +2495,7 @@ class MechanicProfileManagementView(APIView):
 
             old_docs = {
                 'cac_document': mechanic_profile.cac_document,
-                'selfie': mechanic_profile.selfie,
-                'license_front_image': mechanic_profile.license_front_image,
-                'license_back_image': mechanic_profile.license_back_image,
+                'business_license': mechanic_profile.business_license,
             }
             if not is_staff and any(getattr(updated_profile, field) != old_docs[field] for field in old_docs):
                 updated_profile.is_approved = False
