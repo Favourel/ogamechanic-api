@@ -27,6 +27,12 @@ from users.serializers import (
     ContactMessageAdminSerializer,
     EmailSubscriptionSerializer,
 )
+from users.views import (
+    _compute_kyc,
+    MERCHANT_KYC_REQUIRED_FIELDS,
+    MECHANIC_KYC_REQUIRED_FIELDS,
+    DRIVER_KYC_REQUIRED_FIELDS,
+)
 from products.models import Order, OrderItem, ProductReview
 from products.serializers import CategorySerializer
 from users.services import NotificationService
@@ -5894,43 +5900,43 @@ class EmailSubscriptionListView(APIView):
         #     },
         # )
         # def put(self, request, message_id):
-        """
-        Update a contact message
-        """
-        from users.models import ContactMessage
+        # """
+        # Update a contact message
+        # """
+        # from users.models import ContactMessage
 
-        try:
-            message = ContactMessage.objects.get(id=message_id)
-        except ContactMessage.DoesNotExist:
-            return Response(
-                api_response(
-                    message="Contact message not found", status=False),
-                status=404,
-            )
+        # try:
+        #     message = ContactMessage.objects.get(id=message_id)
+        # except ContactMessage.DoesNotExist:
+        #     return Response(
+        #         api_response(
+        #             message="Contact message not found", status=False),
+        #         status=404,
+        #     )
 
-        serializer = ContactMessageAdminSerializer(message, data=request.data)
+        # serializer = ContactMessageAdminSerializer(message, data=request.data)
 
-        if serializer.is_valid():
-            updated_message = serializer.save()
+        # if serializer.is_valid():
+        #     updated_message = serializer.save()
 
-            # Log the update
-            logger.info(
-                f"Contact message {message_id} updated by {request.user.email}")
+        #     # Log the update
+        #     logger.info(
+        #         f"Contact message {message_id} updated by {request.user.email}")
 
-            return Response(
-                api_response(
-                    message="Contact message updated successfully",
-                    status=True,
-                    data=ContactMessageSerializer(updated_message).data,
-                )
-            )
+        #     return Response(
+        #         api_response(
+        #             message="Contact message updated successfully",
+        #             status=True,
+        #             data=ContactMessageSerializer(updated_message).data,
+        #         )
+        #     )
 
-        return Response(
-            api_response(
-                message="Validation failed", status=False, errors=serializer.errors
-            ),
-            status=400,
-        )
+        # return Response(
+        #     api_response(
+        #         message="Validation failed", status=False, errors=serializer.errors
+        #     ),
+        #     status=400,
+        # )
 
 
 class MerchantProviderDetailView(APIView):
@@ -6961,3 +6967,202 @@ class DriverProviderDetailView(APIView):
             "offset": offset,
             "activity_logs": logs_data,
         }
+
+
+class PendingKYCView(APIView):
+    """
+    Admin endpoint to get all users with pending KYC verification across all roles.
+    Shows profiles that have submitted KYC but are not yet approved.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    @swagger_auto_schema(
+        operation_summary="Get Pending KYC Verifications",
+        operation_description="""
+        **Get all users with submitted but unapproved KYC across all roles (merchant, mechanic, driver)**
+
+        This endpoint returns all provider profiles that have submitted KYC documentation
+        but are still pending admin approval. This helps admins identify accounts that need
+        verification and activation.
+
+        **Returned Data:**
+        - User information (ID, email, name, phone)
+        - Role type (merchant, mechanic, driver)
+        - Profile details (partial - sensitive info hidden)
+        - KYC completeness status
+        - Submission date
+
+        **Use Cases:**
+        - Review pending account activations
+        - Monitor KYC submission queue
+        - Bulk approve/reject pending profiles
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                "limit",
+                openapi.IN_QUERY,
+                description="Number of items to return",
+                type=openapi.TYPE_INTEGER,
+                default=50,
+            ),
+            openapi.Parameter(
+                "offset",
+                openapi.IN_QUERY,
+                description="Offset for pagination",
+                type=openapi.TYPE_INTEGER,
+                default=0,
+            ),
+            openapi.Parameter(
+                "search",
+                openapi.IN_QUERY,
+                description="Search by user email, name, or phone",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "role",
+                openapi.IN_QUERY,
+                description="Filter by role (merchant, mechanic, driver)",
+                type=openapi.TYPE_STRING,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Pending KYC verifications retrieved successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "status": openapi.Schema(type=openapi.TYPE_BOOLEAN, example=True),
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                        "data": openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                "total_count": openapi.Schema(type=openapi.TYPE_INTEGER),
+                                "limit": openapi.Schema(type=openapi.TYPE_INTEGER),
+                                "offset": openapi.Schema(type=openapi.TYPE_INTEGER),
+                                "pending_kyc": openapi.Schema(
+                                    type=openapi.TYPE_ARRAY,
+                                    items=openapi.Schema(
+                                        type=openapi.TYPE_OBJECT,
+                                        properties={
+                                            "user_id": openapi.Schema(type=openapi.TYPE_STRING),
+                                            "role": openapi.Schema(type=openapi.TYPE_STRING),
+                                            "email": openapi.Schema(type=openapi.TYPE_STRING),
+                                            "full_name": openapi.Schema(type=openapi.TYPE_STRING),
+                                            "phone_number": openapi.Schema(type=openapi.TYPE_STRING),
+                                            "profile_id": openapi.Schema(type=openapi.TYPE_INTEGER),
+                                            "kyc_status": openapi.Schema(type=openapi.TYPE_OBJECT),
+                                            "submitted_at": openapi.Schema(type=openapi.TYPE_STRING, format="date-time"),
+                                            "is_approved": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                        }
+                                    )
+                                ),
+                            }
+                        ),
+                    }
+                ),
+            ),
+            401: "Unauthorized - Admin access required",
+        },
+    )
+    def get(self, request):
+        limit = int(request.query_params.get("limit", 50))
+        offset = int(request.query_params.get("offset", 0))
+        search = request.query_params.get("search", "").strip()
+        role_filter = request.query_params.get("role", "").strip()
+
+        # Collect all pending profiles
+        pending_profiles = []
+
+        # Query each profile type for unapproved profiles
+        if not role_filter or role_filter == "merchant":
+            merchant_profiles = MerchantProfile.objects.filter(is_approved=False).select_related("user")
+            for profile in merchant_profiles:
+                pending_profiles.append({
+                    "profile": profile,
+                    "role": "merchant",
+                    "user": profile.user,
+                    "kyc_fields": MERCHANT_KYC_REQUIRED_FIELDS,
+                })
+
+        if not role_filter or role_filter == "mechanic":
+            mechanic_profiles = MechanicProfile.objects.filter(is_approved=False).select_related("user")
+            for profile in mechanic_profiles:
+                pending_profiles.append({
+                    "profile": profile,
+                    "role": "mechanic",
+                    "user": profile.user,
+                    "kyc_fields": MECHANIC_KYC_REQUIRED_FIELDS,
+                })
+
+        if not role_filter or role_filter == "driver":
+            driver_profiles = DriverProfile.objects.filter(is_approved=False).select_related("user")
+            for profile in driver_profiles:
+                pending_profiles.append({
+                    "profile": profile,
+                    "role": "driver",
+                    "user": profile.user,
+                    "kyc_fields": DRIVER_KYC_REQUIRED_FIELDS,
+                })
+
+        # Apply search filter if provided
+        if search:
+            filtered_profiles = []
+            search_lower = search.lower()
+            for item in pending_profiles:
+                user = item["user"]
+                # Search in email, first_name, last_name, phone_number
+                if (search_lower in user.email.lower() or
+                    search_lower in (user.first_name or "").lower() or
+                    search_lower in (user.last_name or "").lower() or
+                    search_lower in (user.phone_number or "").lower()):
+                    filtered_profiles.append(item)
+            pending_profiles = filtered_profiles
+
+        # Sort by submission date (newest first)
+        pending_profiles.sort(key=lambda x: x["profile"].updated_at, reverse=True)
+
+        # Apply pagination
+        total_count = len(pending_profiles)
+        paginated_profiles = pending_profiles[offset:offset + limit]
+
+        # Format response data
+        pending_kyc_data = []
+        for item in paginated_profiles:
+            profile = item["profile"]
+            user = item["user"]
+            role = item["role"]
+            kyc_fields = item["kyc_fields"]
+
+            # Compute KYC status
+            kyc_status = _compute_kyc(profile, kyc_fields)
+
+            # Get basic profile info (avoid sensitive data)
+            profile_data = {
+                "profile_id": profile.id,
+                "submitted_at": profile.updated_at.isoformat() if profile.updated_at else None,
+                "is_approved": profile.is_approved,
+            }
+
+            pending_kyc_data.append({
+                "user_id": str(user.id),
+                "role": role,
+                "email": user.email,
+                "full_name": f"{user.first_name} {user.last_name}".strip(),
+                "phone_number": user.phone_number,
+                "profile_data": profile_data,
+                "kyc_status": kyc_status,
+            })
+
+        return Response(
+            api_response(
+                message="Pending KYC verifications retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "pending_kyc": pending_kyc_data,
+                },
+            )
+        )

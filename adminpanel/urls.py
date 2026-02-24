@@ -10,6 +10,7 @@ from .views import (
     MechanicManagementView,
     PendingVerificationsView,
     UserActivationView,
+    PendingKYCView,
     # AdminAnalyticsView,
     AdminCategoryCreateView,
     AdminNotificationView,
@@ -76,6 +77,11 @@ urlpatterns = [
         'management/accounts/',
         AccountManagementView.as_view(),
         name='account-management'
+    ),
+    path(
+        'management/kyc/pending/',
+        PendingKYCView.as_view(),
+        name='pending-kyc'
     ),
     path(
         'management/mechanics/',
