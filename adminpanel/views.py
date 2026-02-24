@@ -7105,25 +7105,43 @@ class PendingKYCView(APIView):
                     "kyc_fields": DRIVER_KYC_REQUIRED_FIELDS,
                 })
 
+        complete_pending_profiles = pending_profiles  # Initialize with all pending profiles
+
         # Apply search filter if provided
         if search:
-            filtered_profiles = []
             search_lower = search.lower()
-            for item in pending_profiles:
-                user = item["user"]
-                # Search in email, first_name, last_name, phone_number
-                if (search_lower in user.email.lower() or
-                    search_lower in (user.first_name or "").lower() or
-                    search_lower in (user.last_name or "").lower() or
-                    search_lower in (user.phone_number or "").lower()):
-                    filtered_profiles.append(item)
-            pending_profiles = filtered_profiles
+            complete_pending_profiles = [
+                item for item in pending_profiles
+                if (
+                    search_lower in item["user"].email.lower() or
+                    search_lower in (item["user"].first_name or "").lower() or
+                    search_lower in (item["user"].last_name or "").lower() or
+                    search_lower in (item["user"].phone_number or "").lower()
+                )
+            ]
 
-        # Sort by submission date (newest first)
-        pending_profiles.sort(key=lambda x: x["profile"].updated_at, reverse=True)
+        # Apply role filter if provided
+        if role_filter:
+            complete_pending_profiles = [
+                item for item in complete_pending_profiles
+                if item["role"] == role_filter
+            ]
+
+        # Filter to only include profiles with complete KYC
+        final_pending_profiles = []
+        for item in complete_pending_profiles:
+            profile = item["profile"]
+            kyc_fields = item["kyc_fields"]
+            kyc_status = _compute_kyc(profile, kyc_fields)
+            if kyc_status["has_all_required"]:
+                final_pending_profiles.append(item)
+
+        pending_profiles = final_pending_profiles
+
+        # Total count after filters
+        total_count = len(pending_profiles)
 
         # Apply pagination
-        total_count = len(pending_profiles)
         paginated_profiles = pending_profiles[offset:offset + limit]
 
         # Format response data
