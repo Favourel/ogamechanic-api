@@ -24,9 +24,6 @@ from .models import UserEmailVerification
 from django.contrib.auth import get_user_model
 
 
-# flake8: noqa: E501
-
-
 User = get_user_model()
 
 
@@ -498,6 +495,7 @@ class DriverProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = DriverProfile
         fields = [
+            "id",
             "user",
             "full_name",
             "phone_number",
