@@ -422,11 +422,11 @@ class MechanicProfile(models.Model):
     # Updated fields for new onboarding (same as merchant)
     location = models.CharField(max_length=255, blank=True, null=True)
     latitude = models.DecimalField(
-        max_digits=9, decimal_places=6, null=True, blank=True,
+        max_digits=20, decimal_places=15, null=True, blank=True,
         help_text="Mechanic's location latitude for proximity-based requests"
     )
     longitude = models.DecimalField(
-        max_digits=9, decimal_places=6, null=True, blank=True,
+        max_digits=20, decimal_places=15, null=True, blank=True,
         help_text="Mechanic's location longitude for proximity-based requests"
     )
     bio = models.TextField(null=True, blank=True)
@@ -659,8 +659,12 @@ class DriverProfile(models.Model):
     # Note: For development with SQLite, we'll use regular fields
     # For production with PostgreSQL, uncomment the PointField
     # location = gis_models.PointField(null=True, blank=True, srid=4326)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True) # noqa
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True) # noqa
+    latitude = models.DecimalField(
+        max_digits=20, decimal_places=15, null=True, blank=True
+    )
+    longitude = models.DecimalField(
+        max_digits=20, decimal_places=15, null=True, blank=True
+    )
     last_location_update = models.DateTimeField(null=True, blank=True)
 
     # Additional spatial tracking fields
