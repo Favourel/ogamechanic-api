@@ -487,6 +487,7 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
                 data[field_name] = self._get_absolute_url(value.url, request)
             else:
                 data[field_name] = None
+        return data
 
 
 class DriverProfileSerializer(serializers.ModelSerializer):
@@ -628,6 +629,8 @@ class DriverProfileSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
+        if data is None:
+            return {}
         request = self.context.get('request', None)
         file_fields = [
             'license_front_image',
