@@ -2018,6 +2018,12 @@ class MerchantProfileManagementView(APIView):
         },
     )
     def post(self, request):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
         user = request.user
 
         # Check if user's active role is merchant
@@ -2042,7 +2048,7 @@ class MerchantProfileManagementView(APIView):
                 status=400,
             )
 
-        serializer = MerchantProfileSerializer(data=request.data)
+        serializer = MerchantProfileSerializer(data=data)
         if serializer.is_valid():
             serializer.save(user=user)
             return Response(
@@ -2220,6 +2226,12 @@ class MerchantProfileManagementView(APIView):
         },
     )
     def put(self, request):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
         user = request.user
         is_staff = getattr(request.user, "is_staff", False)
 
@@ -2243,7 +2255,7 @@ class MerchantProfileManagementView(APIView):
             )
 
         serializer = MerchantProfileSerializer(
-            user.merchant_profile, data=request.data, partial=True, context={"request": request}
+            user.merchant_profile, data=data, partial=True, context={"request": request}
         )
         if serializer.is_valid():
             updated_profile = serializer.save()
@@ -2264,10 +2276,11 @@ class MerchantProfileManagementView(APIView):
                     status=True,
                     data={
                         "has_merchant_profile": True,
-                        "merchant_profile": serializer.data,
+                        "merchant_profile": MerchantProfileSerializer(updated_profile, context={"request": request}).data,
                         "kyc": kyc,
                     },
-                )
+                ),
+                status=200,
             )
         return Response(
             api_response(
@@ -2461,6 +2474,12 @@ class MechanicProfileManagementView(APIView):
         },
     )
     def put(self, request):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
         user = request.user
         is_staff = getattr(request.user, "is_staff", False)
 
@@ -2486,7 +2505,7 @@ class MechanicProfileManagementView(APIView):
             )
 
         serializer = MechanicProfileSerializer(
-            mechanic_profile, data=request.data, partial=True, context={"request": request}
+            mechanic_profile, data=data, partial=True, context={"request": request}
         )
 
         if serializer.is_valid():
@@ -2507,7 +2526,7 @@ class MechanicProfileManagementView(APIView):
                     status=True,
                     data={
                         "has_mechanic_profile": True,
-                        "mechanic_profile": serializer.data,
+                        "mechanic_profile": MechanicProfileSerializer(updated_profile, context={"request": request}).data,
                         "kyc": kyc,
                     },
                 ),
@@ -2568,6 +2587,12 @@ class MechanicProfileManagementView(APIView):
         },
     )
     def post(self, request):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
         user = request.user
 
         # Check if user's active role is mechanic
@@ -2592,7 +2617,7 @@ class MechanicProfileManagementView(APIView):
                 status=400,
             )
 
-        serializer = MechanicProfileSerializer(data=request.data)
+        serializer = MechanicProfileSerializer(data=data)
         if serializer.is_valid():
             serializer.save(user=user)
             return Response(
@@ -3079,6 +3104,12 @@ class DriverProfileManagementView(APIView):
         },
     )
     def post(self, request):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
         user = request.user
 
         # Check if user's active role is driver or rider
@@ -3103,7 +3134,7 @@ class DriverProfileManagementView(APIView):
                 status=400,
             )
 
-        serializer = DriverProfileSerializer(data=request.data)
+        serializer = DriverProfileSerializer(data=data)
         if serializer.is_valid():
             serializer.save(user=user)
             return Response(
@@ -3159,6 +3190,12 @@ class DriverProfileManagementView(APIView):
         },
     )
     def put(self, request):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
         user = request.user
         is_staff = getattr(request.user, "is_staff", False)
 
@@ -3184,7 +3221,7 @@ class DriverProfileManagementView(APIView):
             )
 
         serializer = DriverProfileSerializer(
-            user.driver_profile, data=request.data, partial=True, context={"request": request}
+            user.driver_profile, data=data, partial=True, context={"request": request}
         )
         if serializer.is_valid():
             updated_profile = serializer.save()
@@ -3213,10 +3250,11 @@ class DriverProfileManagementView(APIView):
                     status=True,
                     data={
                         "has_driver_profile": True,
-                        "driver_profile": serializer.data,
+                        "driver_profile": DriverProfileSerializer(updated_profile, context={"request": request}).data,
                         "kyc": kyc,
                     },
-                )
+                ),
+                status=200,
             )
         return Response(
             api_response(
