@@ -491,7 +491,6 @@ class DriverProfileSerializer(serializers.ModelSerializer):
     vehicle_photo_left = serializers.SerializerMethodField()
     government_id = serializers.SerializerMethodField()
     driver_license = serializers.SerializerMethodField()
-    vehicle_photo = serializers.SerializerMethodField()
     insurance_document = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
 
@@ -597,12 +596,6 @@ class DriverProfileSerializer(serializers.ModelSerializer):
         request = self.context.get('request', None)
         if obj.driver_license and hasattr(obj.driver_license, 'url'):
             return self._get_absolute_url(obj.driver_license.url, request)
-        return None
-
-    def get_vehicle_photo(self, obj):
-        request = self.context.get('request', None)
-        if obj.vehicle_photo and hasattr(obj.vehicle_photo, 'url'):
-            return self._get_absolute_url(obj.vehicle_photo.url, request)
         return None
 
     def get_selfie(self, obj):
