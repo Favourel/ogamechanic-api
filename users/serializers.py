@@ -306,8 +306,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 class MerchantProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
-    cac_document = serializers.SerializerMethodField()
-    selfie = serializers.SerializerMethodField()
 
     class Meta:
         model = MerchantProfile
@@ -360,6 +358,17 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         validated_data['user'] = user
         return MerchantProfile.objects.create(**validated_data)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request', None)
+        for field_name in ['cac_document', 'selfie']:
+            value = getattr(instance, field_name, None)
+            if value and hasattr(value, 'url'):
+                data[field_name] = self._get_absolute_url(value.url, request)
+            else:
+                data[field_name] = None
+        return data
 
 
 class MechanicProfileSerializer(serializers.ModelSerializer):
@@ -481,21 +490,6 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
                 data[field_name] = self._get_absolute_url(value.url, request)
             else:
                 data[field_name] = None
-        return data
-
-
-class DriverProfileSerializer(serializers.ModelSerializer):
-    user = serializers.SerializerMethodField()
-    license_front_image = serializers.SerializerMethodField()
-    license_back_image = serializers.SerializerMethodField()
-    vehicle_photo_front = serializers.SerializerMethodField()
-    vehicle_photo_back = serializers.SerializerMethodField()
-    vehicle_photo_right = serializers.SerializerMethodField()
-    vehicle_photo_left = serializers.SerializerMethodField()
-    government_id = serializers.SerializerMethodField()
-    driver_license = serializers.SerializerMethodField()
-    insurance_document = serializers.SerializerMethodField()
-    rating = serializers.SerializerMethodField()
 
     class Meta:
         model = DriverProfile
@@ -629,6 +623,22 @@ class DriverProfileSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         validated_data['user'] = user
         return DriverProfile.objects.create(**validated_data)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request', None)
+        file_fields = [
+            'license_front_image', 'license_back_image', 'vehicle_photo_front',
+            'vehicle_photo_back', 'vehicle_photo_right', 'vehicle_photo_left',
+            'government_id', 'driver_license', 'insurance_document', 'selfie'
+        ]
+        for field_name in file_fields:
+            value = getattr(instance, field_name, None)
+            if value and hasattr(value, 'url'):
+                data[field_name] = self._get_absolute_url(value.url, request)
+            else:
+                data[field_name] = None
+        return data
 
 
 class DriverLocationUpdateSerializer(serializers.ModelSerializer):
