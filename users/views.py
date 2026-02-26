@@ -2480,6 +2480,7 @@ class MechanicProfileManagementView(APIView):
                 api_response(message=data, status=False),
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
+        logging.info("data: ", data)
         user = request.user
         is_staff = getattr(request.user, "is_staff", False)
 
@@ -2505,7 +2506,7 @@ class MechanicProfileManagementView(APIView):
             )
 
         serializer = MechanicProfileSerializer(
-            mechanic_profile, data=data, partial=False, context={"request": request}
+            mechanic_profile, data=data, partial=True
         )
 
         if serializer.is_valid():
