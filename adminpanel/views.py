@@ -21,6 +21,7 @@ from users.models import User, MechanicProfile, MerchantProfile, DriverProfile
 from users.serializers import (
     MechanicProfileSerializer,
     DriverProfileSerializer,
+    MerchantProfileSerializer,
     CustomTokenObtainPairSerializer,
     PasswordResetSerializer,
     ContactMessageSerializer,
@@ -7155,12 +7156,14 @@ class PendingKYCView(APIView):
             # Compute KYC status
             kyc_status = _compute_kyc(profile, kyc_fields)
 
-            # Get basic profile info (avoid sensitive data)
-            profile_data = {
-                "profile_id": profile.id,
-                "submitted_at": profile.updated_at.isoformat() if profile.updated_at else None,
-                "is_approved": profile.is_approved,
-            }
+            # Serialize full profile data for admin review
+            if role == "merchant":
+                serializer = MerchantProfileSerializer(profile, context={'request': request})
+            elif role == "mechanic":
+                serializer = MechanicProfileSerializer(profile, context={'request': request})
+            elif role == "driver":
+                serializer = DriverProfileSerializer(profile, context={'request': request})
+            profile_data = serializer.data
 
             pending_kyc_data.append({
                 "user_id": str(user.id),
