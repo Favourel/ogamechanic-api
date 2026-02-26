@@ -400,10 +400,6 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "rating",
-            "cac_document",
-            "selfie",
-            "government_id_front",
-            "government_id_back",
             "has_active_repair_request",
         ]
         ref_name = "UsersMechanicProfileSerializer"
