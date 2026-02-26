@@ -2505,7 +2505,7 @@ class MechanicProfileManagementView(APIView):
             )
 
         serializer = MechanicProfileSerializer(
-            mechanic_profile, data=data, partial=True, context={"request": request}
+            mechanic_profile, data=data, partial=False, context={"request": request}
         )
 
         if serializer.is_valid():
