@@ -646,10 +646,6 @@ class DriverProfile(models.Model):
 
     # Enhanced fields for better driver management
     vehicle_info = models.TextField(blank=True)
-    license_number = models.CharField(max_length=50, blank=True)
-    vehicle_plate = models.CharField(max_length=20, blank=True)
-    vehicle_model = models.CharField(max_length=100, blank=True)
-    vehicle_color = models.CharField(max_length=50, blank=True)
     is_available = models.BooleanField(default=True)
     rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
     total_rides = models.PositiveIntegerField(default=0)
