@@ -497,6 +497,7 @@ class DriverProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = DriverProfile
         fields = [
+            "user",
             "full_name",
             "phone_number",
             "city",
@@ -522,7 +523,9 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "government_id",
             "vehicle_type",
             "vehicle_registration_number",
-            "insurance_document"
+            "insurance_document",
+            "driver_license",
+            "rating"
         ]
         read_only_fields = [
             "id",
