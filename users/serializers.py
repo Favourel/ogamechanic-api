@@ -364,10 +364,6 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
 
 class MechanicProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
-    cac_document = serializers.SerializerMethodField()
-    selfie = serializers.SerializerMethodField()
-    government_id_front = serializers.SerializerMethodField()
-    government_id_back = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
     has_active_repair_request = serializers.SerializerMethodField()
 
@@ -475,6 +471,17 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         validated_data['user'] = user
         return MechanicProfile.objects.create(**validated_data)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request', None)
+        for field_name in ['cac_document', 'selfie', 'government_id_front', 'government_id_back']:
+            value = getattr(instance, field_name, None)
+            if value and hasattr(value, 'url'):
+                data[field_name] = self._get_absolute_url(value.url, request)
+            else:
+                data[field_name] = None
+        return data
 
 
 class DriverProfileSerializer(serializers.ModelSerializer):
