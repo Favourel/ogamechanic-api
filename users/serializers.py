@@ -503,7 +503,6 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "city",
             "date_of_birth",
             "gender",
-            "state",
             "location",
             "selfie",
             "license_number",
