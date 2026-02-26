@@ -158,6 +158,7 @@ def incoming_request_checks(request, require_data_field: bool = True) -> tuple:
         )
         request_type = request.data.get("requestType", None)
         data = request.data.get("data", {})
+        logging.info("incoming_request_checks", data)
 
         if not x_api_key:
             return False, ("Missing or Incorrect "
