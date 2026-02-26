@@ -628,9 +628,16 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         request = self.context.get('request', None)
         file_fields = [
-            'license_front_image', 'license_back_image', 'vehicle_photo_front',
-            'vehicle_photo_back', 'vehicle_photo_right', 'vehicle_photo_left',
-            'government_id', 'driver_license', 'insurance_document', 'selfie'
+            'license_front_image',
+            'license_back_image',
+            'vehicle_photo_front',
+            'vehicle_photo_back',
+            'vehicle_photo_right',
+            'vehicle_photo_left',
+            'government_id',
+            'driver_license',
+            'insurance_document',
+            'selfie'
         ]
         for field_name in file_fields:
             value = getattr(instance, field_name, None)
