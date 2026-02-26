@@ -73,8 +73,8 @@ def password_checker(password: str):
 
         return (
             False,
-            "Password must contain uppercase, ''lowercase letters'',"
-            " '# ! - _ @ $' special characters "
+            "Password must contain uppercase, lowercase letters,"
+            " '# ! _ @ $ -' special characters "
             "and 8 or more characters",
         )
     except (Exception,) as err:
