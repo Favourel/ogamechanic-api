@@ -498,14 +498,12 @@ class DriverProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = DriverProfile
         fields = [
-            "id",
-            "user",
             "full_name",
             "phone_number",
             "city",
             "date_of_birth",
             "gender",
-            "address",
+            "state",
             "location",
             "selfie",
             "license_number",
@@ -522,20 +520,10 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "vehicle_photo_back",
             "vehicle_photo_right",
             "vehicle_photo_left",
-            "bank_name",
-            "account_number",
-            "rating",
-            # Legacy fields for backward compatibility
             "government_id",
-            "driver_license",
             "vehicle_type",
             "vehicle_registration_number",
-            "vehicle_photo",
-            "insurance_document",
-            "is_approved",
-            "approved_at",
-            "created_at",
-            "updated_at",
+            "insurance_document"
         ]
         read_only_fields = [
             "id",

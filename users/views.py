@@ -166,6 +166,8 @@ MERCHANT_KYC_REQUIRED_FIELDS = [
 
 MECHANIC_KYC_REQUIRED_FIELDS = [
     "location",
+    "latitude",
+    "longitude",
     "cac_number",
     "cac_document",
     "selfie",
@@ -180,8 +182,10 @@ DRIVER_KYC_REQUIRED_FIELDS = [
     "city",
     "date_of_birth",
     "gender",
-    "address",
+    "state",
     "location",
+    "latitude",
+    "longitude",
     "selfie",
     "license_number",
     "license_issue_date",
@@ -197,14 +201,9 @@ DRIVER_KYC_REQUIRED_FIELDS = [
     "vehicle_photo_back",
     "vehicle_photo_right",
     "vehicle_photo_left",
-    "bank_name",
-    "account_number",
-    "rating",
     "government_id",
-    "driver_license",
     "vehicle_type",
     "vehicle_registration_number",
-    "vehicle_photo",
     "insurance_document",
 ]
 
