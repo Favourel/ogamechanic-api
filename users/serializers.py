@@ -491,6 +491,10 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             else:
                 data[field_name] = None
 
+
+class DriverProfileSerializer(serializers.ModelSerializer):
+    user = serializers.SerializerMethodField()
+
     class Meta:
         model = DriverProfile
         fields = [
