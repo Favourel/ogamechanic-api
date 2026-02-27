@@ -11,6 +11,7 @@ from .views import (
     PendingVerificationsView,
     UserActivationView,
     PendingKYCView,
+    DetailPendingKYCView,
     # AdminAnalyticsView,
     AdminCategoryCreateView,
     AdminNotificationView,
@@ -82,6 +83,11 @@ urlpatterns = [
         'management/kyc/pending/',
         PendingKYCView.as_view(),
         name='pending-kyc'
+    ),
+    path(
+        'management/kyc/pending/<uuid:user_id>/',
+        DetailPendingKYCView.as_view(),
+        name='pending-kyc-detail'
     ),
     path(
         'management/mechanics/',

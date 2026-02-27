@@ -7268,3 +7268,282 @@ class PendingKYCView(APIView):
                 },
             )
         )
+
+
+class DetailPendingKYCView(APIView):
+    permission_classes = [IsAdminUser]
+
+    @swagger_auto_schema(
+        operation_summary="Get Pending KYC Details",
+        operation_description="""
+        **Get detailed KYC information for a specific user**
+        
+        This endpoint returns comprehensive KYC details for a specific user including:
+        - Full profile information with all documents
+        - KYC completeness status and missing fields
+        - User details and contact information
+        - Approval status history
+        - Document URLs for admin review
+        
+        **Use Cases:**
+        - Detailed review of individual KYC submissions
+        - Document verification and validation
+        - Decision making for approval/rejection
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                "user_id",
+                openapi.IN_PATH,
+                description="User ID to get KYC details for",
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="KYC details retrieved successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "status": openapi.Schema(type=openapi.TYPE_BOOLEAN, example=True),
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                        "data": openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                "user_id": openapi.Schema(type=openapi.TYPE_STRING),
+                                "role": openapi.Schema(type=openapi.TYPE_STRING),
+                                "email": openapi.Schema(type=openapi.TYPE_STRING),
+                                "full_name": openapi.Schema(type=openapi.TYPE_STRING),
+                                "phone_number": openapi.Schema(type=openapi.TYPE_STRING),
+                                "profile_data": openapi.Schema(type=openapi.TYPE_OBJECT),
+                                "kyc_status": openapi.Schema(type=openapi.TYPE_OBJECT),
+                                "submission_history": openapi.Schema(type=openapi.TYPE_ARRAY),
+                            }
+                        ),
+                    }
+                ),
+            ),
+            404: "User or profile not found",
+            401: "Unauthorized - Admin access required",
+        },
+    )
+    def get(self, request, user_id=None):
+        """
+        Get detailed KYC information for a specific user.
+        
+        If user_id is provided, returns details for that specific user.
+        If no user_id, returns list of all pending KYC (existing functionality).
+        """
+        if user_id:
+            return self._get_user_kyc_details(request, user_id)
+        else:
+            return self._get_pending_kyc_list(request)
+
+    def _get_user_kyc_details(self, request, user_id):
+        """Get detailed KYC information for a specific user."""
+        try:
+            user = User.objects.get(id=user_id)
+            
+            # Find user's profile(s)
+            user_profiles = []
+            if hasattr(user, 'merchant_profile'):
+                user_profiles.append(("merchant", user.merchant_profile, MERCHANT_KYC_REQUIRED_FIELDS))
+            if hasattr(user, 'mechanic_profile'):
+                user_profiles.append(("mechanic", user.mechanic_profile, MECHANIC_KYC_REQUIRED_FIELDS))
+            if hasattr(user, 'driver_profile'):
+                user_profiles.append(("driver", user.driver_profile, DRIVER_KYC_REQUIRED_FIELDS))
+            
+            if not user_profiles:
+                return Response(
+                    api_response(
+                        message="No profile found for this user",
+                        status=False
+                    ),
+                    status=404,
+                )
+            
+            # Return details for each profile the user has
+            profiles_data = []
+            for role, profile, kyc_fields in user_profiles:
+                # Compute KYC status
+                kyc_status = _compute_kyc(profile, kyc_fields)
+                
+                # Serialize full profile data
+                if role == "merchant":
+                    serializer = MerchantProfileSerializer(profile, context={'request': request})
+                elif role == "mechanic":
+                    serializer = MechanicProfileSerializer(profile, context={'request': request})
+                elif role == "driver":
+                    serializer = DriverProfileSerializer(profile, context={'request': request})
+                
+                profile_data = serializer.data
+                
+                profiles_data.append({
+                    "role": role,
+                    "profile_id": str(profile.id),
+                    "profile_data": profile_data,
+                    "kyc_status": kyc_status,
+                    "is_approved": getattr(profile, 'is_approved', False),
+                    "is_active": getattr(profile, 'is_active', True),
+                    "disapproved": getattr(profile, 'disapproved', False),
+                    "disapproval_reason": getattr(profile, 'disapproval_reason', None),
+                    "created_at": profile.created_at.isoformat(),
+                    "updated_at": profile.updated_at.isoformat(),
+                })
+            
+            return Response(
+                api_response(
+                    message="KYC details retrieved successfully",
+                    status=True,
+                    data={
+                        "user_id": str(user.id),
+                        "email": user.email,
+                        "full_name": f"{user.first_name} {user.last_name}".strip(),
+                        "phone_number": user.phone_number,
+                        "is_active": user.is_active,
+                        "date_joined": user.date_joined.isoformat(),
+                        "profiles": profiles_data,
+                    },
+                ),
+                status=200,
+            )
+            
+        except User.DoesNotExist:
+            return Response(
+                api_response(
+                    message="User not found",
+                    status=False
+                ),
+                status=404,
+            )
+        except Exception as e:
+            return Response(
+                api_response(
+                    message=f"An error occurred: {str(e)}",
+                    status=False
+                ),
+                status=500,
+            )
+
+    def _get_pending_kyc_list(self, request):
+        """Get list of all pending KYC (existing functionality)."""
+        limit = int(request.query_params.get("limit", 50))
+        offset = int(request.query_params.get("offset", 0))
+        search = request.query_params.get("search", "").strip()
+        role_filter = request.query_params.get("role", "").strip()
+
+        # Collect all pending profiles
+        pending_profiles = []
+
+        # Query each profile type for unapproved profiles
+        if not role_filter or role_filter == "merchant":
+            merchant_profiles = MerchantProfile.objects.filter(is_approved=False).select_related("user")
+            for profile in merchant_profiles:
+                pending_profiles.append({
+                    "profile": profile,
+                    "role": "merchant",
+                    "user": profile.user,
+                    "kyc_fields": MERCHANT_KYC_REQUIRED_FIELDS,
+                })
+
+        if not role_filter or role_filter == "mechanic":
+            mechanic_profiles = MechanicProfile.objects.filter(is_approved=False).select_related("user")
+            for profile in mechanic_profiles:
+                pending_profiles.append({
+                    "profile": profile,
+                    "role": "mechanic",
+                    "user": profile.user,
+                    "kyc_fields": MECHANIC_KYC_REQUIRED_FIELDS,
+                })
+
+        if not role_filter or role_filter == "driver":
+            driver_profiles = DriverProfile.objects.filter(is_approved=False).select_related("user")
+            for profile in driver_profiles:
+                pending_profiles.append({
+                    "profile": profile,
+                    "role": "driver",
+                    "user": profile.user,
+                    "kyc_fields": DRIVER_KYC_REQUIRED_FIELDS,
+                })
+
+        complete_pending_profiles = pending_profiles  # Initialize with all pending profiles
+
+        # Apply search filter if provided
+        if search:
+            search_lower = search.lower()
+            complete_pending_profiles = [
+                item for item in pending_profiles
+                if (
+                    search_lower in item["user"].email.lower() or
+                    search_lower in (item["user"].first_name or "").lower() or
+                    search_lower in (item["user"].last_name or "").lower() or
+                    search_lower in (item["user"].phone_number or "").lower()
+                )
+            ]
+
+        # Apply role filter if provided
+        if role_filter:
+            complete_pending_profiles = [
+                item for item in complete_pending_profiles
+                if item["role"] == role_filter
+            ]
+
+        # Filter to only include profiles with complete KYC
+        final_pending_profiles = []
+        for item in complete_pending_profiles:
+            profile = item["profile"]
+            kyc_fields = item["kyc_fields"]
+            kyc_status = _compute_kyc(profile, kyc_fields)
+            if not kyc_status["missing_fields"]:
+                final_pending_profiles.append(item)
+
+        pending_profiles = final_pending_profiles
+
+        # Total count after filters
+        total_count = len(pending_profiles)
+
+        # Apply pagination
+        paginated_profiles = pending_profiles[offset:offset + limit]
+
+        # Format response data
+        pending_kyc_data = []
+        for item in paginated_profiles:
+            profile = item["profile"]
+            user = item["user"]
+            role = item["role"]
+            kyc_fields = item["kyc_fields"]
+
+            # Compute KYC status
+            kyc_status = _compute_kyc(profile, kyc_fields)
+
+            # Serialize full profile data for admin review
+            if role == "merchant":
+                serializer = MerchantProfileSerializer(profile, context={'request': request})
+            elif role == "mechanic":
+                serializer = MechanicProfileSerializer(profile, context={'request': request})
+            elif role == "driver":
+                serializer = DriverProfileSerializer(profile, context={'request': request})
+            profile_data = serializer.data
+
+            pending_kyc_data.append({
+                "user_id": str(user.id),
+                "role": role,
+                "email": user.email,
+                "full_name": f"{user.first_name} {user.last_name}".strip(),
+                "phone_number": user.phone_number,
+                "profile_data": profile_data,
+                "kyc_status": kyc_status,
+            })
+
+        return Response(
+            api_response(
+                message="Pending KYC verifications retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "pending_kyc": pending_kyc_data,
+                },
+            )
+        )
