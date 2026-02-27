@@ -7317,7 +7317,10 @@ class DetailPendingKYCView(APIView):
                                 "phone_number": openapi.Schema(type=openapi.TYPE_STRING),
                                 "profile_data": openapi.Schema(type=openapi.TYPE_OBJECT),
                                 "kyc_status": openapi.Schema(type=openapi.TYPE_OBJECT),
-                                "submission_history": openapi.Schema(type=openapi.TYPE_ARRAY),
+                                "submission_history": openapi.Schema(
+                                    type=openapi.TYPE_ARRAY,
+                                    items=openapi.Schema(type=openapi.TYPE_OBJECT)
+                                ),
                             }
                         ),
                     }
