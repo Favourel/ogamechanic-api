@@ -1422,7 +1422,7 @@ class UserActivationView(APIView):
     permission_classes = [IsAdminUser]
 
     @swagger_auto_schema(
-        operation_description="Activate or deactivate a user account by role",
+        operation_description="Activate, deactivate or disapprove a user account by role",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             required=["user_id", "action"],
