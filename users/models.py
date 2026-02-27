@@ -396,6 +396,9 @@ class MerchantProfile(models.Model):
 
     # Legacy fields for backward compatibility
     is_approved = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    disapproved = models.BooleanField(default=False)
+    disapproval_reason = models.TextField(blank=True, null=True)
     business_address = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -474,6 +477,9 @@ class MechanicProfile(models.Model):
     )
 
     is_approved = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    disapproved = models.BooleanField(default=False)
+    disapproval_reason = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -641,6 +647,9 @@ class DriverProfile(models.Model):
     )
     is_approved = models.BooleanField(default=False)
     approved_at = models.DateTimeField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    disapproved = models.BooleanField(default=False)
+    disapproval_reason = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

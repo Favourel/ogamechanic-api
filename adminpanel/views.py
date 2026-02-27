@@ -1433,12 +1433,14 @@ class UserActivationView(APIView):
                 ),
                 "action": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    enum=["activate", "deactivate"],
+                    enum=["activate", "deactivate", "disapprove"],
                     description="Action to perform",
                 ),
                 "reason": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description="Reason for deactivation (optional, sent via email)",
+                    description=("Reason for deactivation/disapproval "
+                                 "(required for disapproval, "
+                                 "sent via email)"),
                 ),
                 "send_email": openapi.Schema(
                     type=openapi.TYPE_BOOLEAN,
@@ -1469,10 +1471,10 @@ class UserActivationView(APIView):
         reason = data.get("reason", "")
         send_email = data.get("send_email", True)
 
-        if not user_id or action not in ["activate", "deactivate"]:
+        if not user_id or action not in ["activate", "deactivate", "disapprove"]:
             return Response(
                 api_response(
-                    message="user_id and action (activate/deactivate) are required.",  # noqa
+                    message="user_id and action (activate/deactivate/disapprove) are required.",  # noqa
                     status=False,
                 ),
                 status=400,
@@ -1612,9 +1614,88 @@ class UserActivationView(APIView):
                     status=200,
                 )
 
+            elif action == "disapprove":
+                if not reason:
+                    return Response(
+                        api_response(
+                            message="Reason is required for disapproval action.", 
+                            status=False
+                        ),
+                        status=400,
+                    )
+                
+                user.is_active = True
+                user.save()
+
+                # Disapprove role-specific profiles (set approved=False, active=True, disapproved=True)
+                for role_name, profile in user_profiles:
+                    if hasattr(profile, "is_approved"):
+                        profile.is_approved = False
+                    if hasattr(profile, "is_active"):
+                        profile.is_active = True
+                    if hasattr(profile, "disapproved"):
+                        profile.disapproved = True
+                    if hasattr(profile, "disapproval_reason"):
+                        profile.disapproval_reason = reason
+                    profile.save()
+
+                # Create notification
+                message = f"Your KYC verification has been disapproved. Reason: {reason}"
+                NotificationService.create_notification(
+                    user=user,
+                    title="KYC Disapproved",
+                    message=message,
+                    notification_type="warning",
+                )
+
+                # Send email if requested
+                if send_email:
+                    from users.services import send_account_status_email
+
+                    send_account_status_email.delay(
+                        str(user.id), "disapproved", reason)
+
+                # Prepare response data with profile information
+                response_data = {
+                    "user_id": str(user.id),
+                    "is_active": True,
+                    "disapproved": True,
+                    "profiles": [],
+                }
+
+                for role_name, profile in user_profiles:
+                    response_data["profiles"].append(
+                        {
+                            "role": role_name,
+                            "profile_id": str(profile.id),
+                            "is_approved": (
+                                getattr(profile, "is_approved", None)
+                            ),
+                            "is_active": (
+                                getattr(profile, "is_active", None)
+                            ),
+                            "disapproved": (
+                                getattr(profile, "disapproved", None)
+                            ),
+                            "disapproval_reason": (
+                                getattr(profile, "disapproval_reason", None)
+                            ),
+                        }
+                    )
+
+                return Response(
+                    api_response(
+                        message="User KYC disapproved successfully.",
+                        status=True,
+                        data=response_data,
+                    ),
+                    status=200,
+                )
+
         except User.DoesNotExist:
             return Response(
-                api_response(message="User not found.", status=False), status=404
+                api_response(message="User not found.", status=False), 
+                status=404
             )
         except Exception as e:
             return Response(
