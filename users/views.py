@@ -22,6 +22,7 @@ from .serializers import (
     MerchantProfileSerializer,
     MechanicProfileSerializer,
     DriverProfileSerializer,
+    RiderProfileSerializer,
     DriverLocationUpdateSerializer,
     StepOneRoleSelectionSerializer,
     StepTwoPrimaryUserInfoSerializer,
@@ -72,6 +73,7 @@ from .models import (
     BankAccount,
     Role,
     DriverProfile,
+    RiderProfile,
     MerchantProfile,
     MechanicProfile,
 )
@@ -205,6 +207,14 @@ DRIVER_KYC_REQUIRED_FIELDS = [
     "vehicle_type",
     "vehicle_registration_number",
     "insurance_document",
+]
+
+RIDER_KYC_REQUIRED_FIELDS = [
+    "full_name",
+    "phone_number",
+    "location",
+    "selfie",
+    "government_id",
 ]
 
 User = get_user_model()
@@ -545,7 +555,7 @@ class UserRegistrationView(APIView):
                 )
 
             # Validate role
-            valid_roles = ["primary_user", "driver", "merchant", "mechanic"]
+            valid_roles = ["primary_user", "driver", "merchant", "mechanic", "rider"]
             if role_name not in valid_roles:
                 return Response(
                     api_response(
@@ -1118,7 +1128,7 @@ class SwitchRoleView(APIView):
                 )
 
             # Validate role
-            valid_roles = ["primary_user", "driver", "merchant", "mechanic"]
+            valid_roles = ["primary_user", "driver", "merchant", "mechanic", 'rider']
             if role_name not in valid_roles:
                 return Response(
                     api_response(
@@ -2301,6 +2311,198 @@ class MerchantProfileManagementView(APIView):
         )
 
 
+class RiderProfileManagementView(APIView):
+    """Manage rider (passenger/customer) profiles - create, update, or view."""
+
+    permission_classes = [IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+
+    @swagger_auto_schema(
+        operation_summary="View Rider Profile",
+        operation_description="""
+        **Retrieve the rider (passenger/customer) profile for the authenticated user**
+
+        **Requirements:**
+        - User must be authenticated
+        - User must have 'rider' role
+        - User must already have a rider profile
+        """,
+        responses={200: RiderProfileSerializer(many=True)},
+    )
+    def get(self, request):
+        user = request.user
+
+        if not user.roles.filter(name="rider").exists():
+            return Response(
+                api_response(
+                    message="You must have a rider role to view rider profile.",
+                    status=False,
+                ),
+                status=403,
+            )
+
+        rider_profile = getattr(user, "rider_profile", None)
+        if not rider_profile:
+            return Response(
+                api_response(
+                    message="Rider profile not found.",
+                    status=False,
+                    data={"has_rider_profile": False},
+                ),
+                status=404,
+            )
+
+        serializer = RiderProfileSerializer(
+            rider_profile, context={"request": request}
+        )
+        return Response(
+            api_response(
+                message="Rider profile retrieved successfully.",
+                status=True,
+                data={
+                    "has_rider_profile": True,
+                    "rider_profile": serializer.data,
+                },
+            ),
+            status=200,
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Create Rider Profile",
+        operation_description="""
+        **Create a rider (passenger/customer) profile for authenticated user**
+
+        **Requirements:**
+        - User must be authenticated
+        - User must have 'rider' role
+        - User must not already have a rider profile
+
+        **Fields:**
+        - full_name (optional)
+        - phone_number (optional)
+        - location (optional)
+        - selfie (file, optional)
+        - government_id (file, optional)
+        """,
+        request_body=RiderProfileSerializer,
+        responses={201: RiderProfileSerializer},
+    )
+    def post(self, request):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        user = request.user
+
+        if not user.roles.filter(name="rider").exists():
+            return Response(
+                api_response(
+                    message="You must have a rider role to create rider profile.",
+                    status=False,
+                ),
+                status=403,
+            )
+
+        if hasattr(user, "rider_profile"):
+            return Response(
+                api_response(
+                    message="Rider profile already exists. Use PUT to update.",
+                    status=False,
+                ),
+                status=400,
+            )
+
+        serializer = RiderProfileSerializer(data=data, context={"request": request})
+        if serializer.is_valid():
+            serializer.save(user=user)
+            return Response(
+                api_response(
+                    message="Rider profile created successfully.",
+                    status=True,
+                    data=serializer.data,
+                ),
+                status=201,
+            )
+        return Response(
+            api_response(
+                message="Invalid data",
+                status=False,
+                errors=serializer.errors,
+            ),
+            status=400,
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Update Rider Profile",
+        operation_description="""
+        **Update an existing rider (passenger/customer) profile for the authenticated user**
+
+        **Requirements:**
+        - User must be authenticated
+        - User must have 'rider' role
+        - User must already have a rider profile
+        """,
+        request_body=RiderProfileSerializer,
+        responses={200: RiderProfileSerializer},
+    )
+    def put(self, request):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        user = request.user
+
+        if not user.roles.filter(name="rider").exists():
+            return Response(
+                api_response(
+                    message="You must have a rider role to update rider profile.",
+                    status=False,
+                ),
+                status=403,
+            )
+
+        rider_profile = getattr(user, "rider_profile", None)
+        if not rider_profile:
+            return Response(
+                api_response(
+                    message="Rider profile does not exist. Create one first.",
+                    status=False,
+                ),
+                status=404,
+            )
+
+        serializer = RiderProfileSerializer(
+            rider_profile,
+            data=data,
+            partial=True,
+            context={"request": request},
+        )
+        if serializer.is_valid():
+            updated_profile = serializer.save()
+            return Response(
+                api_response(
+                    message="Rider profile updated successfully.",
+                    status=True,
+                    data=RiderProfileSerializer(
+                        updated_profile, context={"request": request}
+                    ).data,
+                ),
+                status=200,
+            )
+        return Response(
+            api_response(
+                message="Invalid data",
+                status=False,
+                errors=serializer.errors,
+            ),
+            status=400,
+        )
+
+
 class MechanicProfileManagementView(APIView):
     """
     Manage mechanic profiles - create, update, or complete mechanic profile.
@@ -2690,17 +2892,17 @@ class DriverProfileManagementView(APIView):
 
             if not (
                 target_user.active_role
-                and target_user.active_role.name in ["driver", "rider"]
+                and target_user.active_role.name in ["driver"]
             ):
                 return Response(
                     api_response(
                         message=(
-                            "Your active role must be 'driver' or 'rider' to view your driver profile."
+                            "Your active role must be 'driver' to view your driver profile."
                         ),
                         status=False,
                         data={
                             "suggestion": (
-                                "Use /api/users/switch-role/ to switch to the driver or rider role"
+                                "Use /api/users/switch-role/ to switch to the driver role"
                             )
                         },
                     ),
@@ -2725,12 +2927,11 @@ class DriverProfileManagementView(APIView):
 
         has_driver_role = (
             target_user.roles.filter(name="driver").exists()
-            or target_user.roles.filter(name="rider").exists()
         )
         if not has_driver_role:
             return Response(
                 api_response(
-                    message="User does not have a driver or rider role.",
+                    message="User does not have a driver role.",
                     status=False,
                 ),
                 status=400,

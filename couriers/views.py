@@ -488,7 +488,7 @@ class CourierRequestCreateView(APIView):
             return Response(api_response(message=data, status=False), status=400)
 
         # Check if user is a customer
-        if not request.user.roles.filter(name="customer").exists():
+        if not request.user.roles.filter(name="rider").exists():
             return Response(
                 api_response(
                     message="Only customers can create courier requests", status=False
@@ -734,7 +734,7 @@ class CourierRequestCancelView(APIView):
             return Response(api_response(message=data, status=False), status=400)
 
         # Check if user is a customer
-        if not request.user.roles.filter(name="customer").exists():
+        if not request.user.roles.filter(name="rider").exists():
             return Response(
                 api_response(
                     message="Only customers can cancel courier requests", status=False
@@ -869,11 +869,11 @@ class AssignDriverView(APIView):
         if not status_:
             return Response(api_response(message=data, status=False), status=400)
 
-        # Only customers can assign drivers
-        if not request.user.roles.filter(name="customer").exists():
+        # Only riders can assign drivers
+        if not request.user.roles.filter(name="rider").exists():
             return Response(
                 api_response(
-                    message="Only customers can assign drivers.", status=False
+                    message="Only riders can assign drivers.", status=False
                 ),
                 status=403,
             )
@@ -1153,7 +1153,7 @@ class CourierRatingView(APIView):
             return Response(api_response(message=data, status=False), status=400)
 
         # Only customers can rate
-        if not request.user.roles.filter(name="customer").exists():
+        if not request.user.roles.filter(name="rider").exists():
             return Response(
                 api_response(
                     message="Only customers can rate courier services.", status=False

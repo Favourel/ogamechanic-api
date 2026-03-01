@@ -2,14 +2,15 @@ from rest_framework import serializers
 from .models import (
     Role,
     Notification,
+    Wallet,
+    Transaction,
+    BankAccount,
     MerchantProfile,
     MechanicProfile,
     DriverProfile,
+    RiderProfile,
     MechanicReview,
     DriverReview,
-    BankAccount,
-    Wallet,
-    Transaction,
     ContactMessage,
     EmailSubscription,
 )
@@ -21,6 +22,8 @@ from django.conf import settings
 from datetime import datetime, timedelta
 from django.utils import timezone
 from .models import UserEmailVerification
+
+
 from django.contrib.auth import get_user_model
 
 
@@ -97,6 +100,70 @@ class ChangePasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"new_password_confirm": "Passwords do not match"}
             )
+        return data
+
+
+class RiderProfileSerializer(serializers.ModelSerializer):
+    user = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RiderProfile
+        fields = [
+            "id",
+            "user",
+            "full_name",
+            "phone_number",
+            "location",
+            "selfie",
+            "government_id",
+            "is_approved",
+            "approved_at",
+            "is_active",
+            "disapproved",
+            "disapproval_reason",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "user",
+            "is_approved",
+            "approved_at",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_user(self, obj):
+        from users.serializers import UserSerializer
+        return UserSerializer(obj.user).data
+
+    def _get_absolute_url(self, url, request=None):
+        if not url:
+            return None
+        if url.startswith("http://") or url.startswith("https://"):
+            return url
+        if request is not None:
+            return request.build_absolute_uri(url)
+        from django.conf import settings
+        if hasattr(settings, "SITE_DOMAIN"):
+            return f"{settings.SITE_DOMAIN}{url}"
+        return url
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if data is None:
+            return {}
+        request = self.context.get('request', None)
+        file_fields = [
+            'selfie',
+            'government_id',
+        ]
+        for field_name in file_fields:
+            value = getattr(instance, field_name, None)
+            if value and hasattr(value, 'url'):
+                data[field_name] = self._get_absolute_url(value.url, request)
+            else:
+                data[field_name] = None
         return data
 
 

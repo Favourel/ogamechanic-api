@@ -287,10 +287,10 @@ class RideConfirmView(APIView):
                 api_response(message=data, status=False), status=status.HTTP_400_BAD_REQUEST
             )
         user = request.user
-        if not user.roles.filter(name="customer").exists():
+        if not user.roles.filter(name="rider").exists():
             return Response(
                 api_response(
-                    message="Only customers can confirm rides.", status=False
+                    message="Only riders can confirm rides.", status=False
                 ),
                 status=status.HTTP_403_FORBIDDEN,
             )
@@ -329,7 +329,7 @@ class RideConfirmView(APIView):
         try:
             driver = User.objects.get(
                 id=data["driver_id"],
-                roles__name="rider",
+                roles__name="driver",
                 driver_profile__is_approved=True,
             )
         except User.DoesNotExist:
@@ -570,7 +570,7 @@ class CourierRequestOptionsView(APIView):
                 api_response(message=data, status=False),
                 status=status.HTTP_400_BAD_REQUEST)
         user = request.user
-        if not user.roles.filter(name="customer").exists():
+        if not user.roles.filter(name="rider").exists():
             return Response(
                 api_response(
                     message="Only customers can request courier options.",
@@ -657,7 +657,7 @@ class CourierRequestOptionsView(APIView):
 
         available_drivers = (
             User.objects.filter(
-                roles__name="rider", driver_profile__is_approved=True
+                roles__name="driver", driver_profile__is_approved=True
             )
             .exclude(courier_deliveries__status__in=["accepted", "in_progress"]) # noqa
         )
@@ -750,7 +750,7 @@ class CourierRequestConfirmView(APIView):
             return Response(
                 api_response(message=data, status=False), status=400)
         user = request.user
-        if not user.roles.filter(name="customer").exists():
+        if not user.roles.filter(name="rider").exists():
             return Response(
                 api_response(
                     message="Only customers can confirm courier requests.",
@@ -781,7 +781,7 @@ class CourierRequestConfirmView(APIView):
         try:
             driver = User.objects.get(
                 id=data["driver_id"],
-                roles__name="rider",
+                roles__name="driver",
                 driver_profile__is_approved=True,
             )
         except User.DoesNotExist:
@@ -936,7 +936,7 @@ class CourierRequestListView(APIView):
         user = request.user
         if user.is_staff:
             queryset = CourierRequest.objects.all()
-        elif user.roles.filter(name="rider").exists():
+        elif user.roles.filter(name="driver").exists():
             queryset = CourierRequest.objects.filter(driver=user)
         else:
             queryset = CourierRequest.objects.filter(customer=user)
@@ -987,7 +987,7 @@ class RideCourierAnalyticsView(APIView):
         if user.is_staff:
             rides = Ride.objects.all()
             couriers = CourierRequest.objects.all()
-        elif user.roles.filter(name="rider").exists():
+        elif user.roles.filter(name="driver").exists():
             rides = Ride.objects.filter(driver=user)
             couriers = CourierRequest.objects.filter(driver=user)
         else:

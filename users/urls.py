@@ -97,6 +97,11 @@ urlpatterns = [
         views.DriverProfileManagementView.as_view(),
         name='driver_profile'
     ),
+    path(
+        'profile/rider/',
+        views.RiderProfileManagementView.as_view(),
+        name='rider_profile'
+    ),
 
     # Driver location
     path(

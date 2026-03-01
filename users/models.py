@@ -730,6 +730,48 @@ class DriverProfile(models.Model):
         return distance <= radius_km
 
 
+class RiderProfile(models.Model):
+    user = models.OneToOneField(
+        'User', on_delete=models.CASCADE, related_name='rider_profile'
+    )
+
+    full_name = models.CharField(max_length=255, blank=True, null=True)
+    phone_number = models.CharField(max_length=20, blank=True, null=True)
+    location = models.CharField(max_length=255, blank=True, null=True)
+    selfie = models.ImageField(
+        upload_to='rider/selfies/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png'])],
+        blank=True, null=True,
+        help_text="Live photo of rider"
+    )
+
+    government_id = models.FileField(
+        upload_to='rider/ids/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True
+    )
+
+    is_approved = models.BooleanField(default=False)
+    approved_at = models.DateTimeField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    disapproved = models.BooleanField(default=False)
+    disapproval_reason = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _('rider profile')
+        verbose_name_plural = _('rider profiles')
+        indexes = [
+            models.Index(fields=['user']),
+            models.Index(fields=['is_approved']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f"RiderProfile: {self.user.email}"
+
+
 class DriverReview(models.Model):
     driver = models.ForeignKey(
         DriverProfile,

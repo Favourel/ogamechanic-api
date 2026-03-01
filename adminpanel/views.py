@@ -17,11 +17,23 @@ from ogamechanic.modules.utils import (
     incoming_request_checks,
     get_incoming_request_checks,
 )
-from users.models import User, MechanicProfile, MerchantProfile, DriverProfile
+from users.models import (
+    User,
+    Role,
+    Notification,
+    Wallet,
+    Transaction,
+    BankAccount,
+    MerchantProfile,
+    MechanicProfile,
+    DriverProfile,
+    RiderProfile,
+)
 from users.serializers import (
     MechanicProfileSerializer,
     DriverProfileSerializer,
     MerchantProfileSerializer,
+    RiderProfileSerializer,
     CustomTokenObtainPairSerializer,
     PasswordResetSerializer,
     ContactMessageSerializer,
@@ -33,6 +45,7 @@ from users.views import (
     MERCHANT_KYC_REQUIRED_FIELDS,
     MECHANIC_KYC_REQUIRED_FIELDS,
     DRIVER_KYC_REQUIRED_FIELDS,
+    RIDER_KYC_REQUIRED_FIELDS,
 )
 from products.models import Order, OrderItem, ProductReview
 from products.serializers import CategorySerializer
@@ -1501,6 +1514,12 @@ class UserActivationView(APIView):
                 try:
                     user_profiles.append(("driver", user.driver_profile))
                 except DriverProfile.DoesNotExist:
+                    pass
+
+            if user.roles.filter(name="rider").exists():
+                try:
+                    user_profiles.append(("rider", user.rider_profile))
+                except RiderProfile.DoesNotExist:
                     pass
 
             if action == "activate":
@@ -7187,6 +7206,16 @@ class PendingKYCView(APIView):
                     "kyc_fields": DRIVER_KYC_REQUIRED_FIELDS,
                 })
 
+        if not role_filter or role_filter == "rider":
+            rider_profiles = RiderProfile.objects.filter(is_approved=False).select_related("user")
+            for profile in rider_profiles:
+                pending_profiles.append({
+                    "profile": profile,
+                    "role": "rider",
+                    "user": profile.user,
+                    "kyc_fields": RIDER_KYC_REQUIRED_FIELDS,
+                })
+
         complete_pending_profiles = pending_profiles  # Initialize with all pending profiles
 
         # Apply search filter if provided
@@ -7244,6 +7273,8 @@ class PendingKYCView(APIView):
                 serializer = MechanicProfileSerializer(profile, context={'request': request})
             elif role == "driver":
                 serializer = DriverProfileSerializer(profile, context={'request': request})
+            elif role == "rider":
+                serializer = RiderProfileSerializer(profile, context={'request': request})
             profile_data = serializer.data
 
             pending_kyc_data.append({
@@ -7297,6 +7328,13 @@ class DetailPendingKYCView(APIView):
                 description="User ID to get KYC details for",
                 type=openapi.TYPE_STRING,
                 required=True,
+            ),
+            openapi.Parameter(
+                "role",
+                openapi.IN_QUERY,
+                description="Optional role filter (merchant, mechanic, driver, rider) to get specific profile",
+                type=openapi.TYPE_STRING,
+                required=False,
             ),
         ],
         responses={
@@ -7355,11 +7393,18 @@ class DetailPendingKYCView(APIView):
                 user_profiles.append(("mechanic", user.mechanic_profile, MECHANIC_KYC_REQUIRED_FIELDS))
             if hasattr(user, 'driver_profile'):
                 user_profiles.append(("driver", user.driver_profile, DRIVER_KYC_REQUIRED_FIELDS))
+            if hasattr(user, 'rider_profile'):
+                user_profiles.append(("rider", user.rider_profile, RIDER_KYC_REQUIRED_FIELDS))
+            
+            # Filter by role if specified
+            role_filter = request.query_params.get("role", "").strip()
+            if role_filter:
+                user_profiles = [profile for profile in user_profiles if profile[0] == role_filter]
             
             if not user_profiles:
                 return Response(
                     api_response(
-                        message="No profile found for this user",
+                        message="No profile found for this user" + (f" with role '{role_filter}'" if role_filter else ""),
                         status=False
                     ),
                     status=404,
@@ -7378,6 +7423,8 @@ class DetailPendingKYCView(APIView):
                     serializer = MechanicProfileSerializer(profile, context={'request': request})
                 elif role == "driver":
                     serializer = DriverProfileSerializer(profile, context={'request': request})
+                elif role == "rider":
+                    serializer = RiderProfileSerializer(profile, context={'request': request}) 
                 
                 profile_data = serializer.data
                 
@@ -7469,6 +7516,16 @@ class DetailPendingKYCView(APIView):
                     "kyc_fields": DRIVER_KYC_REQUIRED_FIELDS,
                 })
 
+        if not role_filter or role_filter == "rider":
+            rider_profiles = RiderProfile.objects.filter(is_approved=False).select_related("user")
+            for profile in rider_profiles:
+                pending_profiles.append({
+                    "profile": profile,
+                    "role": "rider",
+                    "user": profile.user,
+                    "kyc_fields": RIDER_KYC_REQUIRED_FIELDS,
+                })
+
         complete_pending_profiles = pending_profiles  # Initialize with all pending profiles
 
         # Apply search filter if provided
@@ -7526,6 +7583,8 @@ class DetailPendingKYCView(APIView):
                 serializer = MechanicProfileSerializer(profile, context={'request': request})
             elif role == "driver":
                 serializer = DriverProfileSerializer(profile, context={'request': request})
+            elif role == "rider":
+                serializer = RiderProfileSerializer(profile, context={'request': request})
             profile_data = serializer.data
 
             pending_kyc_data.append({
