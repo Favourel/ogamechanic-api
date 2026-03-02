@@ -559,6 +559,8 @@ class DriverProfile(models.Model):
     gender = models.CharField(max_length=20, choices=GENDER_CHOICES, blank=True, null=True) # noqa
     address = models.CharField(max_length=255)
     location = models.CharField(max_length=255, blank=True, null=True)
+    state = models.CharField(max_length=100, blank=True, null=True)
+
     selfie = models.ImageField(
         upload_to='driver/selfies/',
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png'])],
@@ -759,6 +761,8 @@ class RiderProfile(models.Model):
     full_name = models.CharField(max_length=255, blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     location = models.CharField(max_length=255, blank=True, null=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
+    state = models.CharField(max_length=100, blank=True, null=True)
     selfie = models.ImageField(
         upload_to='rider/selfies/',
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png'])],
