@@ -3453,8 +3453,7 @@ class DriverProfileManagementView(APIView):
             user.driver_profile, data=data, partial=True, context={"request": request}
         )
         if serializer.is_valid():
-            updated_profile = serializer.save()
-
+            driver_profile = user.driver_profile
             old_docs = {
                 'license_front_image': driver_profile.license_front_image,
                 'license_back_image': driver_profile.license_back_image,
@@ -3463,11 +3462,12 @@ class DriverProfileManagementView(APIView):
                 'vehicle_photo_right': driver_profile.vehicle_photo_right,
                 'vehicle_photo_left': driver_profile.vehicle_photo_left,
                 'government_id_front': driver_profile.government_id_front,
-                'ggovernment_id_back': driver_profile.government_id_back,
+                'government_id_back': driver_profile.government_id_back,
                 'driver_license': driver_profile.driver_license,
                 'vehicle_photo': driver_profile.vehicle_photo,
                 'insurance_document': driver_profile.insurance_document,
             }
+            updated_profile = serializer.save()
             if not is_staff and any(getattr(updated_profile, field) != old_docs[field] for field in old_docs):
                 updated_profile.is_approved = False
                 updated_profile.save(update_fields=['is_approved'])
