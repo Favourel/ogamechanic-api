@@ -5208,9 +5208,9 @@ class BankNameEnquiryView(APIView):
             )
 
         try:
-            response = requests.post(
+            response = requests.get(
                 "https://api.paystack.co/bank/resolve",
-                json={
+                params={
                     "account_number": account_number,
                     "bank_code": bank_code,
                 },
@@ -5244,14 +5244,24 @@ class BankNameEnquiryView(APIView):
                         status=400,
                     )
             else:
-                logger.error(f"Paystack API error (status {response.status_code}): {response.text}")
-                return Response(
-                    api_response(
-                        message="Account verification service is temporarily unavailable. Please try again later.",
-                        status=False,
-                    ),
-                    status=400,
-                )
+                if response.status_code == 404:
+                    logger.error(f"Paystack API error (status 404): Invalid bank code or account details - {response.text}")
+                    return Response(
+                        api_response(
+                            message="Invalid bank code or account details. Please check your bank code and account number.",
+                            status=False,
+                        ),
+                        status=400,
+                    )
+                else:
+                    logger.error(f"Paystack API error (status {response.status_code}): {response.text}")
+                    return Response(
+                        api_response(
+                            message="Account verification service is temporarily unavailable. Please try again later.",
+                            status=False,
+                        ),
+                        status=400,
+                    )
         except requests.RequestException as e:
             logger.exception(f"Network error during Paystack account resolution: {e}")
             return Response(
@@ -6117,939 +6127,939 @@ class RoleListView(APIView):
             )
 
 
-class StepByStepRegistrationView(APIView):
-    """
-    Comprehensive step-by-step user registration process.
-
-    This API handles user registration through 5 distinct steps:
-    1. Role selection (primary_user, driver, merchant, mechanic)
-    2. User information collection (role-specific)
-    3. Email verification with 6-digit code
-    4. Role-specific details collection
-    5. Password setup and account creation
-
-    The process uses Django sessions to maintain state between steps.
-    Each step validates previous steps and guides users to the next step.
-
-    **Image/File Upload Format:**
-    For any step that requires uploading images or files (such as license images, selfies, CAC documents, vehicle photos, etc.), # noqa
-    you MUST send the request as `multipart/form-data` (not JSON).
-    All image and file fields should be sent as file uploads in the form-data body,
-    while other fields (strings, numbers, etc.) can be sent as regular form fields.
-
-    - For steps that do NOT require file/image uploads, you may use JSON.
-    - For steps that require file/image uploads (e.g., step 4 for driver, merchant, mechanic), use `multipart/form-data` and include files in the request.
-    - In Swagger UI, use the "Try it out" button and select "multipart/form-data" for these steps.
-
-    Example for step 4 (driver):
-      - Content-Type: multipart/form-data
-      - Fields:
-        - full_name: John Driver
-        - license_front_image: (file upload)
-        - license_back_image: (file upload)
-        - vehicle_photo_front: (file upload)
-        - ... (other fields as text or file as appropriate)
-    """
-
-    permission_classes = [AllowAny]
-    throttle_classes = [AuthRateThrottle]
-    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
-
-    @swagger_auto_schema(
-        operation_summary="Step-by-Step User Registration",
-        operation_description="""
-        Multi-step registration process for different user roles.
-
-        **Steps Overview**
-        1. Role selection (`primary_user`, `driver`, `merchant`, `mechanic`)
-        2. User information collection (role-specific)
-        3. Email verification with 6-digit code
-        4. Role-specific details (may include file uploads)
-        5. Password setup and account creation
-
-        **Important Notes**
-        - For steps **without files**: send `application/json`
-        - For steps **with files (e.g., selfies, license, CAC docs)**: send `multipart/form-data` # noqa
-        - Always include:  
-        - `requestType`: must be `"inbound"`  
-        - `data`: step-specific payload
-        """,
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                "requestType": openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description="Request type identifier (must be 'inbound')",
-                    example="inbound",
-                ),
-                "data": openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    description="Step-specific data payload",
-                    example={
-                        "step_1": {"role_id": 1},
-                        "step_2_primary_user": {
-                            "first_name": "John",
-                            "last_name": "Doe",
-                            "email": "john@example.com",
-                            "phone_number": "08012345678",
-                        },
-                        "step_2_driver_sub_role": {"sub_role": "driver"},
-                        "step_2_driver_info": {
-                            "email": "driver@example.com",
-                            "phone_number": "08012345678",
-                            "city": "Lagos",
-                        },  # noqa
-                        "step_2_merchant_mechanic": {
-                            "first_name": "Jane",
-                            "last_name": "Smith",
-                            "email": "jane@example.com",
-                            "phone_number": "08087654321",
-                        },  # noqa
-                        "step_3": {
-                            "email": "john@example.com",
-                            "verification_code": "123456",
-                        },  # noqa
-                        "step_4_primary_user": {
-                            "has_car": True,
-                            "car_make": "Toyota",
-                            "car_model": "Corolla",
-                            "car_year": 2020,
-                            "license_plate": "ABC123",
-                        },
-                        # For step_4_driver, step_4_merchant, step_4_mechanic: # All image/file fields must be sent as file uploads in multipart/form-data # noqa
-                        "step_4_driver": {
-                            "full_name": "John Driver",
-                            "date_of_birth": "1990-01-01",
-                            "gender": "male",
-                            "address": "123 Street",
-                            "location": "Lagos",
-                            "license_number": "LIC123",
-                            "license_issue_date": "2015-01-01",
-                            "license_expiry_date": "2025-01-01",
-                            "license_front_image": "(file upload)",
-                            "license_back_image": "(file upload)",
-                            "vin": "VIN123",
-                            "vehicle_name": "Toyota",
-                            "plate_number": "ABC123",
-                            "vehicle_model": "Corolla",
-                            "vehicle_color": "Red",
-                            "vehicle_photo_front": "(file upload)",
-                            "vehicle_photo_back": "(file upload)",
-                            "vehicle_photo_right": "(file upload)",
-                            "vehicle_photo_left": "(file upload)",
-                            "bank_name": "GTBank",
-                            "account_number": "0123456789",
-                        },  # noqa
-                        "step_4_merchant": {
-                            "location": "Lagos",
-                            "lga": "Ikeja",
-                            "cac_number": "CAC123",
-                            "cac_document": "(file upload)",
-                            "selfie": "(file upload)",
-                        },
-                        "step_4_mechanic": {
-                            "location": "Lagos",
-                            "lga": "Ikeja",
-                            "cac_number": "CAC123",
-                            "cac_document": "(file upload)",
-                            "selfie": "(file upload)",
-                            "govt_id_type": "(choice)",
-                            "government_id_front": "(file upload)",
-                            "government_id_back": "(file upload)",
-                            # "vehicle_make_ids": [1, 2],
-                            "expertise_details": [
-                                {
-                                    "vehicle_make_id": 1,
-                                    "years_of_experience": 5,
-                                    "certification_level": "advanced",
-                                },
-                                {
-                                    "vehicle_make_id": 2,
-                                    "years_of_experience": 2,
-                                    "certification_level": "basic",
-                                },
-                            ],
-                        },  # noqa
-                        "step_5": {
-                            "password": "strongpassword",
-                            "confirm_password": "strongpassword",
-                        },  # noqa
-                    },
-                ),
-            },
-            required=["requestType", "data"],
-        ),
-        responses={
-            200: openapi.Response(description="Step completed successfully"),
-            201: openapi.Response(
-                description="Registration completed successfully (step 5)"
-            ),
-            400: openapi.Response(
-                description="Invalid request data or step requirements not met"
-            ),
-            429: openapi.Response(
-                description="Too many requests - rate limited"
-            ),  # noqa
-        },
-    )
-    def post(self, request, step):
-        """Handle different steps of registration"""
-
-        if step == 1:
-            return self.step_one_role_selection(request)
-        elif step == 2:
-            return self.step_two_user_info(request)
-        elif step == 3:
-            return self.step_three_email_verification(request)
-        elif step == 4:
-            return self.step_four_details(request)
-        elif step == 5:
-            return self.step_five_password_setup(request)
-        else:
-            logger.critical(f"Stepbystep registration post: {traceback.format_exc()}")
-
-            return Response(
-                api_response(message="Invalid step number", status=False),
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-
-    def step_one_role_selection(self, request):
-        """Step 1: Role selection"""
-        status_, data = incoming_request_checks(request)
-        if not status_:
-            return Response(
-                api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-
-        serializer = StepOneRoleSelectionSerializer(data=data)
-        if serializer.is_valid():
-            role = serializer.validated_data["role_id"]
-
-            # Store role selection in session
-            request.session["registration_role_id"] = role.id
-            request.session["registration_step"] = 1
-
-            return Response(
-                api_response(
-                    message="Role selected successfully",
-                    status=True,
-                    data={"role_id": role.id, "role_name": role.name, "next_step": 2},
-                )
-            )
-
-        return Response(
-            api_response(
-                message="Invalid role selection", status=False, errors=serializer.errors
-            ),
-            status=http_status.HTTP_400_BAD_REQUEST,
-        )
-
-    def step_two_user_info(self, request):
-        """Step 2: User information based on role"""
-        role_id = request.session.get("registration_role_id")
-        if not role_id:
-            return Response(
-                api_response(message="Please select a role first", status=False),
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            role = Role.objects.get(id=role_id)
-        except Role.DoesNotExist:
-            return Response(
-                api_response(message="Invalid role", status=False),
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-
-        status_, data = incoming_request_checks(request)
-        if not status_:
-            return Response(
-                api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Handle driver's special case - sub-role selection first
-        if role.name == "driver":
-            # Check if this is sub-role selection or driver info
-            if "sub_role" in data:
-                return self.step_two_driver_sub_role(request, data)
-            elif "email" in data:
-                return self.step_two_driver_info(request, data)
-            else:
-                return Response(
-                    api_response(
-                        message="Please select driver or rider first", status=False
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST,
-                )
-
-        # Choose serializer based on role
-        if role.name == "primary_user":
-            serializer = StepTwoPrimaryUserInfoSerializer(data=data)
-        elif role.name == "mechanic":
-            serializer = StepTwoMechanicInfoSerializer(data=data)
-        elif role.name == "merchant":
-            serializer = StepTwoMerchantInfoSerializer(data=data)
-        else:
-            return Response(
-                api_response(message="Invalid role for registration", status=False),
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-
-        if serializer.is_valid():
-            # Store user info in session
-            request.session["registration_user_info"] = (
-                serializer.validated_data
-            )  # noqa
-            request.session["registration_step"] = 2
-
-            # Send verification email
-            email = serializer.validated_data["email"]
-            verification_code = self.generate_verification_code()
-            request.session["verification_code"] = verification_code
-            request.session["verification_email"] = email
-
-            # Send email
-            self.send_verification_email(email, verification_code)
-            print(f"{verification_code} for {email}")
-            logger.info(f"{verification_code} for {email}")
-
-            return Response(
-                api_response(
-                    message="User info saved. Verification code sent to email.",  # noqa
-                    status=True,
-                    data={"next_step": 3},
-                )
-            )
-
-        logger.critical(
-            f"step_two_user_info: {serializer.errors}\n {traceback.format_exc()}"
-        )  # noqa
-        return Response(
-            api_response(
-                message="Invalid user information",
-                status=False,
-                errors=serializer.errors,
-            ),
-            status=http_status.HTTP_400_BAD_REQUEST,
-        )
-
-    def step_two_driver_sub_role(self, request, data):
-        """Step 2a: Driver sub-role selection"""
-        serializer = StepTwoDriverSubRoleSerializer(data=data)
-        if serializer.is_valid():
-            request.session["registration_driver_sub_role"] = serializer.validated_data[
-                "sub_role"
-            ]
-            return Response(
-                api_response(
-                    message="Sub-role selected. Please provide information.",
-                    status=True,
-                    data={"next_step": "2b"},
-                )
-            )
-        return Response(
-            api_response(
-                message="Invalid sub-role selection",
-                status=False,
-                errors=serializer.errors,
-            ),
-            status=http_status.HTTP_400_BAD_REQUEST,
-        )
-
-    def step_two_driver_info(self, request, data):
-        """Step 2b: Driver information"""
-        # Check if sub-role was selected
-        driver_sub_role = request.session.get("registration_driver_sub_role")
-        if not driver_sub_role:
-            return Response(
-                api_response(
-                    message="Please select driver or rider sub-role first", status=False
-                ),
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-
-        serializer = StepTwoDriverInfoSerializer(data=data)
-        if serializer.is_valid():
-            # Store driver info and sub-role
-            user_info = serializer.validated_data
-            user_info["driver_sub_role"] = driver_sub_role
-            request.session["registration_user_info"] = user_info
-            request.session["registration_step"] = 2
-
-            # Send verification email
-            email = serializer.validated_data["email"]
-            verification_code = self.generate_verification_code()
-            request.session["verification_code"] = verification_code
-            request.session["verification_email"] = email
-
-            # Send email
-            self.send_verification_email(email, verification_code)
-            print(f"{verification_code} for {email}")
-            logger.info(f"{verification_code} for {email}")
-
-            return Response(
-                api_response(
-                    message="Driver info saved. Verification code sent.",
-                    status=True,
-                    data={"next_step": 3},
-                )
-            )
-
-        return Response(
-            api_response(
-                message="Invalid driver information",
-                status=False,
-                errors=serializer.errors,
-            ),
-            status=http_status.HTTP_400_BAD_REQUEST,
-        )
-
-    def step_three_email_verification(self, request):
-        """Step 3: Email verification"""
-        status_, data = incoming_request_checks(request)
-        if not status_:
-            return Response(
-                api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-
-        serializer = StepThreeEmailVerificationSerializer(data=data)
-        if serializer.is_valid():
-            email = serializer.validated_data["email"]
-            code = serializer.validated_data["verification_code"]
-
-            # Check if code matches
-            stored_code = request.session.get("verification_code")
-            stored_email = request.session.get("verification_email")
-
-            if not stored_code or not stored_email:
-                return Response(
-                    api_response(
-                        message="Verification session expired. Please start over.",  # noqa
-                        status=False,
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST,
-                )
-
-            if email != stored_email:
-                return Response(
-                    api_response(
-                        message="Email does not match verification session",
-                        status=False,
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST,
-                )
-
-            if code != stored_code:
-                return Response(
-                    api_response(message="Invalid verification code", status=False),
-                    status=http_status.HTTP_400_BAD_REQUEST,
-                )
-
-            # Mark email as verified
-            request.session["email_verified"] = True
-            request.session["registration_step"] = 3
-
-            # Determine next step based on role
-            role_id = request.session.get("registration_role_id")
-            role = Role.objects.get(id=role_id)
-
-            next_step = 4 if role.name == "primary_user" else 4
-
-            return Response(
-                api_response(
-                    message="Email verified successfully",
-                    status=True,
-                    data={"next_step": next_step},
-                )
-            )
-
-        return Response(
-            api_response(
-                message="Invalid verification data",
-                status=False,
-                errors=serializer.errors,
-            ),
-            status=http_status.HTTP_400_BAD_REQUEST,
-        )
-
-    def step_four_details(self, request):
-        """Step 4: Role-specific details
-
-        **IMPORTANT:** If this step requires uploading images or files (e.g., license images, selfies, CAC documents, vehicle photos), # noqa
-        you MUST send the request as `multipart/form-data` and include the files as file uploads.
-        Do NOT send images/files as base64 or JSON fields.
-        """
-        role_id = request.session.get("registration_role_id")
-        if not role_id:
-            return Response(
-                api_response(message="Please select a role first", status=False),
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            role = Role.objects.get(id=role_id)
-        except Role.DoesNotExist:
-            return Response(
-                api_response(message="Invalid role", status=False),
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-
-        status_, data = incoming_request_checks(request)
-        if not status_:
-            return Response(
-                api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Choose serializer and message based on role
-        if role.name == "primary_user":
-            serializer = StepFourPrimaryUserCarDetailsSerializer(data=data)
-            success_message = "Car details saved"
-            session_key = "registration_car_details"
-        elif role.name == "driver":
-            serializer = StepFourDriverDetailsSerializer(data=data)
-            success_message = "Driver details saved"
-            session_key = "registration_driver_details"
-        elif role.name == "merchant":
-            serializer = StepFourMerchantDetailsSerializer(data=data)
-            success_message = "Merchant details saved"
-            session_key = "registration_merchant_details"
-        elif role.name == "mechanic":
-            serializer = StepFourMechanicDetailsSerializer(data=data)
-            success_message = "Mechanic details saved"
-            session_key = "registration_mechanic_details"
-        else:
-            return Response(
-                api_response(message="Invalid role for this step", status=False),
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-
-        if serializer.is_valid():
-            # Store details in session
-            details = dict(serializer.validated_data)
-
-            # Persist uploaded files and store only file paths in session to avoid pickling errors # noqa
-            def save_file(value):
-                try:
-                    if not value:
-                        return value
-                    # Save using original name; storage will handle collisions
-                    path = default_storage.save(getattr(value, "name", "upload"), value)
-                    return path
-                except Exception:
-                    return value
-
-            if role.name == "driver":
-                file_keys = [
-                    "license_front_image",
-                    "license_back_image",
-                    "vehicle_photo_front",
-                    "vehicle_photo_back",
-                    "vehicle_photo_right",
-                    "vehicle_photo_left",
-                ]
-            elif role.name == "merchant":
-                file_keys = ["cac_document", "selfie"]
-            elif role.name == "mechanic":
-                file_keys = [
-                    "cac_document",
-                    "selfie",
-                    "govt_id_type",
-                    "government_id_front",
-                    "government_id_back",
-                ]
-            else:
-                file_keys = []
-
-            for k in file_keys:
-                if k in details:
-                    details[k] = save_file(details.get(k))
-
-            request.session[session_key] = details
-            request.session["registration_step"] = 4
-
-            return Response(
-                api_response(
-                    message=success_message, status=True, data={"next_step": 5}
-                )
-            )
-        logger.critical(f"Step four: {serializer.errors}\n {traceback.format_exc()}")
-
-        return Response(
-            api_response(
-                message="Invalid details", status=False, errors=serializer.errors
-            ),
-            status=http_status.HTTP_400_BAD_REQUEST,
-        )
-
-    def step_five_password_setup(self, request):
-        """Step 5: Password setup and account creation"""
-        # Check if all previous steps are complete
-        required_data = [
-            "registration_role_id",
-            "registration_user_info",
-            "email_verified",
-        ]
-
-        for key in required_data:
-            if not request.session.get(key):
-                return Response(
-                    api_response(
-                        message="Previous steps not completed. Please start over.",  # noqa
-                        status=False,
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST,
-                )
-
-        status_, data = incoming_request_checks(request)
-        if not status_:
-            return Response(
-                api_response(message=data, status=False),
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-
-        serializer = StepFivePasswordSerializer(data=data)
-        if serializer.is_valid():
-            # Store password in session for account creation
-            request.session["password"] = serializer.validated_data["password"]
-            request.session["registration_step"] = 5
-
-            try:
-                # Create user account
-                user = self.create_user_account(request.session)
-
-                # Log the user in after registration
-                # from django.contrib.auth import login
-                # login(request, user)
-
-                # Generate JWT tokens
-                refresh = RefreshToken.for_user(user)
-                access_token = str(refresh.access_token)
-                refresh_token = str(refresh)
-
-                # Clear session data
-                self.clear_registration_session(request)
-
-                return Response(
-                    api_response(
-                        message="Account created successfully! You are now logged in.",  # noqa
-                        status=True,
-                        data={
-                            "access": access_token,
-                            "refresh": refresh_token,
-                            "user_id": str(user.id),
-                            "email": user.email,
-                            "role": user.active_role.name,
-                        },
-                    ),
-                    status=http_status.HTTP_201_CREATED,
-                )
-
-            except Exception as e:
-                return Response(
-                    api_response(
-                        message=f"Error creating account: {str(e)}", status=False
-                    ),
-                    status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
-
-        logger.critical(
-            f"step_five_password_setup: {serializer.errors}\n {traceback.format_exc()}"
-        )  # noqa
-        return Response(
-            api_response(
-                message="Invalid password data", status=False, errors=serializer.errors
-            ),
-            status=http_status.HTTP_400_BAD_REQUEST,
-        )
-
-    def generate_verification_code(self):
-        """Generate a 6-digit verification code"""
-        import random
-
-        return str(random.randint(100000, 999999))
-
-    def send_verification_email(self, email, code):
-        """Send verification email with code using Celery background task"""
-        import logging
-
-        logger = logging.getLogger(__name__)
-        try:
-            from .tasks import send_step_by_step_verification_email
-
-            # Send verification email as background task
-            send_step_by_step_verification_email.delay(email, code)
-            logger.info(
-                f"Step-by-step verification email task queued for {email}: {code}"
-            )  # noqa
-        except Exception as e:
-            logger.error(f"Failed to queue verification email task: {e}")
-            # Fallback to direct sending if Celery is not available
-            logger.error(f"Failed to queue verification email task: {e}")
-
-    def create_user_account(self, session_data):
-        """Create the user account with all collected data"""
-        role_id = session_data["registration_role_id"]
-        user_info = session_data["registration_user_info"]
-        password = session_data.get("password")
-
-        if not password:
-            raise ValueError("Password is required for account creation")
-
-        # Get role to determine account creation logic
-        role = Role.objects.get(id=role_id)
-
-        # Check if user with this email already exists
-        email = user_info["email"].lower().strip()
-        existing_user = User.objects.filter(email=email).first()
-
-        if existing_user:
-            # Check if user already has this role
-            if existing_user.roles.filter(id=role_id).exists():
-                raise ValueError(
-                    f"User with email {email} already has the {role.name} role"
-                )  # noqa
-
-            # User exists but doesn't have this role - add the role
-            user = existing_user
-            user.roles.add(role)
-
-            # Update user data if needed (merge information)
-            if role.name != "driver" and (
-                user_info.get("first_name") or user_info.get("last_name")
-            ):  # noqa
-                if user_info.get("first_name") and not user.first_name:
-                    user.first_name = user_info["first_name"]
-                if user_info.get("last_name") and not user.last_name:
-                    user.last_name = user_info["last_name"]
-                user.save()
-
-            # Set phone number if not already set and phone number provided
-            if user_info.get("phone_number") and not user.phone_number:
-                try:
-                    from ogamechanic.modules.utils import format_phone_number
-
-                    formatted_phone = format_phone_number(user_info.get("phone_number"))
-                except Exception as e:
-                    raise ValueError(
-                        {
-                            "phone_number": f"Invalid phone number format: {str(e)}"  # noqa
-                        }
-                    )
-                user.phone_number = formatted_phone
-                user.save()
-
-            # Add car details if primary user has a car and user doesn't have car details   # noqa
-            # if role.name == 'primary_user':
-            #     car_details = session_data.get('registration_car_details', {})
-            #     if car_details.get('has_car') and not user.car_make:
-            #         user.car_make = car_details.get('car_make', '')
-            #         user.car_model = car_details.get('car_model', '')
-            #         user.car_year = car_details.get('car_year')
-            #         user.license_plate = car_details.get('license_plate', '')
-            #         user.save()
-        else:
-            # Create new user
-            # Prepare basic user data
-            if role.name == "driver":
-                # For drivers, we only have email, phone, city from step 2
-                user_data = {
-                    "email": user_info["email"],
-                    "phone_number": user_info["phone_number"],
-                    "is_active": True,
-                    "is_verified": True,
-                }
-            else:
-                # For primary_user, merchant, mechanic - we have first_name, last_name  # noqa
-                user_data = {
-                    "email": user_info["email"],
-                    "first_name": user_info.get("first_name", ""),
-                    "last_name": user_info.get("last_name", ""),
-                    "phone_number": user_info["phone_number"],
-                    "is_active": True,
-                    "is_verified": True,
-                }
-
-            # Add car details if primary user has a car
-            # if role.name == 'primary_user':
-            #     car_details = session_data.get('registration_car_details', {})
-            #     if car_details.get('has_car'):
-            #         user_data.update({
-            #             'car_make': car_details.get('car_make', ''),
-            #             'car_model': car_details.get('car_model', ''),
-            #             'car_year': car_details.get('car_year'),
-            #             'license_plate': car_details.get('license_plate', '')
-            #         })
-
-            # Create user
-            user = User.objects.create_user(password=password, **user_data)
-
-        # Assign role (only for new users, existing users already had role added above)   # noqa
-        if not existing_user:
-            if role.name == "driver":
-                # For drivers, determine actual role based on sub_role
-                driver_sub_role = user_info.get("driver_sub_role", "driver")
-                if driver_sub_role == "rider":
-                    rider_role, _ = Role.objects.get_or_create(
-                        name=Role.RIDER, defaults={"description": "Rider"}
-                    )
-                    user.roles.add(rider_role)
-                    user.active_role = rider_role
-                else:
-                    user.roles.add(role)
-                    user.active_role = role
-            else:
-                user.roles.add(role)
-                user.active_role = role
-
-            user.save()
-        else:
-            # For existing users, set the new role as active role
-            user.active_role = role
-            user.save()
-
-        # Create profile based on role
-        self.create_user_profile(user, session_data, role)
-
-        return user
-
-    def create_user_profile(self, user, session_data, role):
-        """Create role-specific profile"""
-        if role.name == "driver" or (
-            role.name == "driver"
-            and session_data["registration_user_info"].get("driver_sub_role")
-            == "driver"
-        ):  # noqa
-            # Create driver profile
-            driver_details = session_data.get("registration_driver_details", {})  # noqa
-            user_info = session_data["registration_user_info"]
-
-            DriverProfile.objects.create(
-                user=user,
-                full_name=driver_details.get("full_name", ""),
-                phone_number=user_info.get("phone_number", ""),
-                city=user_info.get("city", ""),
-                date_of_birth=driver_details.get("date_of_birth"),
-                gender=driver_details.get("gender"),
-                address=driver_details.get("address", ""),
-                location=driver_details.get("location", ""),
-                license_number=driver_details.get("license_number", ""),
-                license_issue_date=driver_details.get("license_issue_date"),
-                license_expiry_date=driver_details.get("license_expiry_date"),
-                license_front_image=driver_details.get("license_front_image"),
-                license_back_image=driver_details.get("license_back_image"),
-                vin=driver_details.get("vin", ""),
-                vehicle_name=driver_details.get("vehicle_name", ""),
-                plate_number=driver_details.get("plate_number", ""),
-                vehicle_model=driver_details.get("vehicle_model", ""),
-                vehicle_color=driver_details.get("vehicle_color", ""),
-                vehicle_photo_front=driver_details.get("vehicle_photo_front"),
-                vehicle_photo_back=driver_details.get("vehicle_photo_back"),
-                vehicle_photo_right=driver_details.get("vehicle_photo_right"),
-                vehicle_photo_left=driver_details.get("vehicle_photo_left"),
-                bank_name=driver_details.get("bank_name", ""),
-                account_number=driver_details.get("account_number", ""),
-            )
-
-        elif role.name == "merchant":
-            # Create merchant profile
-            merchant_details = session_data.get(
-                "registration_merchant_details", {}
-            )  # noqa
-
-            MerchantProfile.objects.create(
-                user=user,
-                location=merchant_details.get("location", ""),
-                lga=merchant_details.get("lga", ""),
-                cac_number=merchant_details.get("cac_number", ""),
-                cac_document=merchant_details.get("cac_document"),
-                selfie=merchant_details.get("selfie"),
-                business_address=merchant_details.get("location", ""),
-            )
-
-        elif role.name == "mechanic":
-            # Create mechanic profile
-            mechanic_details = session_data.get(
-                "registration_mechanic_details", {}
-            )  # noqa
-
-            mechanic_profile = MechanicProfile.objects.create(
-                user=user,
-                location=mechanic_details.get("location", ""),
-                lga=mechanic_details.get("lga", ""),
-                cac_number=mechanic_details.get("cac_number", ""),
-                cac_document=mechanic_details.get("cac_document"),
-                selfie=mechanic_details.get("selfie"),
-                government_id_front=mechanic_details.get("government_id_front"),
-                government_id_back=mechanic_details.get("government_id_back"),
-                govt_id_type=mechanic_details.get("govt_id_type"),
-            )
-
-            # Create vehicle expertise records
-            self.create_mechanic_vehicle_expertise(mechanic_profile, mechanic_details)
-
-    def create_mechanic_vehicle_expertise(
-        self, mechanic_profile, mechanic_details
-    ):  # noqa
-        """Create vehicle expertise records for mechanic.
-        No longer uses vehicle_make_ids; only expertise_details.
-        """
-        from mechanics.models import VehicleMake, MechanicVehicleExpertise
-        import logging
-        from rest_framework.exceptions import ValidationError
-
-        expertise_details = mechanic_details.get("expertise_details", [])
-        logger = logging.getLogger(__name__)
-
-        for detail in expertise_details:
-            vehicle_make_id = detail.get("vehicle_make_id")
-            if not vehicle_make_id:
-                raise ValidationError(
-                    {
-                        "vehicle_make_id": "Each expertise detail must contain a vehicle_make_id."
-                    }
-                )
-            try:
-                vehicle_make = VehicleMake.objects.get(id=vehicle_make_id)
-                MechanicVehicleExpertise.objects.create(
-                    mechanic=mechanic_profile,
-                    vehicle_make=vehicle_make,
-                    years_of_experience=detail.get("years_of_experience", 0),
-                    certification_level=detail.get("certification_level", "basic"),
-                )
-            except VehicleMake.DoesNotExist as e:
-                logger.error(
-                    f"VehicleMake with id {vehicle_make_id} does not exist: {e}"
-                )
-                raise ValidationError(
-                    {
-                        "vehicle_make_id": f"Vehicle make with id {vehicle_make_id} does not exist."
-                    }
-                )
-
-    def clear_registration_session(self, request):
-        """Clear all registration session data"""
-        keys_to_clear = [
-            "registration_role_id",
-            "registration_user_info",
-            "registration_car_details",
-            "registration_driver_details",
-            "registration_merchant_details",
-            "registration_mechanic_details",
-            "registration_driver_sub_role",
-            "verification_code",
-            "verification_email",
-            "email_verified",
-            "registration_step",
-            "password",
-        ]
-
-        for key in keys_to_clear:
-            if key in request.session:
-                del request.session[key]
+# class StepByStepRegistrationView(APIView):
+#     """
+#     Comprehensive step-by-step user registration process.
+
+#     This API handles user registration through 5 distinct steps:
+#     1. Role selection (primary_user, driver, merchant, mechanic)
+#     2. User information collection (role-specific)
+#     3. Email verification with 6-digit code
+#     4. Role-specific details collection
+#     5. Password setup and account creation
+
+#     The process uses Django sessions to maintain state between steps.
+#     Each step validates previous steps and guides users to the next step.
+
+#     **Image/File Upload Format:**
+#     For any step that requires uploading images or files (such as license images, selfies, CAC documents, vehicle photos, etc.), # noqa
+#     you MUST send the request as `multipart/form-data` (not JSON).
+#     All image and file fields should be sent as file uploads in the form-data body,
+#     while other fields (strings, numbers, etc.) can be sent as regular form fields.
+
+#     - For steps that do NOT require file/image uploads, you may use JSON.
+#     - For steps that require file/image uploads (e.g., step 4 for driver, merchant, mechanic), use `multipart/form-data` and include files in the request.
+#     - In Swagger UI, use the "Try it out" button and select "multipart/form-data" for these steps.
+
+#     Example for step 4 (driver):
+#       - Content-Type: multipart/form-data
+#       - Fields:
+#         - full_name: John Driver
+#         - license_front_image: (file upload)
+#         - license_back_image: (file upload)
+#         - vehicle_photo_front: (file upload)
+#         - ... (other fields as text or file as appropriate)
+#     """
+
+#     permission_classes = [AllowAny]
+#     throttle_classes = [AuthRateThrottle]
+#     parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+
+#     @swagger_auto_schema(
+#         operation_summary="Step-by-Step User Registration",
+#         operation_description="""
+#         Multi-step registration process for different user roles.
+
+#         **Steps Overview**
+#         1. Role selection (`primary_user`, `driver`, `merchant`, `mechanic`)
+#         2. User information collection (role-specific)
+#         3. Email verification with 6-digit code
+#         4. Role-specific details (may include file uploads)
+#         5. Password setup and account creation
+
+#         **Important Notes**
+#         - For steps **without files**: send `application/json`
+#         - For steps **with files (e.g., selfies, license, CAC docs)**: send `multipart/form-data` # noqa
+#         - Always include:  
+#         - `requestType`: must be `"inbound"`  
+#         - `data`: step-specific payload
+#         """,
+#         request_body=openapi.Schema(
+#             type=openapi.TYPE_OBJECT,
+#             properties={
+#                 "requestType": openapi.Schema(
+#                     type=openapi.TYPE_STRING,
+#                     description="Request type identifier (must be 'inbound')",
+#                     example="inbound",
+#                 ),
+#                 "data": openapi.Schema(
+#                     type=openapi.TYPE_OBJECT,
+#                     description="Step-specific data payload",
+#                     example={
+#                         "step_1": {"role_id": 1},
+#                         "step_2_primary_user": {
+#                             "first_name": "John",
+#                             "last_name": "Doe",
+#                             "email": "john@example.com",
+#                             "phone_number": "08012345678",
+#                         },
+#                         "step_2_driver_sub_role": {"sub_role": "driver"},
+#                         "step_2_driver_info": {
+#                             "email": "driver@example.com",
+#                             "phone_number": "08012345678",
+#                             "city": "Lagos",
+#                         },  # noqa
+#                         "step_2_merchant_mechanic": {
+#                             "first_name": "Jane",
+#                             "last_name": "Smith",
+#                             "email": "jane@example.com",
+#                             "phone_number": "08087654321",
+#                         },  # noqa
+#                         "step_3": {
+#                             "email": "john@example.com",
+#                             "verification_code": "123456",
+#                         },  # noqa
+#                         "step_4_primary_user": {
+#                             "has_car": True,
+#                             "car_make": "Toyota",
+#                             "car_model": "Corolla",
+#                             "car_year": 2020,
+#                             "license_plate": "ABC123",
+#                         },
+#                         # For step_4_driver, step_4_merchant, step_4_mechanic: # All image/file fields must be sent as file uploads in multipart/form-data # noqa
+#                         "step_4_driver": {
+#                             "full_name": "John Driver",
+#                             "date_of_birth": "1990-01-01",
+#                             "gender": "male",
+#                             "address": "123 Street",
+#                             "location": "Lagos",
+#                             "license_number": "LIC123",
+#                             "license_issue_date": "2015-01-01",
+#                             "license_expiry_date": "2025-01-01",
+#                             "license_front_image": "(file upload)",
+#                             "license_back_image": "(file upload)",
+#                             "vin": "VIN123",
+#                             "vehicle_name": "Toyota",
+#                             "plate_number": "ABC123",
+#                             "vehicle_model": "Corolla",
+#                             "vehicle_color": "Red",
+#                             "vehicle_photo_front": "(file upload)",
+#                             "vehicle_photo_back": "(file upload)",
+#                             "vehicle_photo_right": "(file upload)",
+#                             "vehicle_photo_left": "(file upload)",
+#                             "bank_name": "GTBank",
+#                             "account_number": "0123456789",
+#                         },  # noqa
+#                         "step_4_merchant": {
+#                             "location": "Lagos",
+#                             "lga": "Ikeja",
+#                             "cac_number": "CAC123",
+#                             "cac_document": "(file upload)",
+#                             "selfie": "(file upload)",
+#                         },
+#                         "step_4_mechanic": {
+#                             "location": "Lagos",
+#                             "lga": "Ikeja",
+#                             "cac_number": "CAC123",
+#                             "cac_document": "(file upload)",
+#                             "selfie": "(file upload)",
+#                             "govt_id_type": "(choice)",
+#                             "government_id_front": "(file upload)",
+#                             "government_id_back": "(file upload)",
+#                             # "vehicle_make_ids": [1, 2],
+#                             "expertise_details": [
+#                                 {
+#                                     "vehicle_make_id": 1,
+#                                     "years_of_experience": 5,
+#                                     "certification_level": "advanced",
+#                                 },
+#                                 {
+#                                     "vehicle_make_id": 2,
+#                                     "years_of_experience": 2,
+#                                     "certification_level": "basic",
+#                                 },
+#                             ],
+#                         },  # noqa
+#                         "step_5": {
+#                             "password": "strongpassword",
+#                             "confirm_password": "strongpassword",
+#                         },  # noqa
+#                     },
+#                 ),
+#             },
+#             required=["requestType", "data"],
+#         ),
+#         responses={
+#             200: openapi.Response(description="Step completed successfully"),
+#             201: openapi.Response(
+#                 description="Registration completed successfully (step 5)"
+#             ),
+#             400: openapi.Response(
+#                 description="Invalid request data or step requirements not met"
+#             ),
+#             429: openapi.Response(
+#                 description="Too many requests - rate limited"
+#             ),  # noqa
+#         },
+#     )
+#     def post(self, request, step):
+#         """Handle different steps of registration"""
+
+#         if step == 1:
+#             return self.step_one_role_selection(request)
+#         elif step == 2:
+#             return self.step_two_user_info(request)
+#         elif step == 3:
+#             return self.step_three_email_verification(request)
+#         elif step == 4:
+#             return self.step_four_details(request)
+#         elif step == 5:
+#             return self.step_five_password_setup(request)
+#         else:
+#             logger.critical(f"Stepbystep registration post: {traceback.format_exc()}")
+
+#             return Response(
+#                 api_response(message="Invalid step number", status=False),
+#                 status=http_status.HTTP_400_BAD_REQUEST,
+#             )
+
+#     def step_one_role_selection(self, request):
+#         """Step 1: Role selection"""
+#         status_, data = incoming_request_checks(request)
+#         if not status_:
+#             return Response(
+#                 api_response(message=data, status=False),
+#                 status=http_status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         serializer = StepOneRoleSelectionSerializer(data=data)
+#         if serializer.is_valid():
+#             role = serializer.validated_data["role_id"]
+
+#             # Store role selection in session
+#             request.session["registration_role_id"] = role.id
+#             request.session["registration_step"] = 1
+
+#             return Response(
+#                 api_response(
+#                     message="Role selected successfully",
+#                     status=True,
+#                     data={"role_id": role.id, "role_name": role.name, "next_step": 2},
+#                 )
+#             )
+
+#         return Response(
+#             api_response(
+#                 message="Invalid role selection", status=False, errors=serializer.errors
+#             ),
+#             status=http_status.HTTP_400_BAD_REQUEST,
+#         )
+
+#     def step_two_user_info(self, request):
+#         """Step 2: User information based on role"""
+#         role_id = request.session.get("registration_role_id")
+#         if not role_id:
+#             return Response(
+#                 api_response(message="Please select a role first", status=False),
+#                 status=http_status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         try:
+#             role = Role.objects.get(id=role_id)
+#         except Role.DoesNotExist:
+#             return Response(
+#                 api_response(message="Invalid role", status=False),
+#                 status=http_status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         status_, data = incoming_request_checks(request)
+#         if not status_:
+#             return Response(
+#                 api_response(message=data, status=False),
+#                 status=http_status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         # Handle driver's special case - sub-role selection first
+#         if role.name == "driver":
+#             # Check if this is sub-role selection or driver info
+#             if "sub_role" in data:
+#                 return self.step_two_driver_sub_role(request, data)
+#             elif "email" in data:
+#                 return self.step_two_driver_info(request, data)
+#             else:
+#                 return Response(
+#                     api_response(
+#                         message="Please select driver or rider first", status=False
+#                     ),
+#                     status=http_status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#         # Choose serializer based on role
+#         if role.name == "primary_user":
+#             serializer = StepTwoPrimaryUserInfoSerializer(data=data)
+#         elif role.name == "mechanic":
+#             serializer = StepTwoMechanicInfoSerializer(data=data)
+#         elif role.name == "merchant":
+#             serializer = StepTwoMerchantInfoSerializer(data=data)
+#         else:
+#             return Response(
+#                 api_response(message="Invalid role for registration", status=False),
+#                 status=http_status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         if serializer.is_valid():
+#             # Store user info in session
+#             request.session["registration_user_info"] = (
+#                 serializer.validated_data
+#             )  # noqa
+#             request.session["registration_step"] = 2
+
+#             # Send verification email
+#             email = serializer.validated_data["email"]
+#             verification_code = self.generate_verification_code()
+#             request.session["verification_code"] = verification_code
+#             request.session["verification_email"] = email
+
+#             # Send email
+#             self.send_verification_email(email, verification_code)
+#             print(f"{verification_code} for {email}")
+#             logger.info(f"{verification_code} for {email}")
+
+#             return Response(
+#                 api_response(
+#                     message="User info saved. Verification code sent to email.",  # noqa
+#                     status=True,
+#                     data={"next_step": 3},
+#                 )
+#             )
+
+#         logger.critical(
+#             f"step_two_user_info: {serializer.errors}\n {traceback.format_exc()}"
+#         )  # noqa
+#         return Response(
+#             api_response(
+#                 message="Invalid user information",
+#                 status=False,
+#                 errors=serializer.errors,
+#             ),
+#             status=http_status.HTTP_400_BAD_REQUEST,
+#         )
+
+#     def step_two_driver_sub_role(self, request, data):
+#         """Step 2a: Driver sub-role selection"""
+#         serializer = StepTwoDriverSubRoleSerializer(data=data)
+#         if serializer.is_valid():
+#             request.session["registration_driver_sub_role"] = serializer.validated_data[
+#                 "sub_role"
+#             ]
+#             return Response(
+#                 api_response(
+#                     message="Sub-role selected. Please provide information.",
+#                     status=True,
+#                     data={"next_step": "2b"},
+#                 )
+#             )
+#         return Response(
+#             api_response(
+#                 message="Invalid sub-role selection",
+#                 status=False,
+#                 errors=serializer.errors,
+#             ),
+#             status=http_status.HTTP_400_BAD_REQUEST,
+#         )
+
+#     def step_two_driver_info(self, request, data):
+#         """Step 2b: Driver information"""
+#         # Check if sub-role was selected
+#         driver_sub_role = request.session.get("registration_driver_sub_role")
+#         if not driver_sub_role:
+#             return Response(
+#                 api_response(
+#                     message="Please select driver or rider sub-role first", status=False
+#                 ),
+#                 status=http_status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         serializer = StepTwoDriverInfoSerializer(data=data)
+#         if serializer.is_valid():
+#             # Store driver info and sub-role
+#             user_info = serializer.validated_data
+#             user_info["driver_sub_role"] = driver_sub_role
+#             request.session["registration_user_info"] = user_info
+#             request.session["registration_step"] = 2
+
+#             # Send verification email
+#             email = serializer.validated_data["email"]
+#             verification_code = self.generate_verification_code()
+#             request.session["verification_code"] = verification_code
+#             request.session["verification_email"] = email
+
+#             # Send email
+#             self.send_verification_email(email, verification_code)
+#             print(f"{verification_code} for {email}")
+#             logger.info(f"{verification_code} for {email}")
+
+#             return Response(
+#                 api_response(
+#                     message="Driver info saved. Verification code sent.",
+#                     status=True,
+#                     data={"next_step": 3},
+#                 )
+#             )
+
+#         return Response(
+#             api_response(
+#                 message="Invalid driver information",
+#                 status=False,
+#                 errors=serializer.errors,
+#             ),
+#             status=http_status.HTTP_400_BAD_REQUEST,
+#         )
+
+#     def step_three_email_verification(self, request):
+#         """Step 3: Email verification"""
+#         status_, data = incoming_request_checks(request)
+#         if not status_:
+#             return Response(
+#                 api_response(message=data, status=False),
+#                 status=http_status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         serializer = StepThreeEmailVerificationSerializer(data=data)
+#         if serializer.is_valid():
+#             email = serializer.validated_data["email"]
+#             code = serializer.validated_data["verification_code"]
+
+#             # Check if code matches
+#             stored_code = request.session.get("verification_code")
+#             stored_email = request.session.get("verification_email")
+
+#             if not stored_code or not stored_email:
+#                 return Response(
+#                     api_response(
+#                         message="Verification session expired. Please start over.",  # noqa
+#                         status=False,
+#                     ),
+#                     status=http_status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#             if email != stored_email:
+#                 return Response(
+#                     api_response(
+#                         message="Email does not match verification session",
+#                         status=False,
+#                     ),
+#                     status=http_status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#             if code != stored_code:
+#                 return Response(
+#                     api_response(message="Invalid verification code", status=False),
+#                     status=http_status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#             # Mark email as verified
+#             request.session["email_verified"] = True
+#             request.session["registration_step"] = 3
+
+#             # Determine next step based on role
+#             role_id = request.session.get("registration_role_id")
+#             role = Role.objects.get(id=role_id)
+
+#             next_step = 4 if role.name == "primary_user" else 4
+
+#             return Response(
+#                 api_response(
+#                     message="Email verified successfully",
+#                     status=True,
+#                     data={"next_step": next_step},
+#                 )
+#             )
+
+#         return Response(
+#             api_response(
+#                 message="Invalid verification data",
+#                 status=False,
+#                 errors=serializer.errors,
+#             ),
+#             status=http_status.HTTP_400_BAD_REQUEST,
+#         )
+
+#     def step_four_details(self, request):
+#         """Step 4: Role-specific details
+
+#         **IMPORTANT:** If this step requires uploading images or files (e.g., license images, selfies, CAC documents, vehicle photos), # noqa
+#         you MUST send the request as `multipart/form-data` and include the files as file uploads.
+#         Do NOT send images/files as base64 or JSON fields.
+#         """
+#         role_id = request.session.get("registration_role_id")
+#         if not role_id:
+#             return Response(
+#                 api_response(message="Please select a role first", status=False),
+#                 status=http_status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         try:
+#             role = Role.objects.get(id=role_id)
+#         except Role.DoesNotExist:
+#             return Response(
+#                 api_response(message="Invalid role", status=False),
+#                 status=http_status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         status_, data = incoming_request_checks(request)
+#         if not status_:
+#             return Response(
+#                 api_response(message=data, status=False),
+#                 status=http_status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         # Choose serializer and message based on role
+#         if role.name == "primary_user":
+#             serializer = StepFourPrimaryUserCarDetailsSerializer(data=data)
+#             success_message = "Car details saved"
+#             session_key = "registration_car_details"
+#         elif role.name == "driver":
+#             serializer = StepFourDriverDetailsSerializer(data=data)
+#             success_message = "Driver details saved"
+#             session_key = "registration_driver_details"
+#         elif role.name == "merchant":
+#             serializer = StepFourMerchantDetailsSerializer(data=data)
+#             success_message = "Merchant details saved"
+#             session_key = "registration_merchant_details"
+#         elif role.name == "mechanic":
+#             serializer = StepFourMechanicDetailsSerializer(data=data)
+#             success_message = "Mechanic details saved"
+#             session_key = "registration_mechanic_details"
+#         else:
+#             return Response(
+#                 api_response(message="Invalid role for this step", status=False),
+#                 status=http_status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         if serializer.is_valid():
+#             # Store details in session
+#             details = dict(serializer.validated_data)
+
+#             # Persist uploaded files and store only file paths in session to avoid pickling errors # noqa
+#             def save_file(value):
+#                 try:
+#                     if not value:
+#                         return value
+#                     # Save using original name; storage will handle collisions
+#                     path = default_storage.save(getattr(value, "name", "upload"), value)
+#                     return path
+#                 except Exception:
+#                     return value
+
+#             if role.name == "driver":
+#                 file_keys = [
+#                     "license_front_image",
+#                     "license_back_image",
+#                     "vehicle_photo_front",
+#                     "vehicle_photo_back",
+#                     "vehicle_photo_right",
+#                     "vehicle_photo_left",
+#                 ]
+#             elif role.name == "merchant":
+#                 file_keys = ["cac_document", "selfie"]
+#             elif role.name == "mechanic":
+#                 file_keys = [
+#                     "cac_document",
+#                     "selfie",
+#                     "govt_id_type",
+#                     "government_id_front",
+#                     "government_id_back",
+#                 ]
+#             else:
+#                 file_keys = []
+
+#             for k in file_keys:
+#                 if k in details:
+#                     details[k] = save_file(details.get(k))
+
+#             request.session[session_key] = details
+#             request.session["registration_step"] = 4
+
+#             return Response(
+#                 api_response(
+#                     message=success_message, status=True, data={"next_step": 5}
+#                 )
+#             )
+#         logger.critical(f"Step four: {serializer.errors}\n {traceback.format_exc()}")
+
+#         return Response(
+#             api_response(
+#                 message="Invalid details", status=False, errors=serializer.errors
+#             ),
+#             status=http_status.HTTP_400_BAD_REQUEST,
+#         )
+
+#     def step_five_password_setup(self, request):
+#         """Step 5: Password setup and account creation"""
+#         # Check if all previous steps are complete
+#         required_data = [
+#             "registration_role_id",
+#             "registration_user_info",
+#             "email_verified",
+#         ]
+
+#         for key in required_data:
+#             if not request.session.get(key):
+#                 return Response(
+#                     api_response(
+#                         message="Previous steps not completed. Please start over.",  # noqa
+#                         status=False,
+#                     ),
+#                     status=http_status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#         status_, data = incoming_request_checks(request)
+#         if not status_:
+#             return Response(
+#                 api_response(message=data, status=False),
+#                 status=http_status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         serializer = StepFivePasswordSerializer(data=data)
+#         if serializer.is_valid():
+#             # Store password in session for account creation
+#             request.session["password"] = serializer.validated_data["password"]
+#             request.session["registration_step"] = 5
+
+#             try:
+#                 # Create user account
+#                 user = self.create_user_account(request.session)
+
+#                 # Log the user in after registration
+#                 # from django.contrib.auth import login
+#                 # login(request, user)
+
+#                 # Generate JWT tokens
+#                 refresh = RefreshToken.for_user(user)
+#                 access_token = str(refresh.access_token)
+#                 refresh_token = str(refresh)
+
+#                 # Clear session data
+#                 self.clear_registration_session(request)
+
+#                 return Response(
+#                     api_response(
+#                         message="Account created successfully! You are now logged in.",  # noqa
+#                         status=True,
+#                         data={
+#                             "access": access_token,
+#                             "refresh": refresh_token,
+#                             "user_id": str(user.id),
+#                             "email": user.email,
+#                             "role": user.active_role.name,
+#                         },
+#                     ),
+#                     status=http_status.HTTP_201_CREATED,
+#                 )
+
+#             except Exception as e:
+#                 return Response(
+#                     api_response(
+#                         message=f"Error creating account: {str(e)}", status=False
+#                     ),
+#                     status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+#                 )
+
+#         logger.critical(
+#             f"step_five_password_setup: {serializer.errors}\n {traceback.format_exc()}"
+#         )  # noqa
+#         return Response(
+#             api_response(
+#                 message="Invalid password data", status=False, errors=serializer.errors
+#             ),
+#             status=http_status.HTTP_400_BAD_REQUEST,
+#         )
+
+#     def generate_verification_code(self):
+#         """Generate a 6-digit verification code"""
+#         import random
+
+#         return str(random.randint(100000, 999999))
+
+#     def send_verification_email(self, email, code):
+#         """Send verification email with code using Celery background task"""
+#         import logging
+
+#         logger = logging.getLogger(__name__)
+#         try:
+#             from .tasks import send_step_by_step_verification_email
+
+#             # Send verification email as background task
+#             send_step_by_step_verification_email.delay(email, code)
+#             logger.info(
+#                 f"Step-by-step verification email task queued for {email}: {code}"
+#             )  # noqa
+#         except Exception as e:
+#             logger.error(f"Failed to queue verification email task: {e}")
+#             # Fallback to direct sending if Celery is not available
+#             logger.error(f"Failed to queue verification email task: {e}")
+
+#     def create_user_account(self, session_data):
+#         """Create the user account with all collected data"""
+#         role_id = session_data["registration_role_id"]
+#         user_info = session_data["registration_user_info"]
+#         password = session_data.get("password")
+
+#         if not password:
+#             raise ValueError("Password is required for account creation")
+
+#         # Get role to determine account creation logic
+#         role = Role.objects.get(id=role_id)
+
+#         # Check if user with this email already exists
+#         email = user_info["email"].lower().strip()
+#         existing_user = User.objects.filter(email=email).first()
+
+#         if existing_user:
+#             # Check if user already has this role
+#             if existing_user.roles.filter(id=role_id).exists():
+#                 raise ValueError(
+#                     f"User with email {email} already has the {role.name} role"
+#                 )  # noqa
+
+#             # User exists but doesn't have this role - add the role
+#             user = existing_user
+#             user.roles.add(role)
+
+#             # Update user data if needed (merge information)
+#             if role.name != "driver" and (
+#                 user_info.get("first_name") or user_info.get("last_name")
+#             ):  # noqa
+#                 if user_info.get("first_name") and not user.first_name:
+#                     user.first_name = user_info["first_name"]
+#                 if user_info.get("last_name") and not user.last_name:
+#                     user.last_name = user_info["last_name"]
+#                 user.save()
+
+#             # Set phone number if not already set and phone number provided
+#             if user_info.get("phone_number") and not user.phone_number:
+#                 try:
+#                     from ogamechanic.modules.utils import format_phone_number
+
+#                     formatted_phone = format_phone_number(user_info.get("phone_number"))
+#                 except Exception as e:
+#                     raise ValueError(
+#                         {
+#                             "phone_number": f"Invalid phone number format: {str(e)}"  # noqa
+#                         }
+#                     )
+#                 user.phone_number = formatted_phone
+#                 user.save()
+
+#             # Add car details if primary user has a car and user doesn't have car details   # noqa
+#             # if role.name == 'primary_user':
+#             #     car_details = session_data.get('registration_car_details', {})
+#             #     if car_details.get('has_car') and not user.car_make:
+#             #         user.car_make = car_details.get('car_make', '')
+#             #         user.car_model = car_details.get('car_model', '')
+#             #         user.car_year = car_details.get('car_year')
+#             #         user.license_plate = car_details.get('license_plate', '')
+#             #         user.save()
+#         else:
+#             # Create new user
+#             # Prepare basic user data
+#             if role.name == "driver":
+#                 # For drivers, we only have email, phone, city from step 2
+#                 user_data = {
+#                     "email": user_info["email"],
+#                     "phone_number": user_info["phone_number"],
+#                     "is_active": True,
+#                     "is_verified": True,
+#                 }
+#             else:
+#                 # For primary_user, merchant, mechanic - we have first_name, last_name  # noqa
+#                 user_data = {
+#                     "email": user_info["email"],
+#                     "first_name": user_info.get("first_name", ""),
+#                     "last_name": user_info.get("last_name", ""),
+#                     "phone_number": user_info["phone_number"],
+#                     "is_active": True,
+#                     "is_verified": True,
+#                 }
+
+#             # Add car details if primary user has a car
+#             # if role.name == 'primary_user':
+#             #     car_details = session_data.get('registration_car_details', {})
+#             #     if car_details.get('has_car'):
+#             #         user_data.update({
+#             #             'car_make': car_details.get('car_make', ''),
+#             #             'car_model': car_details.get('car_model', ''),
+#             #             'car_year': car_details.get('car_year'),
+#             #             'license_plate': car_details.get('license_plate', '')
+#             #         })
+
+#             # Create user
+#             user = User.objects.create_user(password=password, **user_data)
+
+#         # Assign role (only for new users, existing users already had role added above)   # noqa
+#         if not existing_user:
+#             if role.name == "driver":
+#                 # For drivers, determine actual role based on sub_role
+#                 driver_sub_role = user_info.get("driver_sub_role", "driver")
+#                 if driver_sub_role == "rider":
+#                     rider_role, _ = Role.objects.get_or_create(
+#                         name=Role.RIDER, defaults={"description": "Rider"}
+#                     )
+#                     user.roles.add(rider_role)
+#                     user.active_role = rider_role
+#                 else:
+#                     user.roles.add(role)
+#                     user.active_role = role
+#             else:
+#                 user.roles.add(role)
+#                 user.active_role = role
+
+#             user.save()
+#         else:
+#             # For existing users, set the new role as active role
+#             user.active_role = role
+#             user.save()
+
+#         # Create profile based on role
+#         self.create_user_profile(user, session_data, role)
+
+#         return user
+
+#     def create_user_profile(self, user, session_data, role):
+#         """Create role-specific profile"""
+#         if role.name == "driver" or (
+#             role.name == "driver"
+#             and session_data["registration_user_info"].get("driver_sub_role")
+#             == "driver"
+#         ):  # noqa
+#             # Create driver profile
+#             driver_details = session_data.get("registration_driver_details", {})  # noqa
+#             user_info = session_data["registration_user_info"]
+
+#             DriverProfile.objects.create(
+#                 user=user,
+#                 full_name=driver_details.get("full_name", ""),
+#                 phone_number=user_info.get("phone_number", ""),
+#                 city=user_info.get("city", ""),
+#                 date_of_birth=driver_details.get("date_of_birth"),
+#                 gender=driver_details.get("gender"),
+#                 address=driver_details.get("address", ""),
+#                 location=driver_details.get("location", ""),
+#                 license_number=driver_details.get("license_number", ""),
+#                 license_issue_date=driver_details.get("license_issue_date"),
+#                 license_expiry_date=driver_details.get("license_expiry_date"),
+#                 license_front_image=driver_details.get("license_front_image"),
+#                 license_back_image=driver_details.get("license_back_image"),
+#                 vin=driver_details.get("vin", ""),
+#                 vehicle_name=driver_details.get("vehicle_name", ""),
+#                 plate_number=driver_details.get("plate_number", ""),
+#                 vehicle_model=driver_details.get("vehicle_model", ""),
+#                 vehicle_color=driver_details.get("vehicle_color", ""),
+#                 vehicle_photo_front=driver_details.get("vehicle_photo_front"),
+#                 vehicle_photo_back=driver_details.get("vehicle_photo_back"),
+#                 vehicle_photo_right=driver_details.get("vehicle_photo_right"),
+#                 vehicle_photo_left=driver_details.get("vehicle_photo_left"),
+#                 bank_name=driver_details.get("bank_name", ""),
+#                 account_number=driver_details.get("account_number", ""),
+#             )
+
+#         elif role.name == "merchant":
+#             # Create merchant profile
+#             merchant_details = session_data.get(
+#                 "registration_merchant_details", {}
+#             )  # noqa
+
+#             MerchantProfile.objects.create(
+#                 user=user,
+#                 location=merchant_details.get("location", ""),
+#                 lga=merchant_details.get("lga", ""),
+#                 cac_number=merchant_details.get("cac_number", ""),
+#                 cac_document=merchant_details.get("cac_document"),
+#                 selfie=merchant_details.get("selfie"),
+#                 business_address=merchant_details.get("location", ""),
+#             )
+
+#         elif role.name == "mechanic":
+#             # Create mechanic profile
+#             mechanic_details = session_data.get(
+#                 "registration_mechanic_details", {}
+#             )  # noqa
+
+#             mechanic_profile = MechanicProfile.objects.create(
+#                 user=user,
+#                 location=mechanic_details.get("location", ""),
+#                 lga=mechanic_details.get("lga", ""),
+#                 cac_number=mechanic_details.get("cac_number", ""),
+#                 cac_document=mechanic_details.get("cac_document"),
+#                 selfie=mechanic_details.get("selfie"),
+#                 government_id_front=mechanic_details.get("government_id_front"),
+#                 government_id_back=mechanic_details.get("government_id_back"),
+#                 govt_id_type=mechanic_details.get("govt_id_type"),
+#             )
+
+#             # Create vehicle expertise records
+#             self.create_mechanic_vehicle_expertise(mechanic_profile, mechanic_details)
+
+#     def create_mechanic_vehicle_expertise(
+#         self, mechanic_profile, mechanic_details
+#     ):  # noqa
+#         """Create vehicle expertise records for mechanic.
+#         No longer uses vehicle_make_ids; only expertise_details.
+#         """
+#         from mechanics.models import VehicleMake, MechanicVehicleExpertise
+#         import logging
+#         from rest_framework.exceptions import ValidationError
+
+#         expertise_details = mechanic_details.get("expertise_details", [])
+#         logger = logging.getLogger(__name__)
+
+#         for detail in expertise_details:
+#             vehicle_make_id = detail.get("vehicle_make_id")
+#             if not vehicle_make_id:
+#                 raise ValidationError(
+#                     {
+#                         "vehicle_make_id": "Each expertise detail must contain a vehicle_make_id."
+#                     }
+#                 )
+#             try:
+#                 vehicle_make = VehicleMake.objects.get(id=vehicle_make_id)
+#                 MechanicVehicleExpertise.objects.create(
+#                     mechanic=mechanic_profile,
+#                     vehicle_make=vehicle_make,
+#                     years_of_experience=detail.get("years_of_experience", 0),
+#                     certification_level=detail.get("certification_level", "basic"),
+#                 )
+#             except VehicleMake.DoesNotExist as e:
+#                 logger.error(
+#                     f"VehicleMake with id {vehicle_make_id} does not exist: {e}"
+#                 )
+#                 raise ValidationError(
+#                     {
+#                         "vehicle_make_id": f"Vehicle make with id {vehicle_make_id} does not exist."
+#                     }
+#                 )
+
+#     def clear_registration_session(self, request):
+#         """Clear all registration session data"""
+#         keys_to_clear = [
+#             "registration_role_id",
+#             "registration_user_info",
+#             "registration_car_details",
+#             "registration_driver_details",
+#             "registration_merchant_details",
+#             "registration_mechanic_details",
+#             "registration_driver_sub_role",
+#             "verification_code",
+#             "verification_email",
+#             "email_verified",
+#             "registration_step",
+#             "password",
+#         ]
+
+#         for key in keys_to_clear:
+#             if key in request.session:
+#                 del request.session[key]
 
 
 class PrimaryUserProfileView(APIView):

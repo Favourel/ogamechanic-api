@@ -35,11 +35,11 @@ urlpatterns = [
         name='merchant_follow'
     ),
     # Step-by-step registration (advanced, multi-step flow)
-    path(
-        'register/step/<int:step>/',
-        views.StepByStepRegistrationView.as_view(),
-        name='step_by_step_register'
-    ),
+    # path(
+    #     'register/step/<int:step>/',
+    #     views.StepByStepRegistrationView.as_view(),
+    #     name='step_by_step_register'
+    # ),
     path('login/', views.LoginView.as_view(), name='login'),
     path(
         'token/refresh/',
