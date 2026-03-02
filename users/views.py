@@ -5016,6 +5016,219 @@ class BankAccountListCreateView(APIView):
             pass
 
 
+class BanksListView(APIView):
+    """List available banks from Paystack."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="Get list of available banks with codes",
+        responses={
+            200: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    "status": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                    "message": openapi.Schema(type=openapi.TYPE_STRING),
+                    "data": openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                "name": openapi.Schema(type=openapi.TYPE_STRING),
+                                "slug": openapi.Schema(type=openapi.TYPE_STRING),
+                                "code": openapi.Schema(type=openapi.TYPE_STRING),
+                                "longcode": openapi.Schema(type=openapi.TYPE_STRING),
+                                "gateway": openapi.Schema(type=openapi.TYPE_STRING),
+                                "pay_with_bank": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                "active": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                "country": openapi.Schema(type=openapi.TYPE_STRING),
+                                "currency": openapi.Schema(type=openapi.TYPE_STRING),
+                                "type": openapi.Schema(type=openapi.TYPE_STRING),
+                                "id": openapi.Schema(type=openapi.TYPE_INTEGER),
+                                "createdAt": openapi.Schema(type=openapi.TYPE_STRING),
+                                "updatedAt": openapi.Schema(type=openapi.TYPE_STRING),
+                            },
+                        ),
+                    ),
+                },
+            )
+        },
+    )
+    def get(self, request):
+        """Get list of banks from Paystack."""
+        from django.conf import settings
+        from django.core.cache import cache
+        import requests
+
+        # Check cache first
+        cache_key = "paystack_banks_list"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(
+                api_response(
+                    message="Banks retrieved from cache",
+                    status=True,
+                    data=cached_data,
+                )
+            )
+
+        try:
+            response = requests.get(
+                "https://api.paystack.co/bank",
+                headers={
+                    "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"
+                },
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status"):
+                    # Cache the banks data for 24 hours
+                    cache.set(cache_key, data["data"], timeout=86400)
+                    return Response(
+                        api_response(
+                            message="Banks retrieved successfully",
+                            status=True,
+                            data=data["data"],
+                        )
+                    )
+                else:
+                    return Response(
+                        api_response(
+                            message="Failed to retrieve banks",
+                            status=False,
+                        ),
+                        status=400,
+                    )
+            else:
+                return Response(
+                    api_response(
+                        message="Failed to retrieve banks from Paystack",
+                        status=False,
+                    ),
+                    status=400,
+                )
+        except Exception as e:
+            return Response(
+                api_response(
+                    message=f"An error occurred: {str(e)}",
+                    status=False,
+                ),
+                status=500,
+            )
+
+
+class BankNameEnquiryView(APIView):
+    """Resolve bank account name from account number and bank code."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="Resolve account name from account number and bank code",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=["account_number", "bank_code"],
+            properties={
+                "account_number": openapi.Schema(
+                    type=openapi.TYPE_STRING, description="Account number to resolve"
+                ),
+                "bank_code": openapi.Schema(
+                    type=openapi.TYPE_STRING, description="Bank code for the account"
+                ),
+            },
+        ),
+        responses={
+            200: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    "status": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                    "message": openapi.Schema(type=openapi.TYPE_STRING),
+                    "data": openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        properties={
+                            "account_number": openapi.Schema(type=openapi.TYPE_STRING),
+                            "account_name": openapi.Schema(type=openapi.TYPE_STRING),
+                            "bank_code": openapi.Schema(type=openapi.TYPE_STRING),
+                        },
+                    ),
+                },
+            )
+        },
+    )
+    def post(self, request):
+        """Resolve account name using Paystack."""
+        from django.conf import settings
+        import requests
+
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(api_response(message=data, status=False), status=400)
+
+        account_number = data.get("account_number")
+        bank_code = data.get("bank_code")
+
+        if not account_number or not bank_code:
+            return Response(
+                api_response(
+                    message="account_number and bank_code are required",
+                    status=False,
+                ),
+                status=400,
+            )
+
+        try:
+            response = requests.post(
+                "https://api.paystack.co/bank/resolve",
+                json={
+                    "account_number": account_number,
+                    "bank_code": bank_code,
+                },
+                headers={
+                    "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"
+                },
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status"):
+                    account_data = data["data"]
+                    return Response(
+                        api_response(
+                            message="Account resolved successfully",
+                            status=True,
+                            data={
+                                "account_number": account_number,
+                                "account_name": account_data["account_name"],
+                                "bank_code": bank_code,
+                            },
+                        )
+                    )
+                else:
+                    return Response(
+                        api_response(
+                            message=data.get("message", "Account resolution failed"),
+                            status=False,
+                        ),
+                        status=400,
+                    )
+            else:
+                return Response(
+                    api_response(
+                        message="Failed to resolve account from Paystack",
+                        status=False,
+                    ),
+                    status=400,
+                )
+        except Exception as e:
+            return Response(
+                api_response(
+                    message=f"An error occurred: {str(e)}",
+                    status=False,
+                ),
+                status=500,
+            )
+
+
 class BankAccountDetailView(APIView):
     """Retrieve, update, and delete bank account."""
 

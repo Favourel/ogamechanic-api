@@ -188,6 +188,16 @@ urlpatterns = [
         views.BankAccountDetailView.as_view(),
         name='bank-account-detail'
     ),
+    path(
+        'banks/',
+        views.BanksListView.as_view(),
+        name='banks-list'
+    ),
+    path(
+        'bank/enquiry/',
+        views.BankNameEnquiryView.as_view(),
+        name='bank-name-enquiry'
+    ),
 
     # Paystack Webhooks
     path(
