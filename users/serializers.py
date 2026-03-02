@@ -115,7 +115,8 @@ class RiderProfileSerializer(serializers.ModelSerializer):
             "phone_number",
             "location",
             "selfie",
-            "government_id",
+            "government_id_front",
+            "government_id_back",
             "is_approved",
             "approved_at",
             "is_active",
@@ -149,6 +150,18 @@ class RiderProfileSerializer(serializers.ModelSerializer):
             return f"{settings.SITE_DOMAIN}{url}"
         return url
 
+    def get_government_id_front(self, obj):
+        request = self.context.get('request', None)
+        if obj.government_id_front and hasattr(obj.government_id_front, 'url'):
+            return self._get_absolute_url(obj.government_id_front.url, request)
+        return None
+
+    def get_government_id_back(self, obj):
+        request = self.context.get('request', None)
+        if obj.government_id_back and hasattr(obj.government_id_back, 'url'):
+            return self._get_absolute_url(obj.government_id_back.url, request)
+        return None
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         if data is None:
@@ -156,7 +169,8 @@ class RiderProfileSerializer(serializers.ModelSerializer):
         request = self.context.get('request', None)
         file_fields = [
             'selfie',
-            'government_id',
+            "government_id_front",
+            "government_id_back",
         ]
         for field_name in file_fields:
             value = getattr(instance, field_name, None)
@@ -586,7 +600,8 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "vehicle_photo_back",
             "vehicle_photo_right",
             "vehicle_photo_left",
-            "government_id",
+            "government_id_front",
+            "government_id_back",
             "vehicle_type",
             "vehicle_registration_number",
             "insurance_document",
@@ -655,10 +670,16 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             return self._get_absolute_url(obj.vehicle_photo_left.url, request)
         return None
 
-    def get_government_id(self, obj):
+    def get_government_id_front(self, obj):
         request = self.context.get('request', None)
-        if obj.government_id and hasattr(obj.government_id, 'url'):
-            return self._get_absolute_url(obj.government_id.url, request)
+        if obj.government_id_front and hasattr(obj.government_id_front, 'url'):
+            return self._get_absolute_url(obj.government_id_front.url, request)
+        return None
+
+    def get_government_id_back(self, obj):
+        request = self.context.get('request', None)
+        if obj.government_id_back and hasattr(obj.government_id_back, 'url'):
+            return self._get_absolute_url(obj.government_id_back.url, request)
         return None
 
     def get_driver_license(self, obj):
@@ -706,7 +727,8 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             'vehicle_photo_back',
             'vehicle_photo_right',
             'vehicle_photo_left',
-            'government_id',
+            'government_id_front',
+            'government_id_back',
             'driver_license',
             'insurance_document',
             'selfie'

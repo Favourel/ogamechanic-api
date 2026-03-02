@@ -610,11 +610,32 @@ class DriverProfile(models.Model):
     bank_name = models.CharField(max_length=100, blank=True, null=True)
     account_number = models.CharField(max_length=20, blank=True, null=True)
 
-    # Legacy fields for backward compatibility
-    government_id = models.FileField(
-        upload_to='driver/ids/',
+    GOVT_ID_TYPE_CHOICES = [
+        ("NIN", "NIN"),
+        ("drivers_license", "Drivers license"),
+        ("voters_card", "Voters card"),
+        ("international_passport", "International passport"),
+        ("permanent_voters_card", "Permanent voter’s card"),
+    ]
+
+    govt_id_type = models.CharField(
+        max_length=32,
+        choices=GOVT_ID_TYPE_CHOICES,
+        blank=True,
+        null=True,
+        help_text="Type of government ID provided"
+    )
+    government_id_front = models.FileField(
+        upload_to='driver/ids/government_id/front/',
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
-        blank=True, null=True
+        blank=True, null=True,
+        help_text="Front of Government Identity Card"
+    )
+    government_id_back = models.FileField(
+        upload_to='driver/ids/government_id/back/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True,
+        help_text="Back of Government Identity Card"
     )
     driver_license = models.FileField(
         upload_to='driver/licenses/',
@@ -745,10 +766,32 @@ class RiderProfile(models.Model):
         help_text="Live photo of rider"
     )
 
-    government_id = models.FileField(
-        upload_to='rider/ids/',
+    GOVT_ID_TYPE_CHOICES = [
+        ("NIN", "NIN"),
+        ("drivers_license", "Drivers license"),
+        ("voters_card", "Voters card"),
+        ("international_passport", "International passport"),
+        ("permanent_voters_card", "Permanent voter’s card"),
+    ]
+
+    govt_id_type = models.CharField(
+        max_length=32,
+        choices=GOVT_ID_TYPE_CHOICES,
+        blank=True,
+        null=True,
+        help_text="Type of government ID provided"
+    )
+    government_id_front = models.FileField(
+        upload_to='rider/ids/government_id/front/',
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
-        blank=True, null=True
+        blank=True, null=True,
+        help_text="Front of Government Identity Card"
+    )
+    government_id_back = models.FileField(
+        upload_to='rider/ids/government_id/back/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True,
+        help_text="Back of Government Identity Card"
     )
 
     is_approved = models.BooleanField(default=False)

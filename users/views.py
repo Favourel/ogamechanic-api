@@ -203,7 +203,8 @@ DRIVER_KYC_REQUIRED_FIELDS = [
     "vehicle_photo_back",
     "vehicle_photo_right",
     "vehicle_photo_left",
-    "government_id",
+    "government_id_front",
+    "government_id_back",
     "vehicle_type",
     "vehicle_registration_number",
     "insurance_document",
@@ -214,7 +215,8 @@ RIDER_KYC_REQUIRED_FIELDS = [
     "phone_number",
     "location",
     "selfie",
-    "government_id",
+    "government_id_front",
+    "government_id_back",
 ]
 
 User = get_user_model()
@@ -1184,6 +1186,12 @@ class SwitchRoleView(APIView):
                     print(
                         f"Driver profile for user {user.email}: created={created}"
                     )
+                elif role_name == "rider":
+                    from users.models import RiderProfile
+                    profile, created = RiderProfile.objects.get_or_create(user=user)
+                    print(
+                        f"Driver profile for user {user.email}: created={created}"
+                    )
             else:
                 print(f"User {user.email} already has role {role_name}")
 
@@ -1234,6 +1242,19 @@ class SwitchRoleView(APIView):
                     DriverProfile.objects.create(user=user)
                     profile_exists = True
                     logger.info(f"Fallback: Created driver profile for user {user.email}")
+            
+            elif role_name == "rider":
+                profile_exists = hasattr(user, "rider_profile")
+                profile_required = not profile_exists
+                profile_endpoint = "/api/users/profile/rider/"
+                logger.info(f"Rider profile exists for {user.email}: {profile_exists}")
+
+                # Create basic driver profile if it doesn't exist (fallback)
+                if not profile_exists:
+                    from users.models import RiderProfile
+                    RiderProfile.objects.create(user=user)
+                    profile_exists = True
+                    logger.info(f"Fallback: Created rider profile for user {user.email}")
 
             # Role-specific KYC
             kyc = None
@@ -1251,6 +1272,12 @@ class SwitchRoleView(APIView):
                 kyc = _compute_kyc(
                     getattr(user, "driver_profile", None),
                     DRIVER_KYC_REQUIRED_FIELDS,
+                )
+
+            elif role_name == "rider":
+                kyc = _compute_kyc(
+                    getattr(user, "rider_profile", None),
+                    RIDER_KYC_REQUIRED_FIELDS,
                 )
 
             # Log activity
@@ -2382,7 +2409,7 @@ class RiderProfileManagementView(APIView):
         - phone_number (optional)
         - location (optional)
         - selfie (file, optional)
-        - government_id (file, optional)
+        - government_id_front/government_id_back (file, optional)
         """,
         request_body=RiderProfileSerializer,
         responses={201: RiderProfileSerializer},
@@ -3017,7 +3044,7 @@ class DriverProfileManagementView(APIView):
         
         **Requirements:**
         - User must be authenticated
-        - User must have 'driver' or 'rider' role
+        - User must have 'driver' role
         - User must not already have a driver profile
         
         **Comprehensive Profile Fields:**
@@ -3435,7 +3462,8 @@ class DriverProfileManagementView(APIView):
                 'vehicle_photo_back': driver_profile.vehicle_photo_back,
                 'vehicle_photo_right': driver_profile.vehicle_photo_right,
                 'vehicle_photo_left': driver_profile.vehicle_photo_left,
-                'government_id': driver_profile.government_id,
+                'government_id_front': driver_profile.government_id_front,
+                'ggovernment_id_back': driver_profile.government_id_back,
                 'driver_license': driver_profile.driver_license,
                 'vehicle_photo': driver_profile.vehicle_photo,
                 'insurance_document': driver_profile.insurance_document,
@@ -5159,6 +5187,9 @@ class BankNameEnquiryView(APIView):
         """Resolve account name using Paystack."""
         from django.conf import settings
         import requests
+        import logging
+
+        logger = logging.getLogger(__name__)
 
         status_, data = incoming_request_checks(request)
         if not status_:
@@ -5204,25 +5235,37 @@ class BankNameEnquiryView(APIView):
                         )
                     )
                 else:
+                    logger.error(f"Paystack account resolution failed: {data}")
                     return Response(
                         api_response(
-                            message=data.get("message", "Account resolution failed"),
+                            message="Unable to verify account details. Please check your account number and bank.",
                             status=False,
                         ),
                         status=400,
                     )
             else:
+                logger.error(f"Paystack API error (status {response.status_code}): {response.text}")
                 return Response(
                     api_response(
-                        message="Failed to resolve account from Paystack",
+                        message="Account verification service is temporarily unavailable. Please try again later.",
                         status=False,
                     ),
                     status=400,
                 )
-        except Exception as e:
+        except requests.RequestException as e:
+            logger.exception(f"Network error during Paystack account resolution: {e}")
             return Response(
                 api_response(
-                    message=f"An error occurred: {str(e)}",
+                    message="Account verification service is temporarily unavailable. Please try again later.",
+                    status=False,
+                ),
+                status=500,
+            )
+        except Exception as e:
+            logger.exception(f"Unexpected error during account resolution: {e}")
+            return Response(
+                api_response(
+                    message="An unexpected error occurred. Please try again.",
                     status=False,
                 ),
                 status=500,
