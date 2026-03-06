@@ -588,6 +588,8 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "gender",
             "location",
             "state",
+            "latitude",
+            "longitude",
             "selfie",
             "license_number",
             "license_issue_date",
