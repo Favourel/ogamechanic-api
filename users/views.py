@@ -3401,7 +3401,7 @@ class DriverProfileManagementView(APIView):
         
         **Requirements:**
         - User must be authenticated
-        - User's active role must be 'driver' or 'rider'
+        - User's active role must be 'driver'
         - User must already have a driver profile
         
         **Update Features:**
@@ -3414,7 +3414,7 @@ class DriverProfileManagementView(APIView):
                 "Driver profile updated successfully", DriverProfileSerializer
             ),
             400: "Bad Request - Invalid data",
-            403: "Forbidden - Active role is not driver or rider",
+            403: "Forbidden - Active role is not driver",
             404: "Not Found - Driver profile does not exist",
         },
     )
@@ -3428,13 +3428,13 @@ class DriverProfileManagementView(APIView):
         user = request.user
         is_staff = getattr(request.user, "is_staff", False)
 
-        if not (user.active_role and user.active_role.name in ["driver", "rider"]):
+        if not (user.active_role and user.active_role.name in ["driver"]):
             return Response(
                 api_response(
-                    message="Your active role must be 'driver' or 'rider' to update your driver profile.",
+                    message="Your active role must be 'driver' to update your driver profile.",
                     status=False,
                     data={
-                        "suggestion": "Use /api/users/switch-role/ to switch to the driver or rider role"
+                        "suggestion": "Use /api/users/switch-role/ to switch to the driver role"
                     },
                 ),
                 status=403,
@@ -3450,9 +3450,10 @@ class DriverProfileManagementView(APIView):
             )
 
         serializer = DriverProfileSerializer(
-            user.driver_profile, data=data, partial=True, context={"request": request}
+            user.driver_profile, data=data, partial=True,
         )
         if serializer.is_valid():
+            updated_profile = serializer.save()
             driver_profile = user.driver_profile
             old_docs = {
                 'license_front_image': driver_profile.license_front_image,
@@ -3467,7 +3468,6 @@ class DriverProfileManagementView(APIView):
                 'vehicle_photo': driver_profile.vehicle_photo,
                 'insurance_document': driver_profile.insurance_document,
             }
-            updated_profile = serializer.save()
             if not is_staff and any(getattr(updated_profile, field) != old_docs[field] for field in old_docs):
                 updated_profile.is_approved = False
                 updated_profile.save(update_fields=['is_approved'])
