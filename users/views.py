@@ -160,10 +160,11 @@ def _compute_kyc_from_dict(profile_dict, required_fields):
 
 MERCHANT_KYC_REQUIRED_FIELDS = [
     "location",
+    "state",
+    "lga",
     "cac_number",
     "cac_document",
     "selfie",
-    "business_address",
 ]
 
 MECHANIC_KYC_REQUIRED_FIELDS = [

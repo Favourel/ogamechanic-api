@@ -3556,7 +3556,7 @@ class GeographicHeatMapView(APIView):
             merchant_data = []
             for merchant in merchants:
                 # MerchantProfile has location (text) but no latitude/longitude
-                if merchant.location or merchant.business_address:
+                if merchant.location or merchant.state:
                     merchant_data.append(
                         {
                             "id": str(merchant.id),
@@ -3565,8 +3565,7 @@ class GeographicHeatMapView(APIView):
                             "email": merchant.user.email,
                             "business_name": getattr(merchant, "business_name", "N/A"),
                             "location": {
-                                "address": merchant.location
-                                or merchant.business_address,
+                                "address": merchant.location or merchant.state,
                                 "latitude": None,
                                 "longitude": None,
                             },
