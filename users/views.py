@@ -1904,6 +1904,7 @@ class MerchantProfileManagementView(APIView):
         
         **Profile Fields:**
         - **location**: Business location/address (required)
+        - **store_name**: Store name (optional)
         - **lga**: Local Government Area (required)
         - **cac_number**: Corporate Affairs Commission number (required)
         - **cac_document**: CAC registration document upload (required)
@@ -1936,20 +1937,15 @@ class MerchantProfileManagementView(APIView):
                 "selfie",
             ],  # noqa
             properties={
+                "store_name": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Store name (optional)",
+                    example="Ade's Auto Parts",
+                ),
                 "location": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Business location/address in Nigeria",
                     example="Victoria Island, Lagos",
-                ),
-                "years_of_experience": openapi.Schema(
-                    type=openapi.TYPE_INTEGER,
-                    description="Years of experience (optional)",
-                    example=5,
-                ),
-                "area_of_specialisation": openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description="Area of specialisation (optional)",
-                    example="Engine diagnostics",
                 ),
                 "lga": openapi.Schema(
                     type=openapi.TYPE_STRING,
@@ -2141,6 +2137,7 @@ class MerchantProfileManagementView(APIView):
         - All profile fields can be updated
         
         **Profile Fields (all optional for updates):**
+        - **store_name**: Store name
         - **location**: Business location/address
         - **lga**: Local Government Area
         - **cac_number**: Corporate Affairs Commission number
@@ -2163,6 +2160,11 @@ class MerchantProfileManagementView(APIView):
             type=openapi.TYPE_OBJECT,
             required=[],
             properties={
+                "store_name": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Store name (optional)",
+                    example="Ade's Auto Parts",
+                ),
                 "location": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Business location/address in Nigeria",

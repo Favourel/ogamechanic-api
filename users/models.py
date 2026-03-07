@@ -375,6 +375,7 @@ class MerchantProfile(models.Model):
         'User', on_delete=models.CASCADE, related_name='merchant_profile'
     )
     # Updated fields for new onboarding
+    store_name = models.CharField(max_length=255, blank=True, null=True)
     location = models.CharField(max_length=255, blank=True, null=True)
     lga = models.CharField(
         max_length=100, blank=True, null=True

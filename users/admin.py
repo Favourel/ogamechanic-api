@@ -126,13 +126,14 @@ class NotificationAdmin(admin.ModelAdmin):
 class MerchantProfileAdmin(admin.ModelAdmin):
     list_display = (
         "user",
+        "store_name",
         "cac_number",
         "state",
         "location",
         "created_at",
         "updated_at",
     )
-    search_fields = ("user__email", "cac_number", "state")
+    search_fields = ("user__email", "store_name", "cac_number", "state")
     list_filter = ("created_at", "updated_at")
     readonly_fields = ("created_at", "updated_at")
     autocomplete_fields = ("user",)

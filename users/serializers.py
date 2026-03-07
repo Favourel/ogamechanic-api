@@ -417,6 +417,7 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "user",
+            "store_name",
             "location",
             "lga",
             "cac_number",
