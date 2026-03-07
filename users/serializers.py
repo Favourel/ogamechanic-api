@@ -119,6 +119,8 @@ class RiderProfileSerializer(serializers.ModelSerializer):
             "selfie",
             "government_id_front",
             "government_id_back",
+            "longitude",
+            "latitude",
             "is_approved",
             "approved_at",
             "is_active",

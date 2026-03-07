@@ -162,6 +162,7 @@ MERCHANT_KYC_REQUIRED_FIELDS = [
     "location",
     "state",
     "lga",
+    "store_name",
     "cac_number",
     "cac_document",
     "selfie",

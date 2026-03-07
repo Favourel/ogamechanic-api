@@ -377,6 +377,14 @@ class MerchantProfile(models.Model):
     # Updated fields for new onboarding
     store_name = models.CharField(max_length=255, blank=True, null=True)
     location = models.CharField(max_length=255, blank=True, null=True)
+    # For production with PostgreSQL, uncomment the PointField
+    # location = gis_models.PointField(null=True, blank=True, srid=4326)
+    latitude = models.DecimalField(
+        max_digits=20, decimal_places=17, null=True, blank=True
+    )
+    longitude = models.DecimalField(
+        max_digits=20, decimal_places=17, null=True, blank=True
+    )
     lga = models.CharField(
         max_length=100, blank=True, null=True
     )  # Local Government Area
@@ -761,6 +769,14 @@ class RiderProfile(models.Model):
     full_name = models.CharField(max_length=255, blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     location = models.CharField(max_length=255, blank=True, null=True)
+    latitude = models.DecimalField(
+        max_digits=20, decimal_places=17, null=True, blank=True,
+        help_text="Mechanic's location latitude for proximity-based requests"
+    )
+    longitude = models.DecimalField(
+        max_digits=20, decimal_places=17, null=True, blank=True,
+        help_text="Mechanic's location longitude for proximity-based requests"
+    )
     city = models.CharField(max_length=100, blank=True, null=True)
     state = models.CharField(max_length=100, blank=True, null=True)
     selfie = models.ImageField(
@@ -817,6 +833,37 @@ class RiderProfile(models.Model):
 
     def __str__(self):
         return f"RiderProfile: {self.user.email}"
+
+    def update_location(self, lat: float, lon: float):
+        """
+        Update driver location with enhanced tracking
+        """
+        from django.utils import timezone
+        from ogamechanic.modules.location_service import LocationService # noqa
+
+        self.latitude = lat
+        self.longitude = lon
+        self.last_location_update = timezone.now()
+        self.save()
+
+    def get_distance_to(self, lat: float, lon: float) -> float:
+        """
+        Calculate distance to a point in kilometers using Haversine formula
+        """
+        if not self.latitude or not self.longitude:
+            return float('inf')
+
+        from ogamechanic.modules.location_service import LocationService
+        return LocationService.haversine_distance(
+            float(self.latitude), float(self.longitude), lat, lon
+        )
+
+    def is_within_radius(self, lat: float, lon: float, radius_km: float) -> bool: # noqa
+        """
+        Check if driver is within specified radius
+        """
+        distance = self.get_distance_to(lat, lon)
+        return distance <= radius_km
 
 
 class DriverReview(models.Model):
