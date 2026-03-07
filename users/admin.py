@@ -127,12 +127,12 @@ class MerchantProfileAdmin(admin.ModelAdmin):
     list_display = (
         "user",
         "cac_number",
-        "business_address",
+        "state",
         "location",
         "created_at",
         "updated_at",
     )
-    search_fields = ("user__email", "cac_number", "business_address")
+    search_fields = ("user__email", "cac_number", "state")
     list_filter = ("created_at", "updated_at")
     readonly_fields = ("created_at", "updated_at")
     autocomplete_fields = ("user",)

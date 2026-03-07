@@ -399,7 +399,7 @@ class MerchantProfile(models.Model):
     is_active = models.BooleanField(default=True)
     disapproved = models.BooleanField(default=False)
     disapproval_reason = models.TextField(blank=True, null=True)
-    business_address = models.CharField(max_length=255)
+    state = models.CharField(max_length=100, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -431,6 +431,9 @@ class MechanicProfile(models.Model):
     longitude = models.DecimalField(
         max_digits=20, decimal_places=17, null=True, blank=True,
         help_text="Mechanic's location longitude for proximity-based requests"
+    )
+    area_of_specialisation = models.CharField(
+        max_length=255, blank=True, null=True
     )
     bio = models.TextField(null=True, blank=True)
     lga = models.CharField(
@@ -607,10 +610,6 @@ class DriverProfile(models.Model):
         upload_to='driver/vehicle_photos/left/',
         blank=True, null=True
     )
-
-    # Bank Information
-    bank_name = models.CharField(max_length=100, blank=True, null=True)
-    account_number = models.CharField(max_length=20, blank=True, null=True)
 
     GOVT_ID_TYPE_CHOICES = [
         ("NIN", "NIN"),
@@ -875,6 +874,7 @@ class BankAccount(models.Model):
     account_name = models.CharField(max_length=255)
     bank_code = models.CharField(max_length=10)
     bank_name = models.CharField(max_length=255)
+    is_default = models.BooleanField(default=False)
     is_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     paystack_recipient_code = models.CharField(
@@ -899,6 +899,15 @@ class BankAccount(models.Model):
 
     def __str__(self):
         return f"{self.account_name} - {self.bank_name} ({self.account_number})" # noqa
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.is_default:
+            (
+                BankAccount.objects.filter(user=self.user)
+                .exclude(id=self.id)
+                .update(is_default=False)
+            )
 
     def get_display_name(self):
         """Get formatted display name for the bank account."""

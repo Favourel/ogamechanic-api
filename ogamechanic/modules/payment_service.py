@@ -34,14 +34,14 @@ class PaymentService:
     ) -> Dict[str, Any]:
         """
         Initialize a Paystack payment.
-        
+
         Args:
             email: Customer email
             amount: Amount in NGN
             reference: Unique payment reference
             callback_url: Webhook callback URL
             metadata: Additional payment metadata
-            
+
         Returns:
             Dict containing payment initialization response
         """
@@ -92,10 +92,10 @@ class PaymentService:
     def verify_paystack_payment(reference: str) -> Dict[str, Any]:
         """
         Verify a Paystack payment.
-        
+
         Args:
             reference: Payment reference to verify
-            
+
         Returns:
             Dict containing verification response
         """
@@ -134,11 +134,11 @@ class PaymentService:
     def verify_webhook_signature(payload: bytes, signature: str) -> bool:
         """
         Verify Paystack webhook signature.
-        
+
         Args:
             payload: Raw webhook payload
             signature: Webhook signature header
-            
+
         Returns:
             True if signature is valid, False otherwise
         """
@@ -154,28 +154,27 @@ class PaymentService:
     def resolve_bank_account(account_number: str, bank_code: str) -> Dict[str, Any]: # noqa
         """
         Resolve bank account details with Paystack.
-        
+
         Args:
             account_number: Bank account number
             bank_code: Bank code
-            
+
         Returns:
             Dict containing account resolution response
         """
         headers = {
             'Authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}',
-            'Content-Type': 'application/json',
         }
 
-        payload = {
+        params = {
             'account_number': account_number,
             'bank_code': bank_code
         }
 
         try:
-            response = requests.post(
+            response = requests.get(
                 'https://api.paystack.co/bank/resolve',
-                json=payload,
+                params=params,
                 headers=headers,
                 timeout=30
             )
@@ -212,7 +211,7 @@ class PaymentService:
     def get_bank_list() -> Dict[str, Any]:
         """
         Get list of supported banks from Paystack.
-        
+
         Returns:
             Dict containing bank list
         """

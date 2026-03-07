@@ -140,6 +140,31 @@ class RiderProfileSerializer(serializers.ModelSerializer):
         from users.serializers import UserSerializer
         return UserSerializer(obj.user).data
 
+    def get_default_bank_account(self, obj):
+        from users.models import BankAccount
+        from users.serializers import BankAccountSerializer
+
+        bank_account = (
+            BankAccount.objects.filter(
+                user=obj.user,
+                is_active=True,
+                is_default=True,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if not bank_account:
+            bank_account = (
+                BankAccount.objects.filter(user=obj.user, is_active=True)
+                .order_by("-created_at")
+                .first()
+            )
+
+        if not bank_account:
+            return None
+
+        return BankAccountSerializer(bank_account).data
+
     def _get_absolute_url(self, url, request=None):
         if not url:
             return None
@@ -397,7 +422,7 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             "cac_number",
             "cac_document",
             "selfie",
-            "business_address",
+            "state",
             "is_approved",
             "created_at",
             "updated_at",
@@ -455,6 +480,7 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
     has_active_repair_request = serializers.SerializerMethodField()
+    vehicle_expertise = serializers.SerializerMethodField()
 
     class Meta:
         model = MechanicProfile
@@ -464,6 +490,7 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             "location",
             "latitude",
             "longitude",
+            "area_of_specialisation",
             "bio",
             "lga",
             "cac_number",
@@ -477,6 +504,7 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             "updated_at",
             "rating",
             "has_active_repair_request",
+            "vehicle_expertise",
         ]
         read_only_fields = [
             "id",
@@ -486,6 +514,7 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             "updated_at",
             "rating",
             "has_active_repair_request",
+            "vehicle_expertise",
         ]
         ref_name = "UsersMechanicProfileSerializer"
 
@@ -556,6 +585,11 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             status__in=['accepted', 'in_progress']
         ).exists()
 
+    def get_vehicle_expertise(self, obj):
+        from mechanics.serializers import MechanicVehicleExpertiseSerializer
+        queryset = obj.vehicle_expertise.select_related('vehicle_make').all()
+        return MechanicVehicleExpertiseSerializer(queryset, many=True).data
+
     def create(self, validated_data):
         user = self.context['request'].user
         validated_data['user'] = user
@@ -575,12 +609,14 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
 
 class DriverProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
+    default_bank_account = serializers.SerializerMethodField()
 
     class Meta:
         model = DriverProfile
         fields = [
             "id",
             "user",
+            "default_bank_account",
             "full_name",
             "phone_number",
             "city",
@@ -611,7 +647,7 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "vehicle_registration_number",
             "insurance_document",
             "driver_license",
-            "rating"
+            "rating",
         ]
         read_only_fields = [
             "id",
@@ -880,6 +916,7 @@ class BankAccountSerializer(serializers.ModelSerializer):
             "account_name",
             "bank_code",
             "bank_name",
+            "is_default",
             "is_verified",
             "is_active",
             "paystack_recipient_code",
@@ -912,7 +949,7 @@ class BankAccountCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BankAccount
-        fields = ["account_number", "account_name", "bank_code"]
+        fields = ["account_number", "account_name", "bank_code", "is_default"]
 
     def create(self, validated_data):
         """Create bank account and verify with Paystack."""
@@ -930,6 +967,10 @@ class BankAccountCreateSerializer(serializers.ModelSerializer):
         bank_name = self._get_bank_name(validated_data["bank_code"])
         validated_data["bank_name"] = bank_name
 
+        # If user has no default account yet, make this one default
+        if not BankAccount.objects.filter(user=user, is_default=True).exists():
+            validated_data["is_default"] = True
+
         return super().create(validated_data)
 
     def _get_bank_name(self, bank_code):
@@ -939,16 +980,20 @@ class BankAccountCreateSerializer(serializers.ModelSerializer):
 
         try:
             response = requests.get(
-                f"https://api.paystack.co/bank/{bank_code}",
+                "https://api.paystack.co/bank",
                 headers={
                     "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"
                 },  # noqa
+                timeout=30,
             )
             if response.status_code == 200:
                 data = response.json()
-                return data.get("data", {}).get("name", "Unknown Bank")
-        except Exception:
-            pass
+                banks = data.get("data") or []
+                for bank in banks:
+                    if str(bank.get("code")) == str(bank_code):
+                        return bank.get("name") or "Unknown Bank"
+        except requests.RequestException:
+            return "Unknown Bank"
 
         return "Unknown Bank"
 

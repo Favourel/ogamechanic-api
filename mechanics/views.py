@@ -13,17 +13,18 @@ from ogamechanic.modules.utils import (
 )
 from ogamechanic.modules.paginations import CustomLimitOffsetPagination
 from .models import (
-    RepairRequest, TrainingSession, VehicleMake
+    RepairRequest, TrainingSession, VehicleMake, MechanicVehicleExpertise
 )
 from .serializers import (
     RepairRequestSerializer,
     RepairRequestListSerializer,
-    RepairRequestStatusUpdateSerializer,
+    # RepairRequestStatusUpdateSerializer,
     TrainingSessionSerializer,
     VehicleMakeSerializer,
     TrainingSessionListSerializer,
     TrainingSessionParticipantSerializer,
     TrainingSessionParticipantListSerializer,
+    MechanicVehicleExpertiseSerializer,
 )
 from .tasks import find_and_notify_mechanics_task
 from users.serializers import MechanicProfileSerializer
@@ -1201,21 +1202,20 @@ class VehicleMakeListView(APIView):
         responses={
             201: VehicleMakeSerializer(),
             400: "Bad Request",
-            403: "Forbidden"
-        }
+            403: "Forbidden",
+        },
     )
     def post(self, request):
-        """
-        Create a new vehicle make or model. Admin only.
-        """
+        """Create a new vehicle make or model. Admin only."""
         if not request.user.is_authenticated or not request.user.is_staff:
             return Response(
                 api_response(
-                    message="You do not have permission to perform this action.", # noqa
-                    status=False
+                    message="You do not have permission to perform this action.",
+                    status=False,
                 ),
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
+
         serializer = VehicleMakeSerializer(data=request.data)
         if serializer.is_valid():
             vehicle_make = serializer.save()
@@ -1223,16 +1223,13 @@ class VehicleMakeListView(APIView):
                 api_response(
                     message="Vehicle make/model created successfully.",
                     status=True,
-                    data=VehicleMakeSerializer(vehicle_make).data
+                    data=VehicleMakeSerializer(vehicle_make).data,
                 ),
-                status=status.HTTP_201_CREATED
+                status=status.HTTP_201_CREATED,
             )
         return Response(
-            api_response(
-                message=serializer.errors,
-                status=False
-            ),
-            status=status.HTTP_400_BAD_REQUEST
+            api_response(message=serializer.errors, status=False),
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     @swagger_auto_schema(
@@ -1240,121 +1237,273 @@ class VehicleMakeListView(APIView):
         request_body=VehicleMakeSerializer,
         manual_parameters=[
             openapi.Parameter(
-                'id', openapi.IN_QUERY, description="ID of the vehicle make/model to update", # noqa
-                type=openapi.TYPE_INTEGER, required=True
+                'id',
+                openapi.IN_QUERY,
+                description="ID of the vehicle make/model to update",
+                type=openapi.TYPE_INTEGER,
+                required=True,
             )
         ],
         responses={
             200: VehicleMakeSerializer(),
             400: "Bad Request",
             403: "Forbidden",
-            404: "Not Found"
-        }
+            404: "Not Found",
+        },
     )
     def patch(self, request):
-        """
-        Update a vehicle make or model. Admin only.
-        """
+        """Update a vehicle make or model. Admin only."""
         if not request.user.is_authenticated or not request.user.is_staff:
             return Response(
                 api_response(
-                    message="You do not have permission to perform this action.", # noqa
-                    status=False
+                    message="You do not have permission to perform this action.",
+                    status=False,
                 ),
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
+
         vehicle_make_id = request.query_params.get('id')
         if not vehicle_make_id:
             return Response(
                 api_response(
                     message="Vehicle make/model ID is required.",
-                    status=False
+                    status=False,
                 ),
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
+
         try:
             vehicle_make = VehicleMake.objects.get(id=vehicle_make_id)
         except VehicleMake.DoesNotExist:
             return Response(
                 api_response(
                     message="Vehicle make/model not found.",
-                    status=False
+                    status=False,
                 ),
-                status=status.HTTP_404_NOT_FOUND
+                status=status.HTTP_404_NOT_FOUND,
             )
+
         serializer = VehicleMakeSerializer(
-            vehicle_make, data=request.data, partial=True)
+            vehicle_make,
+            data=request.data,
+            partial=True,
+        )
         if serializer.is_valid():
-            vehicle_make = serializer.save()
+            updated = serializer.save()
             return Response(
                 api_response(
                     message="Vehicle make/model updated successfully.",
                     status=True,
-                    data=VehicleMakeSerializer(vehicle_make).data
+                    data=VehicleMakeSerializer(updated).data,
                 ),
-                status=status.HTTP_200_OK
+                status=status.HTTP_200_OK,
             )
         return Response(
-            api_response(
-                message=serializer.errors,
-                status=False
-            ),
-            status=status.HTTP_400_BAD_REQUEST
+            api_response(message=serializer.errors, status=False),
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     @swagger_auto_schema(
         operation_summary="Delete a Vehicle Make or Model",
         manual_parameters=[
             openapi.Parameter(
-                'id', openapi.IN_QUERY, description="ID of the vehicle make/model to delete", # noqa
-                type=openapi.TYPE_INTEGER, required=True
+                'id',
+                openapi.IN_QUERY,
+                description="ID of the vehicle make/model to delete",
+                type=openapi.TYPE_INTEGER,
+                required=True,
             )
         ],
         responses={
             204: "No Content",
+            400: "Bad Request",
             403: "Forbidden",
-            404: "Not Found"
-        }
+            404: "Not Found",
+        },
     )
     def delete(self, request):
-        """
-        Delete a vehicle make or model. Admin only.
-        """
+        """Delete a vehicle make or model. Admin only."""
         if not request.user.is_authenticated or not request.user.is_staff:
             return Response(
                 api_response(
-                    message="You do not have permission to perform this action.", # noqa
-                    status=False
+                    message="You do not have permission to perform this action.",
+                    status=False,
                 ),
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
+
         vehicle_make_id = request.query_params.get('id')
         if not vehicle_make_id:
             return Response(
                 api_response(
                     message="Vehicle make/model ID is required.",
-                    status=False
+                    status=False,
                 ),
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
+
         try:
             vehicle_make = VehicleMake.objects.get(id=vehicle_make_id)
         except VehicleMake.DoesNotExist:
             return Response(
                 api_response(
                     message="Vehicle make/model not found.",
-                    status=False
+                    status=False,
                 ),
-                status=status.HTTP_404_NOT_FOUND
+                status=status.HTTP_404_NOT_FOUND,
             )
+
         vehicle_make.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MechanicVehicleExpertiseListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="List My Vehicle Expertise",
+        operation_description=(
+            "List the authenticated mechanic's vehicle expertise records."
+        ),
+        responses={200: MechanicVehicleExpertiseSerializer(many=True)},
+    )
+    def get(self, request):
+        user = request.user
+        mechanic_profile = getattr(user, "mechanic_profile", None)
+        if mechanic_profile is None:
+            return Response(
+                api_response(
+                    message="Mechanic profile not found.",
+                    status=False,
+                ),
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        queryset = (
+            MechanicVehicleExpertise.objects.filter(mechanic=mechanic_profile)
+            .select_related("vehicle_make")
+            .order_by("-years_of_experience", "vehicle_make__name")
+        )
+        serializer = MechanicVehicleExpertiseSerializer(queryset, many=True)
         return Response(
             api_response(
-                message="Vehicle make/model deleted successfully.",
-                status=True
-            ),
-            status=status.HTTP_204_NO_CONTENT
+                message="Vehicle expertise retrieved successfully.",
+                status=True,
+                data=serializer.data,
+            )
         )
+
+    @swagger_auto_schema(
+        operation_summary="Create Vehicle Expertise",
+        operation_description=(
+            "Create a new vehicle expertise record for the authenticated mechanic. "
+            "One expertise per vehicle make."
+        ),
+        request_body=MechanicVehicleExpertiseSerializer,
+        responses={201: MechanicVehicleExpertiseSerializer()},
+    )
+    def post(self, request):
+        user = request.user
+        mechanic_profile = getattr(user, "mechanic_profile", None)
+        if mechanic_profile is None:
+            return Response(
+                api_response(message="Mechanic profile not found.", status=False),
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = MechanicVehicleExpertiseSerializer(data=request.data)
+        if serializer.is_valid():
+            vehicle_make_id = serializer.validated_data.get("vehicle_make_id")
+            if MechanicVehicleExpertise.objects.filter(
+                mechanic=mechanic_profile, vehicle_make_id=vehicle_make_id
+            ).exists():
+                return Response(
+                    api_response(
+                        message="Vehicle expertise already exists for this make.",
+                        status=False,
+                    ),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            expertise = serializer.save(mechanic=mechanic_profile)
+            return Response(
+                api_response(
+                    message="Vehicle expertise created successfully.",
+                    status=True,
+                    data=MechanicVehicleExpertiseSerializer(expertise).data,
+                ),
+                status=status.HTTP_201_CREATED,
+            )
+
+        return Response(
+            api_response(message=serializer.errors, status=False),
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+class MechanicVehicleExpertiseDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get_expertise(self, request, expertise_id):
+        mechanic_profile = getattr(request.user, "mechanic_profile", None)
+        if mechanic_profile is None:
+            return None
+        return get_object_or_404(
+            MechanicVehicleExpertise,
+            id=expertise_id,
+            mechanic=mechanic_profile,
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Update Vehicle Expertise",
+        operation_description="Update an existing vehicle expertise record.",
+        request_body=MechanicVehicleExpertiseSerializer,
+        responses={200: MechanicVehicleExpertiseSerializer()},
+    )
+    def patch(self, request, expertise_id):
+        expertise = self._get_expertise(request, expertise_id)
+        if expertise is None:
+            return Response(
+                api_response(
+                    message="Mechanic profile not found.",
+                    status=False,
+                ),
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = MechanicVehicleExpertiseSerializer(
+            expertise, data=request.data, partial=True
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                api_response(
+                    message="Vehicle expertise updated successfully.",
+                    status=True,
+                    data=serializer.data,
+                )
+            )
+
+        return Response(
+            api_response(message=serializer.errors, status=False),
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Delete Vehicle Expertise",
+        operation_description="Delete an existing vehicle expertise record.",
+        responses={204: "No Content"},
+    )
+    def delete(self, request, expertise_id):
+        expertise = self._get_expertise(request, expertise_id)
+        if expertise is None:
+            return Response(
+                api_response(message="Mechanic profile not found.", status=False),
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        expertise.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class MechanicDetailView(APIView):

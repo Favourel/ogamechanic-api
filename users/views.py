@@ -1716,7 +1716,7 @@ class MerchantProfileManagementView(APIView):
                                             type=openapi.TYPE_STRING,
                                             description="URL to selfie",
                                         ),
-                                        "business_address": openapi.Schema(
+                                        "state": openapi.Schema(
                                             type=openapi.TYPE_STRING
                                         ),
                                         "is_approved": openapi.Schema(
@@ -1907,7 +1907,7 @@ class MerchantProfileManagementView(APIView):
         - **cac_number**: Corporate Affairs Commission number (required)
         - **cac_document**: CAC registration document upload (required)
         - **selfie**: Live photo of merchant for verification (required)
-        - **business_address**: Physical business address (optional)
+        - **state**: State (optional)
         
         **File Upload Requirements:**
         - **cac_document**: PDF, JPG, JPEG, PNG (max size varies)
@@ -1940,6 +1940,16 @@ class MerchantProfileManagementView(APIView):
                     description="Business location/address in Nigeria",
                     example="Victoria Island, Lagos",
                 ),
+                "years_of_experience": openapi.Schema(
+                    type=openapi.TYPE_INTEGER,
+                    description="Years of experience (optional)",
+                    example=5,
+                ),
+                "area_of_specialisation": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Area of specialisation (optional)",
+                    example="Engine diagnostics",
+                ),
                 "lga": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Local Government Area",
@@ -1958,10 +1968,10 @@ class MerchantProfileManagementView(APIView):
                     type=openapi.TYPE_FILE,
                     description="Live photo of merchant for verification (Image only)",  # noqa
                 ),
-                "business_address": openapi.Schema(
+                "state": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description="Physical business address (optional)",
-                    example="123 Business Street, Victoria Island",
+                    description="State (optional)",
+                    example="Lagos",
                 ),
             },
         ),
@@ -2085,7 +2095,7 @@ class MerchantProfileManagementView(APIView):
                 status=400,
             )
 
-        serializer = MerchantProfileSerializer(data=data)
+        serializer = MerchantProfileSerializer(data=data, context={"request": request})
         if serializer.is_valid():
             serializer.save(user=user)
             return Response(
@@ -2135,7 +2145,7 @@ class MerchantProfileManagementView(APIView):
         - **cac_number**: Corporate Affairs Commission number
         - **cac_document**: New CAC registration document upload
         - **selfie**: New live photo of merchant
-        - **business_address**: Physical business address
+        - **state**: State
         
         **File Upload Requirements:**
         - **cac_document**: PDF, JPG, JPEG, PNG (max size varies)
@@ -2175,10 +2185,10 @@ class MerchantProfileManagementView(APIView):
                     type=openapi.TYPE_FILE,
                     description="Updated live photo of merchant for verification",  # noqa
                 ),
-                "business_address": openapi.Schema(
+                "state": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    description="Updated physical business address",
-                    example="456 New Business Avenue, Lekki",
+                    description="Updated state",
+                    example="Lagos",
                 ),
             },
         ),
@@ -2735,7 +2745,7 @@ class MechanicProfileManagementView(APIView):
             )
 
         serializer = MechanicProfileSerializer(
-            mechanic_profile, data=data, partial=True
+            mechanic_profile, data=data, partial=True, context={"request": request}
         )
 
         if serializer.is_valid():
@@ -2847,7 +2857,7 @@ class MechanicProfileManagementView(APIView):
                 status=400,
             )
 
-        serializer = MechanicProfileSerializer(data=data)
+        serializer = MechanicProfileSerializer(data=data, context={"request": request})
         if serializer.is_valid():
             serializer.save(user=user)
             return Response(
@@ -3078,9 +3088,9 @@ class DriverProfileManagementView(APIView):
         - **vehicle_photo_right**: Right side view
         - **vehicle_photo_left**: Left side view
         
-        **Banking Information (Required):**
-        - **bank_name**: Bank name for payments
-        - **account_number**: Bank account number
+        **Banking Information:**
+        Bank details are managed separately via the BankAccount endpoints.
+        Use `/api/users/bank-accounts/` to add and verify a bank account.
         
         **File Upload Requirements:**
         - **License images**: JPG, JPEG, PNG only
@@ -3125,8 +3135,6 @@ class DriverProfileManagementView(APIView):
                 "vehicle_photo_back",
                 "vehicle_photo_right",
                 "vehicle_photo_left",
-                "bank_name",
-                "account_number",
             ],  # noqa
             properties={
                 "full_name": openapi.Schema(
@@ -3225,16 +3233,6 @@ class DriverProfileManagementView(APIView):
                 ),
                 "vehicle_photo_left": openapi.Schema(
                     type=openapi.TYPE_FILE, description="Left side view of vehicle"
-                ),
-                "bank_name": openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description="Bank name for payment processing",
-                    example="First Bank of Nigeria",
-                ),
-                "account_number": openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description="Bank account number",
-                    example="1234567890",
                 ),
             },
         ),
@@ -3363,7 +3361,7 @@ class DriverProfileManagementView(APIView):
                 status=400,
             )
 
-        serializer = DriverProfileSerializer(data=data)
+        serializer = DriverProfileSerializer(data=data, context={"request": request})
         if serializer.is_valid():
             serializer.save(user=user)
             return Response(
@@ -3450,7 +3448,10 @@ class DriverProfileManagementView(APIView):
             )
 
         serializer = DriverProfileSerializer(
-            user.driver_profile, data=data, partial=True,
+            user.driver_profile,
+            data=data,
+            partial=True,
+            context={"request": request},
         )
         if serializer.is_valid():
             updated_profile = serializer.save()
@@ -5000,6 +5001,12 @@ class BankAccountListCreateView(APIView):
         if serializer.is_valid():
             bank_account = serializer.save(user=request.user)
 
+            if not BankAccount.objects.filter(
+                user=request.user, is_default=True, is_active=True
+            ).exists():
+                bank_account.is_default = True
+                bank_account.save(update_fields=["is_default"])
+
             # Verify account with Paystack
             self._verify_bank_account(bank_account)
 
@@ -5020,18 +5027,22 @@ class BankAccountListCreateView(APIView):
         """Verify bank account with Paystack."""
         from django.conf import settings
         import requests
+        import logging
+
+        logger = logging.getLogger(__name__)
 
         try:
             # Verify account number
-            response = requests.post(
+            response = requests.get(
                 "https://api.paystack.co/bank/resolve",
-                json={
+                params={
                     "account_number": bank_account.account_number,
                     "bank_code": bank_account.bank_code,
                 },
                 headers={
                     "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"
                 },  # noqa
+                timeout=30,
             )
 
             if response.status_code == 200:
@@ -5040,8 +5051,29 @@ class BankAccountListCreateView(APIView):
                     bank_account.account_name = data["data"]["account_name"]
                     bank_account.is_verified = True
                     bank_account.save()
+                else:
+                    logger.error(
+                        "Paystack bank resolve returned status false for bank_account_id=%s: %s",
+                        getattr(bank_account, "id", None),
+                        data,
+                    )
+            else:
+                logger.error(
+                    "Paystack bank resolve failed for bank_account_id=%s (status %s): %s",
+                    getattr(bank_account, "id", None),
+                    response.status_code,
+                    response.text,
+                )
+        except requests.RequestException:
+            logger.exception(
+                "Network error verifying bank account with Paystack for bank_account_id=%s",
+                getattr(bank_account, "id", None),
+            )
         except Exception:
-            pass
+            logger.exception(
+                "Unexpected error verifying bank account with Paystack for bank_account_id=%s",
+                getattr(bank_account, "id", None),
+            )
 
 
 class BanksListView(APIView):
@@ -5321,7 +5353,12 @@ class BankAccountDetailView(APIView):
                 bank_account, data=request.data, partial=True
             )
             if serializer.is_valid():
-                serializer.save()
+                updated = serializer.save()
+
+                if getattr(updated, "is_default", False):
+                    BankAccount.objects.filter(user=request.user).exclude(
+                        id=updated.id
+                    ).update(is_default=False)
                 return Response(
                     api_response(
                         message="Bank account updated successfully",
@@ -5613,7 +5650,7 @@ class WalletWithdrawalView(APIView):
         serializer = WalletWithdrawalSerializer(data=request.data)
         if serializer.is_valid():
             amount = serializer.validated_data["amount"]
-            bank_account_id = serializer.validated_data["bank_account_id"]
+            bank_account_id = serializer.validated_data.get("bank_account_id")
             description = serializer.validated_data.get(
                 "description", "Wallet withdrawal"
             )  # noqa
@@ -5627,15 +5664,42 @@ class WalletWithdrawalView(APIView):
                     status=400,
                 )
 
-            try:
-                bank_account = BankAccount.objects.get(
-                    id=bank_account_id, user=request.user, is_active=True
+            if bank_account_id:
+                try:
+                    bank_account = BankAccount.objects.get(
+                        id=bank_account_id, user=request.user, is_active=True
+                    )
+                except BankAccount.DoesNotExist:
+                    return Response(
+                        api_response(message="Invalid bank account", status=False),
+                        status=400,
+                    )
+            else:
+                bank_account = (
+                    BankAccount.objects.filter(
+                        user=request.user, is_active=True, is_default=True
+                    )
+                    .order_by("-created_at")
+                    .first()
                 )
-            except BankAccount.DoesNotExist:
-                return Response(
-                    api_response(message="Invalid bank account", status=False),
-                    status=400,
-                )
+                if not bank_account:
+                    bank_account = (
+                        BankAccount.objects.filter(
+                            user=request.user, is_active=True
+                        )
+                        .order_by("-created_at")
+                        .first()
+                    )
+                if not bank_account:
+                    return Response(
+                        api_response(
+                            message=(
+                                "No active bank account found. Please add a bank account before withdrawing."
+                            ),
+                            status=False,
+                        ),
+                        status=400,
+                    )
 
             # Create withdrawal transaction
             transaction = Transaction.objects.create(
@@ -7221,6 +7285,26 @@ class PrimaryUserProfileView(APIView):
                 "profile_picture": openapi.Schema(
                     type=openapi.TYPE_FILE, description="Profile picture (image file)"
                 ),
+                "car_make": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Car make (optional)",
+                    example="Toyota",
+                ),
+                "car_model": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Car model (optional)",
+                    example="Corolla",
+                ),
+                "car_year": openapi.Schema(
+                    type=openapi.TYPE_INTEGER,
+                    description="Car year (optional)",
+                    example=2020,
+                ),
+                "license_plate": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="License plate (optional)",
+                    example="ABC123",
+                ),
             },
         ),
         responses={
@@ -7359,6 +7443,40 @@ class PrimaryUserProfileView(APIView):
                 user.profile_picture = profile_picture
                 updated_fields.append("profile_picture")
 
+            # Update car details
+            if "car_make" in data:
+                user.car_make = (data.get("car_make") or "").strip() or None
+                updated_fields.append("car_make")
+
+            if "car_model" in data:
+                user.car_model = (data.get("car_model") or "").strip() or None
+                updated_fields.append("car_model")
+
+            if "car_year" in data:
+                car_year = data.get("car_year")
+                if car_year in [None, ""]:
+                    user.car_year = None
+                    updated_fields.append("car_year")
+                else:
+                    try:
+                        user.car_year = int(car_year)
+                        updated_fields.append("car_year")
+                    except Exception:
+                        return Response(
+                            api_response(
+                                message="Invalid car_year",
+                                status=False,
+                                errors={"car_year": ["Must be an integer"]},
+                            ),
+                            status=http_status.HTTP_400_BAD_REQUEST,
+                        )
+
+            if "license_plate" in data:
+                user.license_plate = (
+                    (data.get("license_plate") or "").strip() or None
+                )
+                updated_fields.append("license_plate")
+
             # Check if any fields were updated
             if not updated_fields:
                 return Response(
@@ -7387,10 +7505,12 @@ class PrimaryUserProfileView(APIView):
                 "first_name": user.first_name or "",
                 "last_name": user.last_name or "",
                 "phone_number": user.phone_number or "",
-                "date_of_birth": (
-                    user.date_of_birth.isoformat() if user.date_of_birth else None
-                ),
-                "gender": user.gender or "",
+                "date_of_birth": user.date_of_birth,
+                "gender": user.gender,
+                "car_make": user.car_make,
+                "car_model": user.car_model,
+                "car_year": user.car_year,
+                "license_plate": user.license_plate,
             }
 
             return Response(

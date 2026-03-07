@@ -33,6 +33,16 @@ urlpatterns = [
         name="vehicle-makes",
     ),
     path(
+        "vehicle-expertise/",
+        views.MechanicVehicleExpertiseListCreateView.as_view(),
+        name="vehicle-expertise-list-create",
+    ),
+    path(
+        "vehicle-expertise/<int:expertise_id>/",
+        views.MechanicVehicleExpertiseDetailView.as_view(),
+        name="vehicle-expertise-detail",
+    ),
+    path(
         "mechanics/<uuid:mechanic_id>/",
         views.MechanicDetailView.as_view(),
         name="mechanic-detail",
