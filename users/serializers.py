@@ -422,6 +422,8 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             "store_name",
             "location",
             "lga",
+            "longitude",
+            "latitude",
             "cac_number",
             "cac_document",
             "selfie",
