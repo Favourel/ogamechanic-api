@@ -2523,14 +2523,31 @@ class RiderProfileManagementView(APIView):
             context={"request": request},
         )
         if serializer.is_valid():
+            old_docs = {
+                'selfie': rider_profile.selfie,
+                'government_id_front': rider_profile.government_id_front,
+                'government_id_back': rider_profile.government_id_back,
+                'govt_id_type': rider_profile.govt_id_type,
+            }
             updated_profile = serializer.save()
+            if not is_staff and any(
+                getattr(updated_profile, field) != old_docs[field]
+                for field in old_docs
+            ):
+                updated_profile.is_approved = False
+                updated_profile.save(update_fields=['is_approved'])
+
+            kyc = _compute_kyc(updated_profile, RIDER_KYC_REQUIRED_FIELDS)
+
             return Response(
                 api_response(
                     message="Rider profile updated successfully.",
                     status=True,
-                    data=RiderProfileSerializer(
-                        updated_profile, context={"request": request}
-                    ).data,
+                    data={
+                        "has_rider_profile": True,
+                        "rider_profile": RiderProfileSerializer(updated_profile, context={"request": request}).data,
+                        "kyc": kyc,
+                    },
                 ),
                 status=200,
             )
