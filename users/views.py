@@ -2523,13 +2523,14 @@ class RiderProfileManagementView(APIView):
             context={"request": request},
         )
         if serializer.is_valid():
+            updated_profile = serializer.save()
             old_docs = {
                 'selfie': rider_profile.selfie,
                 'government_id_front': rider_profile.government_id_front,
                 'government_id_back': rider_profile.government_id_back,
                 'govt_id_type': rider_profile.govt_id_type,
             }
-            updated_profile = serializer.save()
+
             if not is_staff and any(
                 getattr(updated_profile, field) != old_docs[field]
                 for field in old_docs
