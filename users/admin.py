@@ -171,6 +171,94 @@ class DriverProfileAdmin(admin.ModelAdmin):
     list_max_show_all = 200  # Optional: limit max "Show all" to 200
 
 
+@admin.register(models.RiderProfile)
+class RiderProfileAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "full_name",
+        "phone_number",
+        "ride_type",
+        "is_approved",
+        "created_at",
+        "updated_at",
+    )
+    search_fields = ("user__email", "full_name", "phone_number", "plate_number")
+    list_filter = ("ride_type", "is_approved", "created_at", "updated_at", "gender", "city", "state")
+    readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ("user",)
+    list_per_page = 25
+    list_max_show_all = 200
+    fieldsets = (
+        ("User Information", {"fields": ("user",)}),
+        (
+            "Personal Information",
+            {
+                "fields": (
+                    "full_name",
+                    "phone_number",
+                    "date_of_birth",
+                    "gender",
+                    "selfie",
+                )
+            },
+        ),
+        (
+            "Location Information",
+            {
+                "fields": (
+                    "location",
+                    "city",
+                    "state",
+                    "latitude",
+                    "longitude",
+                )
+            },
+        ),
+        (
+            "Ride Information",
+            {
+                "fields": (
+                    "ride_type",
+                    "ride_photo_front",
+                    "ride_photo_back",
+                    "plate_number",
+                    "ride_registration_number",
+                )
+            },
+        ),
+        (
+            "Identification",
+            {
+                "fields": (
+                    "government_id_front",
+                    "government_id_back",
+                    "license_number",
+                    "license_issue_date",
+                    "license_expiry_date",
+                    "license_front_image",
+                    "license_back_image",
+                )
+            },
+        ),
+        (
+            "Status",
+            {
+                "fields": (
+                    "is_approved",
+                    "approved_at",
+                    "is_active",
+                    "disapproved",
+                    "disapproval_reason",
+                )
+            },
+        ),
+        (
+            "Timestamps",
+            {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
+        ),
+    )
+
+
 @admin.register(models.BankAccount)
 class BankAccountAdmin(admin.ModelAdmin):
     list_display = (
@@ -280,6 +368,7 @@ already_registered = {
     models.MerchantProfile,
     models.MechanicProfile,
     models.DriverProfile,
+    models.RiderProfile,
     models.BankAccount,
     models.Wallet,
     models.Transaction,

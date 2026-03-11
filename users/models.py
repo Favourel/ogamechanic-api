@@ -814,6 +814,50 @@ class RiderProfile(models.Model):
         help_text="Back of Government Identity Card"
     )
 
+    RIDE_TYPE_CHOICES = [
+        ('bicycle', 'Bicycle'),
+        ('motorcycle', 'Motorcycle'),
+    ]
+    ride_type = models.CharField(max_length=20, choices=RIDE_TYPE_CHOICES, blank=True, null=True)
+    date_of_birth = models.DateField(blank=True, null=True)
+    GENDER_CHOICES = [
+        ('male', 'Male'),
+        ('female', 'Female'),
+        ('other', 'Other'),
+    ]
+    gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True, null=True)
+    ride_photo_front = models.ImageField(
+        upload_to='rider/ride_photos/front/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png'])],
+        blank=True, null=True,
+        help_text="Front photo of the ride"
+    )
+    ride_photo_back = models.ImageField(
+        upload_to='rider/ride_photos/back/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png'])],
+        blank=True, null=True,
+        help_text="Back photo of the ride"
+    )
+
+    # Optional fields
+    plate_number = models.CharField(max_length=20, blank=True, null=True)
+    ride_registration_number = models.CharField(max_length=50, blank=True, null=True)
+    license_number = models.CharField(max_length=50, blank=True, null=True)
+    license_issue_date = models.DateField(blank=True, null=True)
+    license_expiry_date = models.DateField(blank=True, null=True)
+    license_front_image = models.ImageField(
+        upload_to='rider/licenses/front/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png'])],
+        blank=True, null=True,
+        help_text="Front of the license"
+    )
+    license_back_image = models.ImageField(
+        upload_to='rider/licenses/back/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png'])],
+        blank=True, null=True,
+        help_text="Back of the license"
+    )
+
     is_approved = models.BooleanField(default=False)
     approved_at = models.DateTimeField(blank=True, null=True)
     is_active = models.BooleanField(default=True)

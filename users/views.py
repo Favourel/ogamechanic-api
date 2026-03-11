@@ -215,8 +215,16 @@ DRIVER_KYC_REQUIRED_FIELDS = [
 RIDER_KYC_REQUIRED_FIELDS = [
     "full_name",
     "phone_number",
+    "date_of_birth",
+    "gender",
+    "city",
+    "state",
     "location",
+    "latitude",
+    "longitude",
     "selfie",
+    "ride_photo_front",
+    "ride_photo_back",
     "government_id_front",
     "government_id_back",
 ]
