@@ -690,6 +690,31 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+    def get_default_bank_account(self, obj):
+        from users.models import BankAccount
+        from users.serializers import BankAccountSerializer
+
+        bank_account = (
+            BankAccount.objects.filter(
+                user=obj.user,
+                is_active=True,
+                is_default=True,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if not bank_account:
+            bank_account = (
+                BankAccount.objects.filter(user=obj.user, is_active=True)
+                .order_by("-created_at")
+                .first()
+            )
+
+        if not bank_account:
+            return None
+
+        return BankAccountSerializer(bank_account).data
+
     def get_user(self, obj):
         from users.serializers import UserSerializer
         return UserSerializer(obj.user).data
