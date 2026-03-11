@@ -2601,6 +2601,7 @@ class RiderProfileManagementView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
         user = request.user
+        is_staff = getattr(request.user, "is_staff", False)
 
         if not user.roles.filter(name="rider").exists():
             return Response(
