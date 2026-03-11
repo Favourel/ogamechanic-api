@@ -639,7 +639,9 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
 
 class DriverProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
-    default_bank_account = serializers.SerializerMethodField(method_name="get_driver_default_bank_account")
+    default_bank_account = serializers.SerializerMethodField(
+        method_name="get_default_bank_account"
+    )
 
     class Meta:
         model = DriverProfile
