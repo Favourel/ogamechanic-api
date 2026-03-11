@@ -2353,7 +2353,18 @@ class MerchantProfileManagementView(APIView):
 
 
 class RiderProfileManagementView(APIView):
-    """Manage rider (passenger/customer) profiles - create, update, or view."""
+    """
+    Manage rider profiles - create, update, or complete rider profile.
+    Added: Support to view rider profile by user ID (public/production-ready).
+
+    Use Cases:
+    - Complete profile for users who registered via step-by-step flow
+    - Update existing rider profiles
+    - Create profiles for users who added rider role later
+    - Retrieve rider profile by user id
+
+    Note: For new user registration, use step-by-step registration flow.
+    """
 
     permission_classes = [IsAuthenticated]
     parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
@@ -2371,18 +2382,57 @@ class RiderProfileManagementView(APIView):
         responses={200: RiderProfileSerializer(many=True)},
     )
     def get(self, request):
-        user = request.user
+        from uuid import UUID
+        from users.models import User
 
-        if not user.roles.filter(name="rider").exists():
+        rider_user_uuid = request.query_params.get("id")
+        is_staff = getattr(request.user, "is_staff", False)
+
+        is_own_profile = not bool(rider_user_uuid)
+        if is_own_profile:
+            target_user = request.user
+
+            if not (
+                target_user.active_role and target_user.active_role.name == "rider"
+            ):
+                return Response(
+                    api_response(
+                        message="Your active role must be 'rider' to view your rider profile.",
+                        status=False,
+                        data={
+                            "suggestion": "Use /api/users/switch-role/ to switch to the rider role"
+                        },
+                    ),
+                    status=403,
+                )
+        else:
+            try:
+                UUID(rider_user_uuid)
+            except Exception:
+                return Response(
+                    api_response(message="Invalid id.", status=False),
+                    status=400,
+                )
+
+            try:
+                target_user = User.objects.get(id=rider_user_uuid)
+            except User.DoesNotExist:
+                return Response(
+                    api_response(message="User not found.", status=False),
+                    status=404,
+                )
+
+        has_rider_role = target_user.roles.filter(name="rider").exists()
+        if not has_rider_role:
             return Response(
                 api_response(
-                    message="You must have a rider role to view rider profile.",
+                    message="User does not have a rider role.",
                     status=False,
                 ),
-                status=403,
+                status=400,
             )
 
-        rider_profile = getattr(user, "rider_profile", None)
+        rider_profile = getattr(target_user, "rider_profile", None)
         if not rider_profile:
             return Response(
                 api_response(
@@ -2391,6 +2441,51 @@ class RiderProfileManagementView(APIView):
                     data={"has_rider_profile": False},
                 ),
                 status=404,
+            )
+
+        is_requester_owner = request.user.id == target_user.id
+        kyc = _compute_kyc(rider_profile, RIDER_KYC_REQUIRED_FIELDS)
+
+        if not rider_profile.is_approved and not (is_staff or is_requester_owner):
+            public_profile = {
+                "id": str(rider_profile.id),
+                "user": str(target_user.id),
+                "location": getattr(rider_profile, "location", None),
+                "city": getattr(rider_profile, "city", None),
+                "state": getattr(rider_profile, "state", None),
+                "selfie": (
+                    request.build_absolute_uri(rider_profile.selfie.url)
+                    if getattr(rider_profile, "selfie", None)
+                    and hasattr(rider_profile.selfie, "url")
+                    else None
+                ),
+                "is_approved": rider_profile.is_approved,
+                "created_at": (
+                    rider_profile.created_at.isoformat()
+                    if getattr(rider_profile, "created_at", None)
+                    else None
+                ),
+                "updated_at": (
+                    rider_profile.updated_at.isoformat()
+                    if getattr(rider_profile, "updated_at", None)
+                    else None
+                ),
+            }
+            return Response(
+                api_response(
+                    message="Rider profile retrieved successfully.",
+                    status=True,
+                    data={
+                        "has_rider_profile": True,
+                        "rider_profile": public_profile,
+                        "kyc": _compute_kyc_from_dict(
+                            public_profile,
+                            RIDER_KYC_REQUIRED_FIELDS,
+                        ),
+                        "restricted": True,
+                    },
+                ),
+                status=200,
             )
 
         serializer = RiderProfileSerializer(
@@ -2403,6 +2498,8 @@ class RiderProfileManagementView(APIView):
                 data={
                     "has_rider_profile": True,
                     "rider_profile": serializer.data,
+                    "kyc": kyc,
+                    "restricted": False,
                 },
             ),
             status=200,
