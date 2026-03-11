@@ -2542,7 +2542,7 @@ class RiderProfileManagementView(APIView):
 
             return Response(
                 api_response(
-                    message="Rider profile updated successfully.",
+                    message="Rider profile updated successfully..",
                     status=True,
                     data={
                         "has_rider_profile": True,
