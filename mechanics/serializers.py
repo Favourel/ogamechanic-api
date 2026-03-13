@@ -35,6 +35,7 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             'vehicle_model', 'vehicle_year',
             'vehicle_registration',
             'problem_description',
+            'problem_resolve',
             # 'symptoms',
             'estimated_cost', 'service_address', 'service_latitude',
             'service_longitude', 'schedule', 'preferred_date', 'preferred_time_slot',
@@ -144,6 +145,7 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
             'vehicle_year',
             'vehicle_registration',
             'problem_description',
+            'problem_resolve',
             'estimated_cost',
             'service_address',
             'service_latitude',
@@ -169,7 +171,9 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
 class RepairRequestStatusUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = RepairRequest
-        fields = ['status', 'notes', 'actual_cost', 'cancellation_reason']
+        fields = [
+            'status', 'notes', 'actual_cost', 
+            'cancellation_reason', 'problem_resolve',]
 
 
 class TrainingSessionSerializer(serializers.ModelSerializer):

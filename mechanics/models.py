@@ -65,6 +65,9 @@ class RepairRequest(models.Model):
 
     # Problem description
     problem_description = models.TextField()
+    problem_resolve = models.CharField(
+        max_length=200, null=True, blank=True
+    )
     # symptoms = models.TextField(blank=True)
     estimated_cost = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
@@ -538,4 +541,3 @@ class MechanicVehicleExpertise(models.Model):
 
     def __str__(self):
         return f"{self.mechanic.user.email} - {self.vehicle_make.name} ({self.certification_level})"  # noqa
-
