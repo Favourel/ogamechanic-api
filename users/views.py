@@ -5123,8 +5123,11 @@ class BankAccountListCreateView(APIView):
     )
     def post(self, request):
         """Create a new bank account."""
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(api_response(message=data, status=False), status=400)
         serializer = BankAccountCreateSerializer(
-            data=request.data, context={"request": request}
+            data=data, context={"request": request}
         )
         if serializer.is_valid():
             bank_account = serializer.save(user=request.user)
