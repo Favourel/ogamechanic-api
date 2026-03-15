@@ -1,5 +1,8 @@
 from rest_framework import serializers
-from .models import ChatRoom, Message, ChatNotification
+from .models import (
+    ChatRoom, Message, ChatNotification,
+    SupportConversation, SupportMessage,
+)
 from users.serializers import UserSerializer
 
 
@@ -137,3 +140,184 @@ class ChatRoomListSerializer(serializers.ModelSerializer):
             if other_participants.exists():
                 return UserSerializer(other_participants.first()).data
         return None
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Support Chat Serializers
+# ═══════════════════════════════════════════════════════════════════
+
+class SupportMessageSenderSerializer(serializers.Serializer):
+    """Lightweight sender representation for messages."""
+    id = serializers.UUIDField()
+    email = serializers.EmailField()
+    first_name = serializers.CharField()
+    last_name = serializers.CharField()
+    is_staff = serializers.BooleanField()
+
+
+class SupportMessageSerializer(serializers.ModelSerializer):
+    """Serializer for SupportMessage model."""
+
+    sender = SupportMessageSenderSerializer(read_only=True)
+    file_attachment_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SupportMessage
+        fields = [
+            "id",
+            "conversation",
+            "sender",
+            "content",
+            "message_type",
+            "file_attachment",
+            "file_attachment_url",
+            "is_read",
+            "read_at",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id", "sender", "is_read", "read_at", "created_at",
+            "file_attachment_url",
+        ]
+
+    def get_file_attachment_url(self, obj):
+        if obj.file_attachment:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(obj.file_attachment.url)
+            return obj.file_attachment.url
+        return None
+
+
+class SupportConversationSerializer(serializers.ModelSerializer):
+    """Full detail serializer for SupportConversation."""
+
+    customer = SupportMessageSenderSerializer(read_only=True)
+    assigned_admin = SupportMessageSenderSerializer(read_only=True)
+    last_message = serializers.SerializerMethodField()
+    unread_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SupportConversation
+        fields = [
+            "id",
+            "customer",
+            "assigned_admin",
+            "subject",
+            "status",
+            "priority",
+            "created_at",
+            "updated_at",
+            "resolved_at",
+            "last_message",
+            "unread_count",
+        ]
+        read_only_fields = [
+            "id", "customer", "assigned_admin", "created_at",
+            "updated_at", "resolved_at",
+        ]
+
+    def get_last_message(self, obj):
+        msg = obj.last_message
+        if msg:
+            return {
+                "content": (
+                    msg.content[:80] + "..."
+                    if len(msg.content) > 80
+                    else msg.content
+                ),
+                "sender_email": msg.sender.email,
+                "sender_is_staff": msg.sender.is_staff,
+                "message_type": msg.message_type,
+                "created_at": msg.created_at.isoformat(),
+            }
+        return None
+
+    def get_unread_count(self, obj):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            return obj.unread_count_for(request.user)
+        return 0
+
+
+class SupportConversationListSerializer(serializers.ModelSerializer):
+    """Compact list serializer for support conversations."""
+
+    customer = SupportMessageSenderSerializer(read_only=True)
+    assigned_admin = SupportMessageSenderSerializer(
+        read_only=True, allow_null=True
+    )
+    last_message = serializers.SerializerMethodField()
+    unread_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SupportConversation
+        fields = [
+            "id",
+            "customer",
+            "assigned_admin",
+            "subject",
+            "status",
+            "priority",
+            "created_at",
+            "updated_at",
+            "last_message",
+            "unread_count",
+        ]
+
+    def get_last_message(self, obj):
+        msg = obj.last_message
+        if msg:
+            return {
+                "content": (
+                    msg.content[:50] + "..."
+                    if len(msg.content) > 50
+                    else msg.content
+                ),
+                "sender_email": msg.sender.email,
+                "created_at": msg.created_at.isoformat(),
+            }
+        return None
+
+    def get_unread_count(self, obj):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            return obj.unread_count_for(request.user)
+        return 0
+
+
+class SupportConversationCreateSerializer(serializers.Serializer):
+    """Serializer for creating a new support conversation."""
+
+    subject = serializers.CharField(max_length=255)
+    message = serializers.CharField(help_text="Initial message content.")
+    priority = serializers.ChoiceField(
+        choices=["low", "medium", "high", "urgent"],
+        default="medium",
+    )
+
+
+class SupportFileUploadSerializer(serializers.Serializer):
+    """Serializer for file upload validation."""
+
+    file = serializers.FileField()
+
+    def validate_file(self, value):
+        # 10 MB limit
+        max_size = 10 * 1024 * 1024
+        if value.size > max_size:
+            raise serializers.ValidationError(
+                "File size exceeds 10 MB limit."
+            )
+
+        allowed_types = [
+            "image/jpeg", "image/png", "image/gif", "image/webp",
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ]
+        if value.content_type not in allowed_types:
+            raise serializers.ValidationError(
+                "Unsupported file type. Allowed: JPEG, PNG, GIF, WebP, PDF, DOC, DOCX."  # noqa
+            )
+        return value

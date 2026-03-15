@@ -14,11 +14,11 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.utils import timezone
 from django.db import models
-import requests
-from django.conf import settings
-from .serializers import CourierRequestSerializer
-from .models import CourierRequest
+from couriers.serializers import CourierRequestSerializer
 from django.db.models import Count, Sum, F, DecimalField, ExpressionWrapper, Func # noqa
+from django.db import transaction
+from couriers.models import DeliveryRequest
+from couriers.serializers import CourierRequestListSerializer
 
 from rest_framework import status
 import logging
@@ -26,6 +26,11 @@ from math import radians, sin, cos, sqrt, atan2
 from .tasks import notify_drivers_task, notify_user_of_ride_status_task
 from .serializers import WaypointSerializer, WaypointUpdateSerializer, RideCreateSerializer # noqa
 from .models import Waypoint # noqa
+from ogamechanic.modules.idempotency import (
+    get_cached_response,
+    store_response,
+    IdempotencyConflict,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -406,8 +411,146 @@ class RideStatusUpdateView(APIView):
     )
     def patch(self, request, ride_id):
         user = request.user
+        idem_key = request.headers.get("Idempotency-Key") or request.META.get(
+            "HTTP_IDEMPOTENCY_KEY"
+        )
+        request_payload = request.data
+        if idem_key:
+            try:
+                cached, redis_key = get_cached_response(
+                    user_id=str(user.id),
+                    method=request.method,
+                    path=request.path,
+                    idempotency_key=idem_key,
+                    request_payload=request_payload,
+                )
+                if cached is not None:
+                    return Response(cached)
+            except IdempotencyConflict as e:
+                return Response(
+                    api_response(message=str(e), status=False),
+                    status=status.HTTP_409_CONFLICT,
+                )
         try:
-            ride = Ride.objects.get(id=ride_id)
+            with transaction.atomic():
+                ride = Ride.objects.select_for_update().get(id=ride_id)
+
+                # Translate legacy statuses to DeliveryRequest statuses
+                new_status = request.data.get("status")
+                status_map = {
+                    "accepted": "assigned",
+                    "in_progress": "in_transit",
+                    "completed": "delivered",
+                    "cancelled": "cancelled",
+                }
+                if new_status not in status_map:
+                    resp = Response(
+                        api_response(message="Invalid status.", status=False),
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                # Only assigned driver or customer can update
+                is_driver = ride.driver == user
+                is_customer = ride.customer == user
+                if not (is_driver or is_customer):
+                    resp = Response(
+                        api_response(message="Not allowed.", status=False),
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                # Define allowed transitions
+                valid_transitions = {
+                    "requested": ["accepted", "cancelled"],
+                    "accepted": ["in_progress", "cancelled"],
+                    "in_progress": ["completed", "cancelled"],
+                    "completed": [],
+                    "cancelled": [],
+                }
+                if new_status not in valid_transitions.get(ride.status, []):
+                    resp = Response(
+                        api_response(
+                            message="Invalid status transition.", status=False
+                        ),
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                # Only driver can accept/start/complete
+                if (
+                    new_status in ["accepted", "in_progress", "completed"]
+                    and not is_driver
+                ):
+                    resp = Response(
+                        api_response(
+                            message="Only driver can update to this status.",
+                            status=False,
+                        ),
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                # Accept only when driver is set to this user (prevents 3rd party accept)
+                if new_status == "accepted" and ride.driver and ride.driver != user:
+                    resp = Response(
+                        api_response(
+                            message="Ride already assigned to another driver.",
+                            status=False,
+                        ),
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+                if new_status == "accepted" and not ride.driver:
+                    ride.driver = user
+
+                # Update status and timestamps
+                ride.status = new_status
+                notify_user = False
+                if new_status == "accepted":
+                    ride.accepted_at = timezone.now()
+                    notify_user = True
+                elif new_status == "in_progress":
+                    ride.started_at = timezone.now()
+                    notify_user = True
+                elif new_status == "completed":
+                    ride.completed_at = timezone.now()
+                    notify_user = True
+                elif new_status == "cancelled":
+                    ride.cancelled_at = timezone.now()
+                    notify_user = True
+
+                ride.save()
         except Ride.DoesNotExist:
             return Response(
                 api_response(
@@ -415,83 +558,16 @@ class RideStatusUpdateView(APIView):
                 ),
                 status=status.HTTP_404_NOT_FOUND    ,
             )
-        new_status = request.data.get("status")
-        if new_status not in [
+        # Re-fetch ride for serialization after transaction
+        ride = Ride.objects.get(id=ride_id)
+        new_status = ride.status
+        is_driver = ride.driver == user
+        notify_user = new_status in [
             "accepted",
             "in_progress",
             "completed",
             "cancelled",
-        ]:
-            return Response(
-                api_response(
-                    message="Invalid status.", status=False
-                ),
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        # Only assigned driver or customer can update
-        is_driver = ride.driver == user
-        is_customer = ride.customer == user
-        if not (is_driver or is_customer):
-            return Response(
-                api_response(
-                    message="Not allowed.", status=False
-                ),
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        # Define allowed transitions
-        valid_transitions = {
-            "requested": ["accepted", "cancelled"],
-            "accepted": ["in_progress", "cancelled"],
-            "in_progress": ["completed", "cancelled"],
-            "completed": [],
-            "cancelled": [],
-        }
-        if new_status not in valid_transitions.get(ride.status, []):
-            return Response(
-                api_response(
-                    message="Invalid status transition.", status=False
-                ),
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        # Only driver can accept/start/complete, only customer/driver can cancel # noqa
-        if (
-            new_status in ["accepted", "in_progress", "completed"]
-            and not is_driver
-        ):
-            return Response(
-                api_response(
-                    message="Only driver can update to this status.",
-                    status=False,
-                ),
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if new_status == "cancelled" and not (is_driver or is_customer):
-            return Response(
-                api_response(
-                    message="Only driver or customer can cancel.",
-                    status=False,
-                ),
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        # Update status and timestamps
-        ride.status = new_status
-        # timezone already imported at top of file
-        notify_user = False  # Flag to determine if user should be notified
-
-        if new_status == "accepted":
-            ride.accepted_at = timezone.now()
-            notify_user = True
-        elif new_status == "in_progress":
-            ride.started_at = timezone.now()
-            notify_user = True
-        elif new_status == "completed":
-            ride.completed_at = timezone.now()
-            notify_user = True
-        elif new_status == "cancelled":
-            ride.cancelled_at = timezone.now()
-            notify_user = True  # Notify user if ride is cancelled
-
-        ride.save()
+        ]
 
         # Notify the user asynchronously if the driver updated the status
         if notify_user and is_driver:
@@ -508,13 +584,20 @@ class RideStatusUpdateView(APIView):
                     e,
                 )
         serializer = RideSerializer(ride)
-        return Response(
+        resp = Response(
             api_response(
                 message=f"Ride status updated to {new_status}.",
                 status=True,
                 data=serializer.data,
             )
         )
+        if idem_key:
+            store_response(
+                redis_key=redis_key,
+                request_payload=request_payload,
+                response_payload=resp.data,
+            )
+        return resp
 
 
 class CourierRequestOptionsView(APIView):
@@ -562,7 +645,6 @@ class CourierRequestOptionsView(APIView):
     )
     def post(self, request):
         import random
-        from math import radians, sin, cos, sqrt, atan2
 
         status_, data = incoming_request_checks(request)
         if not status_:
@@ -600,40 +682,14 @@ class CourierRequestOptionsView(APIView):
         pickup_lon = float(data["pickup_longitude"])
         dropoff_lat = float(data["dropoff_latitude"])
         dropoff_lon = float(data["dropoff_longitude"])
-        # Google Maps Directions API call
-        api_key = getattr(settings, "GOOGLE_MAPS_API_KEY", None)
-        if not api_key:
-            return Response(
-                api_response(
-                    message="Google Maps API key not configured.", status=False
-                ),
-                status=500,
-            )
-        directions_url = (
-            f"https://maps.googleapis.com/maps/api/directions/json?origin={pickup_lat},{pickup_lon}" # noqa
-            f"&destination={dropoff_lat},{dropoff_lon}&mode=driving&key={api_key}" # noqa
+        route_info = LocationService.get_directions(
+            origin_lat=pickup_lat,
+            origin_lon=pickup_lon,
+            dest_lat=dropoff_lat,
+            dest_lon=dropoff_lon,
         )
-        resp = requests.get(directions_url)
-        if resp.status_code != 200:
-            return Response(
-                api_response(
-                    message="Failed to get route from Google Maps.",
-                    status=False
-                ),
-                status=500,
-            )
-        directions = resp.json()
-        if not directions["routes"]:
-            return Response(
-                api_response(
-                    message="No route found between points.",
-                    status=False
-                ),
-                status=400,
-            )
-        leg = directions["routes"][0]["legs"][0]
-        distance_km = leg["distance"]["value"] / 1000.0
-        duration_min = leg["duration"]["value"] / 60.0
+        distance_km = float(route_info.get("distance_km") or 0)
+        duration_min = float(route_info.get("duration_min") or 0)
         # Fare calculation (can be customized for courier)
         base_fare = 700  # NGN
         per_km_rate = 250  # NGN per km
@@ -659,7 +715,13 @@ class CourierRequestOptionsView(APIView):
             User.objects.filter(
                 roles__name="driver", driver_profile__is_approved=True
             )
-            .exclude(courier_deliveries__status__in=["accepted", "in_progress"]) # noqa
+            .exclude(
+                assigned_delivery_requests__status__in=[
+                    "assigned",
+                    "picked_up",
+                    "in_transit",
+                ]
+            )
         )
         driver_list = []
         for driver in available_drivers:
@@ -791,9 +853,10 @@ class CourierRequestConfirmView(APIView):
                     status=False),
                 status=400,
             )
-        # Ensure driver is not already on a courier delivery
-        if CourierRequest.objects.filter(
-            driver=driver, status__in=["accepted", "in_progress"]
+        # Ensure driver is not already on a courier delivery (source of truth)
+        if DeliveryRequest.objects.filter(
+            driver=driver,
+            status__in=["assigned", "picked_up", "in_transit"],
         ).exists():
             return Response(
                 api_response(
@@ -801,21 +864,25 @@ class CourierRequestConfirmView(APIView):
                     status=False),
                 status=400,
             )
-        courier = CourierRequest.objects.create(
+
+        # Create DeliveryRequest in couriers app as source of truth
+        courier = DeliveryRequest.objects.create(
             customer=user,
             driver=driver,
             pickup_address=data["pickup_address"],
             pickup_latitude=data["pickup_latitude"],
             pickup_longitude=data["pickup_longitude"],
-            dropoff_address=data["dropoff_address"],
-            dropoff_latitude=data["dropoff_latitude"],
-            dropoff_longitude=data["dropoff_longitude"],
-            item_description=data["item_description"],
-            item_weight=data.get("item_weight"),
-            status="requested",
-            fare=data["fare"],
+            delivery_address=data["dropoff_address"],
+            delivery_latitude=data["dropoff_latitude"],
+            delivery_longitude=data["dropoff_longitude"],
+            package_description=data["item_description"],
+            package_weight=data.get("item_weight"),
+            base_fare=0,
+            distance_fare=0,
+            total_fare=data["fare"],
+            status="pending",
         )
-        serializer = RideCourierRequestSerializer(courier)
+        serializer = CourierRequestListSerializer(courier)
         return Response(
             api_response(
                 message="Courier request confirmed and created successfully.",
@@ -848,81 +915,140 @@ class CourierRequestStatusUpdateView(APIView):
         from django.utils import timezone
 
         user = request.user
+        idem_key = request.headers.get("Idempotency-Key") or request.META.get(
+            "HTTP_IDEMPOTENCY_KEY"
+        )
+        request_payload = request.data
+        if idem_key:
+            try:
+                cached, redis_key = get_cached_response(
+                    user_id=str(user.id),
+                    method=request.method,
+                    path=request.path,
+                    idempotency_key=idem_key,
+                    request_payload=request_payload,
+                )
+                if cached is not None:
+                    return Response(cached)
+            except IdempotencyConflict as e:
+                return Response(
+                    api_response(message=str(e), status=False),
+                    status=status.HTTP_409_CONFLICT,
+                )
         try:
-            courier = CourierRequest.objects.get(id=courier_id)
-        except CourierRequest.DoesNotExist:
+            with transaction.atomic():
+                courier = DeliveryRequest.objects.select_for_update().get(
+                    id=courier_id
+                )
+
+                status_map = {
+                    "accepted": "assigned",
+                    "in_progress": "in_transit",
+                    "completed": "delivered",
+                    "cancelled": "cancelled",
+                }
+                new_status = request.data.get("status")
+                if new_status not in [
+                    "accepted",
+                    "in_progress",
+                    "completed",
+                    "cancelled",
+                ]:
+                    resp = Response(
+                        api_response(message="Invalid status.", status=False),
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                is_driver = courier.driver == user
+                is_customer = courier.customer == user
+                if not (is_driver or is_customer):
+                    resp = Response(
+                        api_response(message="Not allowed.", status=False),
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                translated_status = status_map[new_status]
+
+                if new_status in ["accepted", "in_progress", "completed"] and not is_driver:
+                    resp = Response(
+                        api_response(
+                            message="Only driver can update to this status.",
+                            status=False,
+                        ),
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                if new_status == "accepted" and courier.driver and courier.driver != user:
+                    resp = Response(
+                        api_response(
+                            message="Courier request already assigned to another driver.",
+                            status=False,
+                        ),
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+                if new_status == "accepted" and not courier.driver:
+                    courier.driver = user
+
+                courier.status = translated_status
+                if translated_status == "assigned":
+                    courier.assigned_at = timezone.now()
+                elif translated_status == "picked_up":
+                    courier.picked_up_at = timezone.now()
+                elif translated_status == "delivered":
+                    courier.delivered_at = timezone.now()
+                elif translated_status == "cancelled":
+                    courier.cancelled_at = timezone.now()
+                courier.save()
+        except DeliveryRequest.DoesNotExist:
             return Response(
                 api_response(
                     message="Courier request not found.", status=False),
                 status=404,
             )
-        new_status = request.data.get("status")
-        if new_status not in [
-            "accepted",
-            "in_progress",
-            "completed",
-            "cancelled",
-        ]:
-            return Response(
-                api_response(message="Invalid status.",
-                             status=False), status=400
-            )
-        # Only assigned driver or customer can update
-        is_driver = courier.driver == user
-        is_customer = courier.customer == user
-        if not (is_driver or is_customer):
-            return Response(
-                api_response(message="Not allowed.",
-                             status=False), status=403
-            )
-        # Define allowed transitions
-        valid_transitions = {
-            "requested": ["accepted", "cancelled"],
-            "accepted": ["in_progress", "cancelled"],
-            "in_progress": ["completed", "cancelled"],
-            "completed": [],
-            "cancelled": [],
-        }
-        if new_status not in valid_transitions.get(courier.status, []):
-            return Response(
-                api_response(message="Invalid status transition.",
-                             status=False),
-                status=400,
-            )
-        # Only driver can accept/start/complete, only customer/driver can cancel # noqa
-        if new_status in ["accepted", "in_progress", "completed"] and not is_driver: # noqa
-            return Response(
-                api_response(
-                    message="Only driver can update to this status.", status=False # noqa
-                ),
-                status=403,
-            )
-        if new_status == "cancelled" and not (is_driver or is_customer):
-            return Response(
-                api_response(
-                    message="Only driver or customer can cancel.", status=False
-                ),
-                status=403,
-            )
-        # Update status and timestamps
-        courier.status = new_status
-        if new_status == "accepted":
-            courier.accepted_at = timezone.now()
-        elif new_status == "in_progress":
-            courier.started_at = timezone.now()
-        elif new_status == "completed":
-            courier.completed_at = timezone.now()
-        elif new_status == "cancelled":
-            courier.cancelled_at = timezone.now()
-        courier.save()
-        serializer = RideCourierRequestSerializer(courier)
-        return Response(
+        courier = DeliveryRequest.objects.get(id=courier_id)
+        serializer = CourierRequestListSerializer(courier)
+        resp = Response(
             api_response(
                 message=f"Courier request status updated to {new_status}.",
                 status=True,
                 data=serializer.data,
             )
         )
+        if idem_key:
+            store_response(
+                redis_key=redis_key,
+                request_payload=request_payload,
+                response_payload=resp.data,
+            )
+        return resp
 
 
 class CourierRequestListView(APIView):
@@ -935,18 +1061,18 @@ class CourierRequestListView(APIView):
     def get(self, request):
         user = request.user
         if user.is_staff:
-            queryset = CourierRequest.objects.all()
+            queryset = DeliveryRequest.objects.all()
         elif user.roles.filter(name="driver").exists():
-            queryset = CourierRequest.objects.filter(driver=user)
+            queryset = DeliveryRequest.objects.filter(driver=user)
         else:
-            queryset = CourierRequest.objects.filter(customer=user)
+            queryset = DeliveryRequest.objects.filter(customer=user)
         queryset = queryset.order_by("-requested_at")
-        serializer = RideCourierRequestSerializer(queryset, many=True)
+        serializer = CourierRequestListSerializer(queryset, many=True)
         return Response(
             api_response(
                 message="Courier requests retrieved successfully.",
                 status=True,
-                data=serializer.data,
+                data={"results": serializer.data},
             )
         )
 
@@ -986,25 +1112,25 @@ class RideCourierAnalyticsView(APIView):
         user = request.user
         if user.is_staff:
             rides = Ride.objects.all()
-            couriers = CourierRequest.objects.all()
+            couriers = DeliveryRequest.objects.all()
         elif user.roles.filter(name="driver").exists():
             rides = Ride.objects.filter(driver=user)
-            couriers = CourierRequest.objects.filter(driver=user)
+            couriers = DeliveryRequest.objects.filter(driver=user)
         else:
             rides = Ride.objects.filter(customer=user)
-            couriers = CourierRequest.objects.filter(customer=user)
+            couriers = DeliveryRequest.objects.filter(customer=user)
         # Totals
         total_rides = rides.count()
         total_couriers = couriers.count()
         completed_rides = rides.filter(status="completed").count()
-        completed_couriers = couriers.filter(status="completed").count()
+        completed_couriers = couriers.filter(status="delivered").count()
         cancelled_rides = rides.filter(status="cancelled").count()
         cancelled_couriers = couriers.filter(status="cancelled").count()
         total_ride_revenue = (
             rides.filter(status="completed").aggregate(total=Sum("fare"))["total"] or 0 # noqa
         )
         total_courier_revenue = (
-            couriers.filter(status="completed").aggregate(total=Sum("fare"))["total"] # noqa
+            couriers.filter(status="delivered").aggregate(total=Sum("total_fare"))["total"] # noqa
             or 0
         )
 
@@ -1022,8 +1148,8 @@ class RideCourierAnalyticsView(APIView):
             .order_by("month")
         )
         couriers_by_month = (
-            couriers.filter(status="completed")
-            .annotate(month=TruncMonth("completed_at"))
+            couriers.filter(status="delivered")
+            .annotate(month=TruncMonth("delivered_at"))
             .values("month")
             .annotate(count=Count("id"))
             .order_by("month")
@@ -1596,39 +1722,153 @@ class WaypointUpdateView(APIView):
     def patch(self, request, ride_id, waypoint_id):
         """Update waypoint completion status."""
         try:
-            ride = Ride.objects.get(id=ride_id)
-            waypoint = Waypoint.objects.get(id=waypoint_id, rides=ride)
+            user = request.user
+            idem_key = request.headers.get("Idempotency-Key") or request.META.get(
+                "HTTP_IDEMPOTENCY_KEY"
+            )
+            request_payload = request.data
+            if idem_key:
+                try:
+                    cached, redis_key = get_cached_response(
+                        user_id=str(user.id),
+                        method=request.method,
+                        path=request.path,
+                        idempotency_key=idem_key,
+                        request_payload=request_payload,
+                    )
+                    if cached is not None:
+                        return Response(cached)
+                except IdempotencyConflict as e:
+                    return Response(
+                        api_response(message=str(e), status=False),
+                        status=status.HTTP_409_CONFLICT,
+                    )
 
-            # Check if user has access to this ride
-            if ride.customer != request.user and ride.driver != request.user:
-                return Response(
-                    api_response(message="Access denied", status=False),
-                    status=403
+            with transaction.atomic():
+                ride = Ride.objects.select_for_update().get(id=ride_id)
+                waypoint = Waypoint.objects.select_for_update().get(
+                    id=waypoint_id, rides=ride
                 )
 
-            serializer = WaypointUpdateSerializer(waypoint, data=request.data, partial=True)
-            if serializer.is_valid():
-                waypoint = serializer.save()
+                # Check if user has access to this ride
+                if ride.customer != request.user and ride.driver != request.user:
+                    resp = Response(
+                        api_response(message="Access denied", status=False),
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
 
-                # Check if all waypoints are completed
-                if ride.is_route_completed():
-                    ride.status = 'completed'
-                    ride.completed_at = timezone.now()
+                # Only driver can complete waypoints
+                if ride.driver != request.user:
+                    resp = Response(
+                        api_response(
+                            message="Only driver can update waypoints",
+                            status=False,
+                        ),
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                if ride.status not in ["accepted", "in_progress"]:
+                    resp = Response(
+                        api_response(
+                            message="Ride is not active for waypoint updates",
+                            status=False,
+                        ),
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                next_wp = (
+                    ride.waypoints.filter(is_completed=False)
+                    .order_by("sequence_order")
+                    .first()
+                )
+                if next_wp and waypoint.id != next_wp.id:
+                    resp = Response(
+                        api_response(
+                            message="Waypoints must be completed in order",
+                            status=False,
+                        ),
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                serializer = WaypointUpdateSerializer(
+                    waypoint, data=request.data, partial=True
+                )
+                if serializer.is_valid():
+                    waypoint = serializer.save()
+
+                    if (
+                        request.data.get("is_completed") is True
+                        and not waypoint.completed_at
+                    ):
+                        waypoint.completed_at = timezone.now()
+                        waypoint.save(update_fields=["completed_at"])
+
+                    if waypoint.is_completed:
+                        ride.current_waypoint_index = max(
+                            ride.current_waypoint_index,
+                            waypoint.sequence_order,
+                        )
+
+                    if ride.is_route_completed():
+                        ride.status = "completed"
+                        ride.completed_at = timezone.now()
                     ride.save()
 
-                response_serializer = WaypointSerializer(waypoint)
-                return Response(
-                    api_response(
-                        message="Waypoint updated successfully",
-                        status=True,
-                        data=response_serializer.data
+                    response_serializer = WaypointSerializer(waypoint)
+                    resp = Response(
+                        api_response(
+                            message="Waypoint updated successfully",
+                            status=True,
+                            data=response_serializer.data,
+                        )
                     )
-                )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
 
-            return Response(
-                api_response(message=serializer.errors, status=False),
-                status=400
-            )
+                resp = Response(
+                    api_response(message=serializer.errors, status=False),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+                if idem_key:
+                    store_response(
+                        redis_key=redis_key,
+                        request_payload=request_payload,
+                        response_payload=resp.data,
+                    )
+                return resp
         except (Ride.DoesNotExist, Waypoint.DoesNotExist):
             return Response(
                 api_response(message="Ride or waypoint not found", status=False),

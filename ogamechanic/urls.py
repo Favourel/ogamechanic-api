@@ -88,8 +88,8 @@ urlpatterns = [
     path('api/v1/admin/', include('adminpanel.urls', namespace='adminpanel')), # noqa
     path('api/v1/products/', include('products.urls', namespace='products')),
     # path('api/v1/rides/', include('rides.urls', namespace='rides')),
-    # path('api/v1/communications/',
-    #      include('communications.urls', namespace='communications')),
+    path('api/v1/communications/',
+         include('communications.urls', namespace='communications')),
     # path('api/v1/couriers/',
     #      include('couriers.urls', namespace='couriers')),
     path('api/v1/mechanics/',

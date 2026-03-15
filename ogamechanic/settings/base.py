@@ -316,5 +316,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'rides.tasks.delete_expired_pending_rides',
         'schedule': crontab(minute='*/30'),  # Every 30 minutes
     },
+
+    'auto-close-stale-support-conversations': {
+        'task': 'communications.auto_close_stale_conversations',
+        'schedule': crontab(hour=2, minute=0),  # Daily at 2 AM
+    },
 }
 

@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import ChatRoom, Message, ChatNotification, CallSession
+from .models import (
+    ChatRoom, Message, ChatNotification, CallSession,
+    SupportConversation, SupportMessage,
+)
 
 
 @admin.register(ChatRoom)
@@ -88,3 +91,42 @@ class CallSessionAdmin(admin.ModelAdmin):
     def duration(self, obj):
         return obj.duration
     duration.short_description = 'Duration (s)'
+
+
+@admin.register(SupportConversation)
+class SupportConversationAdmin(admin.ModelAdmin):
+    list_display = [
+        "id", "subject", "customer", "assigned_admin",
+        "status", "priority", "created_at", "updated_at",
+    ]
+    list_filter = ["status", "priority", "created_at"]
+    search_fields = [
+        "subject", "customer__email", "customer__first_name",
+        "assigned_admin__email",
+    ]
+    readonly_fields = ["id", "created_at", "updated_at", "resolved_at"]
+    autocomplete_fields = ("customer", "assigned_admin")
+    list_per_page = 25
+    date_hierarchy = "created_at"
+
+
+@admin.register(SupportMessage)
+class SupportMessageAdmin(admin.ModelAdmin):
+    list_display = [
+        "id", "conversation_subject", "sender", "message_type",
+        "content_preview", "is_read", "created_at",
+    ]
+    list_filter = ["message_type", "is_read", "created_at"]
+    search_fields = ["sender__email", "content", "conversation__subject"]
+    readonly_fields = ["id", "created_at", "read_at"]
+    autocomplete_fields = ("sender", "conversation")
+    list_per_page = 25
+    date_hierarchy = "created_at"
+
+    def conversation_subject(self, obj):
+        return obj.conversation.subject[:40]
+    conversation_subject.short_description = "Conversation"
+
+    def content_preview(self, obj):
+        return obj.content[:50] + "..." if len(obj.content) > 50 else obj.content
+    content_preview.short_description = "Content"

@@ -19,6 +19,7 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
+
 class LocationService:
     """
     Enhanced location service with GeoDjango spatial operations

@@ -1,9 +1,9 @@
 from rest_framework.views import APIView
 from rest_framework import permissions
 from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from django.utils import timezone
+from django.db import transaction
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from ogamechanic.modules.utils import (
@@ -12,8 +12,14 @@ from ogamechanic.modules.utils import (
     incoming_request_checks,
 )
 from ogamechanic.modules.location_service import LocationService
+from ogamechanic.modules.location_service import MapIntegrationService
 from users.models import User
 from .models import DeliveryRequest, DeliveryTracking, DeliveryWaypoint
+from ogamechanic.modules.idempotency import (
+    get_cached_response,
+    store_response,
+    IdempotencyConflict,
+)
 from .serializers import (
     DeliveryRequestSerializer,
     DeliveryRequestCreateSerializer,
@@ -81,41 +87,153 @@ class DeliveryWaypointUpdateView(APIView):
     def patch(self, request, delivery_id, waypoint_id):
         """Update delivery waypoint completion status."""
         try:
-            delivery = DeliveryRequest.objects.get(id=delivery_id)
-            waypoint = DeliveryWaypoint.objects.get(
-                id=waypoint_id, delivery_requests=delivery
+            user = request.user
+            idem_key = request.headers.get("Idempotency-Key") or request.META.get(
+                "HTTP_IDEMPOTENCY_KEY"
             )
+            request_payload = request.data
+            if idem_key:
+                try:
+                    cached, redis_key = get_cached_response(
+                        user_id=str(user.id),
+                        method=request.method,
+                        path=request.path,
+                        idempotency_key=idem_key,
+                        request_payload=request_payload,
+                    )
+                    if cached is not None:
+                        return Response(cached)
+                except IdempotencyConflict as e:
+                    return Response(
+                        api_response(message=str(e), status=False),
+                        status=409,
+                    )
 
-            # Check if user has access to this delivery
-            if delivery.customer != request.user and delivery.driver != request.user:
-                return Response(
-                    api_response(message="Access denied", status=False), status=403
+            with transaction.atomic():
+                delivery = DeliveryRequest.objects.select_for_update().get(
+                    id=delivery_id
+                )
+                waypoint = DeliveryWaypoint.objects.select_for_update().get(
+                    id=waypoint_id, delivery_requests=delivery
                 )
 
-            serializer = DeliveryWaypointUpdateSerializer(
-                waypoint, data=request.data, partial=True
-            )
-            if serializer.is_valid():
-                waypoint = serializer.save()
+                if delivery.customer != request.user and delivery.driver != request.user:
+                    resp = Response(
+                        api_response(message="Access denied", status=False),
+                        status=403,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
 
-                # Check if all waypoints are completed
-                if delivery.is_route_completed():
-                    delivery.status = "delivered"
-                    delivery.delivered_at = timezone.now()
+                if delivery.driver != request.user:
+                    resp = Response(
+                        api_response(
+                            message="Only driver can update delivery waypoints",
+                            status=False,
+                        ),
+                        status=403,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                if delivery.status not in ["assigned", "picked_up", "in_transit"]:
+                    resp = Response(
+                        api_response(
+                            message="Delivery is not active for waypoint updates",
+                            status=False,
+                        ),
+                        status=409,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                next_wp = (
+                    delivery.waypoints.filter(is_completed=False)
+                    .order_by("sequence_order")
+                    .first()
+                )
+                if next_wp and waypoint.id != next_wp.id:
+                    resp = Response(
+                        api_response(
+                            message="Waypoints must be completed in order",
+                            status=False,
+                        ),
+                        status=409,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                serializer = DeliveryWaypointUpdateSerializer(
+                    waypoint, data=request.data, partial=True
+                )
+                if serializer.is_valid():
+                    waypoint = serializer.save()
+
+                    if (
+                        request.data.get("is_completed") is True
+                        and not waypoint.completed_at
+                    ):
+                        waypoint.completed_at = timezone.now()
+                        waypoint.save(update_fields=["completed_at"])
+
+                    if waypoint.is_completed:
+                        delivery.current_waypoint_index = max(
+                            delivery.current_waypoint_index,
+                            waypoint.sequence_order,
+                        )
+
+                    if delivery.is_route_completed():
+                        delivery.status = "delivered"
+                        delivery.delivered_at = timezone.now()
                     delivery.save()
 
-                response_serializer = DeliveryWaypointSerializer(waypoint)
-                return Response(
-                    api_response(
-                        message="Delivery waypoint updated successfully",
-                        status=True,
-                        data=response_serializer.data,
+                    response_serializer = DeliveryWaypointSerializer(waypoint)
+                    resp = Response(
+                        api_response(
+                            message="Delivery waypoint updated successfully",
+                            status=True,
+                            data=response_serializer.data,
+                        )
                     )
-                )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
 
-            return Response(
-                api_response(message=serializer.errors, status=False), status=400
-            )
+                resp = Response(
+                    api_response(message=serializer.errors, status=False),
+                    status=400,
+                )
+                if idem_key:
+                    store_response(
+                        redis_key=redis_key,
+                        request_payload=request_payload,
+                        response_payload=resp.data,
+                    )
+                return resp
         except (DeliveryRequest.DoesNotExist, DeliveryWaypoint.DoesNotExist):
             return Response(
                 api_response(
@@ -415,57 +533,137 @@ class DeliveryStatusUpdateView(APIView):
     def patch(self, request, delivery_id):
         """Update delivery status."""
         try:
+            user = request.user
+            idem_key = request.headers.get("Idempotency-Key") or request.META.get(
+                "HTTP_IDEMPOTENCY_KEY"
+            )
+            request_payload = request.data
+            if idem_key:
+                try:
+                    cached, redis_key = get_cached_response(
+                        user_id=str(user.id),
+                        method=request.method,
+                        path=request.path,
+                        idempotency_key=idem_key,
+                        request_payload=request_payload,
+                    )
+                    if cached is not None:
+                        return Response(cached)
+                except IdempotencyConflict as e:
+                    return Response(
+                        api_response(message=str(e), status=False),
+                        status=409,
+                    )
+
+            with transaction.atomic():
+                delivery = DeliveryRequest.objects.select_for_update().get(
+                    id=delivery_id
+                )
+
+                if delivery.customer != request.user and delivery.driver != request.user:
+                    resp = Response(
+                        api_response(message="Access denied", status=False),
+                        status=403,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                new_status = request.data.get("status")
+                if not new_status:
+                    resp = Response(
+                        api_response(message="Status is required", status=False),
+                        status=400,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                valid_transitions = {
+                    "pending": ["assigned", "cancelled"],
+                    "assigned": ["picked_up", "cancelled"],
+                    "picked_up": ["in_transit", "delivered"],
+                    "in_transit": ["delivered"],
+                    "delivered": [],
+                    "cancelled": [],
+                    "failed": [],
+                }
+                if new_status not in valid_transitions.get(delivery.status, []):
+                    resp = Response(
+                        api_response(
+                            message="Invalid status transition",
+                            status=False,
+                        ),
+                        status=400,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                is_driver = delivery.driver == request.user
+                if (
+                    new_status in [
+                        "assigned",
+                        "picked_up",
+                        "in_transit",
+                        "delivered",
+                    ]
+                    and not is_driver
+                ):
+                    resp = Response(
+                        api_response(
+                            message="Only driver can update to this status",
+                            status=False,
+                        ),
+                        status=403,
+                    )
+                    if idem_key:
+                        store_response(
+                            redis_key=redis_key,
+                            request_payload=request_payload,
+                            response_payload=resp.data,
+                        )
+                    return resp
+
+                delivery.status = new_status
+                if new_status == "assigned":
+                    delivery.assigned_at = timezone.now()
+                elif new_status == "picked_up":
+                    delivery.picked_up_at = timezone.now()
+                elif new_status == "delivered":
+                    delivery.delivered_at = timezone.now()
+                elif new_status == "cancelled":
+                    delivery.cancelled_at = timezone.now()
+                delivery.save()
+
             delivery = DeliveryRequest.objects.get(id=delivery_id)
-
-            # Check if user has access to this delivery
-            if delivery.customer != request.user and delivery.driver != request.user:
-                return Response(
-                    api_response(message="Access denied", status=False), status=403
-                )
-
-            new_status = request.data.get("status")
-            if not new_status:
-                return Response(
-                    api_response(message="Status is required", status=False), status=400
-                )
-
-            # Update status based on current status
-            if new_status == "assigned" and delivery.status == "pending":
-                delivery.status = "assigned"
-                delivery.assigned_at = timezone.now()
-            elif new_status == "picked_up" and delivery.status == "assigned":
-                delivery.status = "picked_up"
-                delivery.picked_up_at = timezone.now()
-            elif new_status == "in_transit" and delivery.status == "picked_up":
-                delivery.status = "in_transit"
-            elif new_status == "delivered" and delivery.status in [
-                "picked_up",
-                "in_transit",
-            ]:
-                delivery.status = "delivered"
-                delivery.delivered_at = timezone.now()
-            elif new_status == "cancelled" and delivery.status in [
-                "pending",
-                "assigned",
-            ]:
-                delivery.status = "cancelled"
-                delivery.cancelled_at = timezone.now()
-            else:
-                return Response(
-                    api_response(
-                        message="Invalid status transition", status=False),
-                    status=400,
-                )
-
-            delivery.save()
             serializer = DeliveryRequestSerializer(delivery)
-            return Response(
+            resp = Response(
                 api_response(
                     message="Delivery status updated successfully",
                     status=True,
                     data=serializer.data,
                 )
             )
+            if idem_key:
+                store_response(
+                    redis_key=redis_key,
+                    request_payload=request_payload,
+                    response_payload=resp.data,
+                )
+            return resp
         except DeliveryRequest.DoesNotExist:
             return Response(
                 api_response(

@@ -151,3 +151,151 @@ class CallSession(models.Model):
         if self.ended_at and self.started_at:
             return (self.ended_at - self.started_at).total_seconds()
         return None
+
+
+class SupportConversation(models.Model):
+    """
+    A support conversation initiated by a customer.
+    Admins can be assigned, and the conversation has a lifecycle status.
+    """
+
+    STATUS_CHOICES = [
+        ("open", "Open"),
+        ("in_progress", "In Progress"),
+        ("resolved", "Resolved"),
+        ("closed", "Closed"),
+    ]
+
+    PRIORITY_CHOICES = [
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+        ("urgent", "Urgent"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    customer = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="support_conversations",
+        help_text="The customer who initiated this support chat.",
+    )
+    assigned_admin = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_support_conversations",
+        help_text="The admin currently handling this conversation.",
+    )
+    subject = models.CharField(
+        max_length=255,
+        help_text="Brief description of the issue.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="open",
+        db_index=True,
+    )
+    priority = models.CharField(
+        max_length=10,
+        choices=PRIORITY_CHOICES,
+        default="medium",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["status", "-updated_at"]),
+            models.Index(fields=["customer", "-updated_at"]),
+        ]
+
+    def __str__(self):
+        return (
+            f"[{self.get_status_display()}] {self.subject} "
+            f"— {self.customer.email}"
+        )
+
+    @property
+    def last_message(self):
+        return self.support_messages.order_by("-created_at").first()
+
+    def unread_count_for(self, user):
+        """Return the count of unread messages not sent by this user."""
+        return self.support_messages.filter(
+            is_read=False,
+        ).exclude(sender=user).count()
+
+    def resolve(self, admin_user=None):
+        """Mark conversation as resolved."""
+        self.status = "resolved"
+        self.resolved_at = timezone.now()
+        if admin_user:
+            self.assigned_admin = admin_user
+        self.save()
+
+    def close(self):
+        """Mark conversation as closed."""
+        self.status = "closed"
+        self.save()
+
+
+class SupportMessage(models.Model):
+    """
+    An individual message within a support conversation.
+    Supports text, images, files, and system messages.
+    """
+
+    MESSAGE_TYPE_CHOICES = [
+        ("text", "Text"),
+        ("image", "Image"),
+        ("file", "File"),
+        ("system", "System Message"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    conversation = models.ForeignKey(
+        SupportConversation,
+        on_delete=models.CASCADE,
+        related_name="support_messages",
+    )
+    sender = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="sent_support_messages",
+    )
+    content = models.TextField()
+    message_type = models.CharField(
+        max_length=20,
+        choices=MESSAGE_TYPE_CHOICES,
+        default="text",
+    )
+    file_attachment = models.FileField(
+        upload_to="support_attachments/%Y/%m/%d/",
+        blank=True,
+        null=True,
+        help_text="Attached file (image, PDF, etc.)",
+    )
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["conversation", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.sender.email}: {self.content[:50]}"
+
+    def mark_as_read(self):
+        """Mark this message as read."""
+        if not self.is_read:
+            self.is_read = True
+            self.read_at = timezone.now()
+            self.save(update_fields=["is_read", "read_at"])

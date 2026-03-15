@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Ride, CourierRequest, Waypoint
+from .models import Ride, Waypoint
 
 
 class WaypointSerializer(serializers.ModelSerializer):
@@ -103,78 +103,6 @@ class RideCreateSerializer(serializers.ModelSerializer):
                 ride.waypoints.add(dropoff_waypoint)
 
         return ride
-
-
-class CourierRequestSerializer(serializers.ModelSerializer):
-    """Enhanced serializer for CourierRequest model with waypoints."""
-    customer = serializers.StringRelatedField()
-    driver = serializers.StringRelatedField()
-    waypoints = WaypointSerializer(many=True, read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
-
-    class Meta:
-        model = CourierRequest
-        fields = [
-            'id', 'customer', 'driver', 'pickup_address', 'pickup_latitude',
-            'pickup_longitude', 'dropoff_address', 'dropoff_latitude',
-            'dropoff_longitude', 'waypoints', 'current_waypoint_index',
-            'total_distance_km', 'total_duration_min', 'route_polyline',
-            'item_description', 'item_weight', 'status', 'status_display',
-            'fare', 'requested_at', 'accepted_at', 'started_at',
-            'completed_at', 'cancelled_at'
-        ]
-        read_only_fields = [
-            'id', 'customer', 'driver', 'current_waypoint_index',
-            'total_distance_km', 'total_duration_min', 'route_polyline',
-            'fare', 'requested_at', 'accepted_at', 'started_at',
-            'completed_at', 'cancelled_at'
-        ]
-
-
-class CourierRequestCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating courier requests with multiple waypoints."""
-    waypoints = WaypointCreateSerializer(many=True, required=False)
-
-    class Meta:
-        model = CourierRequest
-        fields = [
-            'pickup_address', 'pickup_latitude', 'pickup_longitude',
-            'dropoff_address', 'dropoff_latitude', 'dropoff_longitude',
-            'item_description', 'item_weight', 'waypoints'
-        ]
-
-    def create(self, validated_data):
-        waypoints_data = validated_data.pop('waypoints', [])
-        courier_request = CourierRequest.objects.create(**validated_data)
-
-        # Create waypoints if provided
-        if waypoints_data:
-            for waypoint_data in waypoints_data:
-                waypoint = Waypoint.objects.create(**waypoint_data)
-                courier_request.waypoints.add(waypoint)
-        else:
-            # Create default pickup and dropoff waypoints from legacy fields
-            if validated_data.get('pickup_address'):
-                pickup_waypoint = Waypoint.objects.create(
-                    address=validated_data['pickup_address'],
-                    latitude=validated_data['pickup_latitude'],
-                    longitude=validated_data['pickup_longitude'],
-                    waypoint_type='pickup',
-                    sequence_order=1
-                )
-                courier_request.waypoints.add(pickup_waypoint)
-
-            if validated_data.get('dropoff_address'):
-                dropoff_waypoint = Waypoint.objects.create(
-                    address=validated_data['dropoff_address'],
-                    latitude=validated_data['dropoff_latitude'],
-                    longitude=validated_data['dropoff_longitude'],
-                    waypoint_type='dropoff',
-                    sequence_order=2
-                )
-                courier_request.waypoints.add(dropoff_waypoint)
-
-        return courier_request
 
 
 class WaypointUpdateSerializer(serializers.ModelSerializer):

@@ -1,4 +1,5 @@
 import json
+import time
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
@@ -39,6 +40,8 @@ class RideTrackingConsumer(AsyncWebsocketConsumer):
 
         await self.accept()
 
+        self._last_location_update_ts = 0.0
+
         # Send initial ride data
         ride_data = await self.get_ride_data()
         if ride_data:
@@ -63,6 +66,10 @@ class RideTrackingConsumer(AsyncWebsocketConsumer):
 
             if message_type == 'location_update':
                 # Handle location update from driver
+                now = time.monotonic()
+                if now - getattr(self, "_last_location_update_ts", 0.0) < 0.5:
+                    return
+                self._last_location_update_ts = now
                 latitude = data.get('latitude')
                 longitude = data.get('longitude')
                 accuracy = data.get('accuracy')
@@ -244,6 +251,10 @@ class DriverLocationConsumer(AsyncWebsocketConsumer):
 
             if message_type == 'update_location':
                 # Handle location update from driver app
+                now = time.monotonic()
+                if now - getattr(self, "_last_location_update_ts", 0.0) < 0.5:
+                    return
+                self._last_location_update_ts = now
                 latitude = data.get('latitude')
                 longitude = data.get('longitude')
                 accuracy = data.get('accuracy')
