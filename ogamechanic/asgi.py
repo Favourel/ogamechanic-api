@@ -9,14 +9,13 @@ https://docs.djangoproject.com/en/5.2/howto/deployment/asgi/
 
 import os
 from django.core.asgi import get_asgi_application
-
-from decouple import config
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
-if config('env', '') == 'prod' or os.getenv('env', 'dev') == 'prod':
+# Set settings module before any other imports
+if os.getenv('env', '') == 'prod' or os.getenv('DJANGO_ENV', '') == 'prod':
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ogamechanic.settings.prod')
 else:
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ogamechanic.settings.dev')
