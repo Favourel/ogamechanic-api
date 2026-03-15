@@ -11,6 +11,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 # Application definition
 INSTALLED_APPS = [
+    'daphne',  # Add this first
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -29,7 +30,7 @@ INSTALLED_APPS = [
     'django_filters',
     "django_celery_beat",
 
-    # Local apps
+    # Local apps    
     'users.apps.UsersConfig',
     'adminpanel.apps.AdminpanelConfig',
     'products.apps.ProductsConfig',

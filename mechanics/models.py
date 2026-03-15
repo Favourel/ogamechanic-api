@@ -19,6 +19,7 @@ class RepairRequest(models.Model):
         ("pending", "Pending"),
         ("accepted", "Accepted by Mechanic"),
         ("in_transit", "In Transit"),
+        ("arrived", "Arrived at Location"),
         ("in_progress", "In Progress"),
         ("completed", "Completed"),
         ("cancelled", "Cancelled"),
