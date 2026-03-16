@@ -50,12 +50,12 @@ def find_and_notify_mechanics_task(self, repair_request_id, radius_km=10.0):
         customer_lat = float(repair_request.service_latitude)
         customer_lon = float(repair_request.service_longitude)
 
-        # Find all approved mechanics with location data
+        # Find all approved mechanics with location data, excluding the customer themself
         mechanics = MechanicProfile.objects.filter(
             is_approved=True,
             latitude__isnull=False,
             longitude__isnull=False
-        ).select_related('user')
+        ).exclude(user=repair_request.customer).select_related('user')
         logger.info(f"Found {mechanics.count()} mechanics for notification")
 
         mechanics_within_radius = []

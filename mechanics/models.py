@@ -61,6 +61,7 @@ class RepairRequest(models.Model):
     service_type = models.CharField(max_length=100)
     vehicle_make = models.CharField(max_length=50)
     vehicle_model = models.CharField(max_length=50)
+    vehicle_vin = models.CharField(max_length=17, blank=True, null=True)
     vehicle_year = models.PositiveIntegerField()
     vehicle_registration = models.CharField(max_length=20, blank=True)
 

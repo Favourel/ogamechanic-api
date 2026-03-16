@@ -125,6 +125,8 @@ class ProductSerializer(serializers.ModelSerializer):
         source="total_purchased", read_only=True)
     is_in_cart = serializers.BooleanField(read_only=True)
     is_in_favorite_list = serializers.BooleanField(read_only=True)
+    vin = serializers.CharField(read_only=True)
+    repair_history = serializers.SerializerMethodField()
 
     DELIVERY_OPTION_CHOICES = [
         ('pickup', 'Pick-up only'),
@@ -260,6 +262,8 @@ class ProductSerializer(serializers.ModelSerializer):
             'contact_info',
             'is_in_cart',
             'is_in_favorite_list',
+            'vin',
+            'repair_history',
         ]
         read_only_fields = [
             'id',
@@ -314,6 +318,16 @@ class ProductSerializer(serializers.ModelSerializer):
         )
         return round(avg, 1) if avg else None
 
+    def get_repair_history(self, obj):
+        """Fetch repair records from mechanics app using VIN"""
+        if not obj.vin:
+            return []
+        from mechanics.models import RepairRequest
+        from mechanics.serializers import RepairRequestListSerializer
+        
+        repairs = RepairRequest.objects.filter(vehicle_vin=obj.vin).order_by('-requested_at')
+        return RepairRequestListSerializer(repairs, many=True, context={'request': self.context.get('request')}).data
+
 
 class ProductCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating products with vehicle compatibility support"""
@@ -344,7 +358,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
             'negotiable', 'discount', 'availability', 'stock', 'is_rental',
             'airbags', 'abs', 'traction_control', 'lane_assist',
             'blind_spot_monitor', 'delivery_option', 'vehicle_compatibility',
-            'contact_info'
+            'contact_info', 'vin'
         ]
 
     def validate(self, attrs):

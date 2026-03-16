@@ -184,7 +184,7 @@ urlpatterns = [
         name='bank-account-list-create'
     ),
     path(
-        'bank-accounts/<uuid:account_id>/',
+        'bank-accounts/<int:pk>/',
         views.BankAccountDetailView.as_view(),
         name='bank-account-detail'
     ),

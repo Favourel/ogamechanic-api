@@ -257,6 +257,16 @@ class RepairRequestListView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # Check if user is trying to assign themselves
+            if mechanic == request.user:
+                return Response(
+                    api_response(
+                        message="You cannot assign yourself as the mechanic for your own repair request.",
+                        status=False,
+                    ),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             # Optional: ensure the selected user is actually a mechanic and approved
             if not mechanic.roles.filter(name="mechanic").exists():
                 return Response(

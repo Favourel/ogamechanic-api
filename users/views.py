@@ -5454,10 +5454,10 @@ class BankAccountDetailView(APIView):
         operation_description="Get bank account details",
         responses={200: BankAccountSerializer()},
     )
-    def get(self, request, account_id):
+    def get(self, request, pk):
         """Get bank account details."""
         try:
-            bank_account = BankAccount.objects.get(id=account_id, user=request.user)
+            bank_account = BankAccount.objects.get(id=pk, user=request.user)
             serializer = BankAccountSerializer(bank_account)
             return Response(
                 api_response(
@@ -5476,10 +5476,10 @@ class BankAccountDetailView(APIView):
         request_body=BankAccountSerializer,
         responses={200: BankAccountSerializer()},
     )
-    def patch(self, request, account_id):
+    def patch(self, request, pk):
         """Update bank account."""
         try:
-            bank_account = BankAccount.objects.get(id=account_id, user=request.user)
+            bank_account = BankAccount.objects.get(id=pk, user=request.user)
             serializer = BankAccountSerializer(
                 bank_account, data=request.data, partial=True
             )
@@ -5506,10 +5506,10 @@ class BankAccountDetailView(APIView):
             )
 
     @swagger_auto_schema(operation_description="Delete bank account")
-    def delete(self, request, account_id):
+    def delete(self, request, pk):
         """Delete bank account."""
         try:
-            bank_account = BankAccount.objects.get(id=account_id, user=request.user)
+            bank_account = BankAccount.objects.get(id=pk, user=request.user)
             bank_account.is_active = False
             bank_account.save()
             return Response(

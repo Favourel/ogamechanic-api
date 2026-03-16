@@ -89,6 +89,15 @@ class Product(models.Model):
         blank=True,
     )
 
+    # VIN (Vehicle Identification Number)
+    vin = models.CharField(
+        max_length=17,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text="Vehicle Identification Number (VIN)"
+    )
+
     # Condition
     CONDITION_CHOICES = [
         ('new', 'New'),
