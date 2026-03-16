@@ -67,9 +67,6 @@ class RepairRequest(models.Model):
 
     # Problem description
     problem_description = models.TextField()
-    problem_resolve = models.CharField(
-        max_length=200, null=True, blank=True
-    )
     # symptoms = models.TextField(blank=True)
     estimated_cost = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
@@ -271,6 +268,30 @@ class RepairRequest(models.Model):
                 pass
 
         super().save(*args, **kwargs)
+
+
+class RepairProblemResolve(models.Model):
+    """
+    Model for problem resolutions linked to a repair request.
+    Allows multiple resolutions per request.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    repair_request = models.ForeignKey(
+        RepairRequest,
+        on_delete=models.CASCADE,
+        related_name="problem_resolutions"
+    )
+    description = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        verbose_name = "Repair Problem Resolution"
+        verbose_name_plural = "Repair Problem Resolutions"
+
+    def __str__(self):
+        return f"Resolution for Repair #{str(self.repair_request.id)[:8]}"
 
 
 class TrainingSession(models.Model):

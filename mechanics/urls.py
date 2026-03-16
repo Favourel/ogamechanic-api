@@ -20,6 +20,11 @@ urlpatterns = [
         views.MechanicResponseView.as_view(),
         name="mechanic-respond",
     ),
+    path(
+        "repair-requests/<uuid:repair_id>/problem-resolves/",
+        views.RepairProblemResolveView.as_view(),
+        name="repair-problem-resolves",
+    ),
     # Available Mechanics
     path(
         "available-mechanics/",

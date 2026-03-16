@@ -3,6 +3,11 @@ from . import models
 
 
 # Custom admin for key models
+class RepairProblemResolveInline(admin.TabularInline):
+    model = models.RepairProblemResolve
+    extra = 1
+
+
 @admin.register(models.RepairRequest)
 class RepairRequestAdmin(admin.ModelAdmin):
     list_display = [
@@ -10,6 +15,7 @@ class RepairRequestAdmin(admin.ModelAdmin):
         'vehicle_model', 'status', 'priority', 'requested_at',
         'notified_mechanics_count'
     ]
+    inlines = [RepairProblemResolveInline]
 
     def notified_mechanics_count(self, obj):
         """Count of mechanics notified about this request"""
@@ -209,6 +215,7 @@ already_registered = {
     models.RepairRequest,
     models.TrainingSession,
     models.TrainingSessionParticipant,
+    models.RepairProblemResolve,
 }
 
 for model in vars(models).values():

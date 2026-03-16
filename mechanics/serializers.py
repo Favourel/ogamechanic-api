@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
     RepairRequest, TrainingSession, TrainingSessionParticipant,
-    VehicleMake, MechanicVehicleExpertise
+    VehicleMake, MechanicVehicleExpertise, RepairProblemResolve
 )
 from users.models import MechanicReview
 from users.serializers import MechanicProfileSerializer
@@ -18,12 +18,20 @@ class UserSerializer(serializers.ModelSerializer):
         ref_name = "MechanicsUserSerializer"
 
 
+class RepairProblemResolveSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RepairProblemResolve
+        fields = ['id', 'description', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
 class RepairRequestSerializer(serializers.ModelSerializer):
     customer = UserSerializer(read_only=True)
     mechanic = UserSerializer(read_only=True)
     mechanic_id = serializers.UUIDField(
         write_only=True, required=False, allow_null=True)
     notified_mechanics = UserSerializer(many=True, read_only=True)
+    problem_resolutions = RepairProblemResolveSerializer(many=True, read_only=True)
     can_accept = serializers.SerializerMethodField()
 
     class Meta:
@@ -36,7 +44,7 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             'vehicle_registration',
             'vehicle_vin',
             'problem_description',
-            'problem_resolve',
+            'problem_resolutions',
             # 'symptoms',
             'estimated_cost', 'service_address', 'service_latitude',
             'service_longitude', 'schedule', 'preferred_date', 'preferred_time_slot',
@@ -131,6 +139,7 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
     mechanic = UserSerializer(read_only=True)
     is_active = serializers.ReadOnlyField()
     can_be_cancelled = serializers.ReadOnlyField()
+    problem_resolutions = RepairProblemResolveSerializer(many=True, read_only=True)
     notified_mechanics = UserSerializer(many=True, read_only=True)
 
     class Meta:
@@ -147,7 +156,7 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
             'vehicle_registration',
             'vehicle_vin',
             'problem_description',
-            'problem_resolve',
+            'problem_resolutions',
             'estimated_cost',
             'service_address',
             'service_latitude',
@@ -175,7 +184,7 @@ class RepairRequestStatusUpdateSerializer(serializers.ModelSerializer):
         model = RepairRequest
         fields = [
             'status', 'notes', 'actual_cost', 
-            'cancellation_reason', 'problem_resolve',]
+            'cancellation_reason',]
 
 
 class TrainingSessionSerializer(serializers.ModelSerializer):

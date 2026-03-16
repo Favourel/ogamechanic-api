@@ -13,7 +13,8 @@ from ogamechanic.modules.utils import (
 )
 from ogamechanic.modules.paginations import CustomLimitOffsetPagination
 from .models import (
-    RepairRequest, TrainingSession, VehicleMake, MechanicVehicleExpertise
+    RepairRequest, TrainingSession, VehicleMake, MechanicVehicleExpertise,
+    RepairProblemResolve
 )
 from .serializers import (
     RepairRequestSerializer,
@@ -25,6 +26,7 @@ from .serializers import (
     TrainingSessionParticipantSerializer,
     TrainingSessionParticipantListSerializer,
     MechanicVehicleExpertiseSerializer,
+    RepairProblemResolveSerializer,
 )
 from .tasks import find_and_notify_mechanics_task
 from users.serializers import MechanicProfileSerializer
@@ -1994,3 +1996,62 @@ class MechanicAnalyticsView(APIView):
             ),
             status=status.HTTP_200_OK,
         )
+
+
+class RepairProblemResolveView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="Add a problem resolution to a repair request",
+        request_body=RepairProblemResolveSerializer,
+        responses={201: RepairProblemResolveSerializer()},
+    )
+    def post(self, request, repair_id):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        repair_request = get_object_or_404(RepairRequest, id=repair_id)
+
+        # Check permissions: Only customer or assigned mechanic
+        active_role = getattr(request.user, 'active_role', None)
+        active_role_name = active_role.name if active_role else None
+
+        user_is_customer = (
+            active_role_name == "primary_user" and
+            repair_request.customer == request.user
+        )
+        user_is_mechanic = (
+            active_role_name == "mechanic" and
+            repair_request.mechanic == request.user
+        )
+
+        if not (user_is_customer or user_is_mechanic):
+            return Response(
+                api_response(
+                    message="You don't have permission to add resolutions to this request.",
+                    status=False,
+                ),
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = RepairProblemResolveSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save(repair_request=repair_request)
+            return Response(
+                api_response(
+                    message="Problem resolution added successfully.",
+                    status=True,
+                    data=serializer.data,
+                ),
+                status=status.HTTP_201_CREATED,
+            )
+        
+        return Response(
+            api_response(message=serializer.errors, status=False),
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
