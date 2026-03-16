@@ -1,4 +1,4 @@
-from rest_framework import status
+from rest_framework import status, parsers
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -19,6 +19,7 @@ from .serializers import (
     ChatRoomListSerializer,
     MessageSerializer,
     ChatNotificationSerializer,
+    SupportFileUploadSerializer,
 )
 
 
@@ -1096,19 +1097,14 @@ class SupportFileUploadView(APIView):
     """Upload a file attachment for a support message."""
 
     permission_classes = [IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser]
 
     @swagger_auto_schema(
         operation_description="Upload a file for a support chat message",
-        manual_parameters=[
-            openapi.Parameter(
-                "file", openapi.IN_FORM,
-                type=openapi.TYPE_FILE, required=True,
-            ),
-        ],
+        request_body=SupportFileUploadSerializer,
         responses={201: "File uploaded"},
     )
     def post(self, request):
-        from .serializers import SupportFileUploadSerializer
         from django.core.files.storage import default_storage
 
         serializer = SupportFileUploadSerializer(data=request.data)

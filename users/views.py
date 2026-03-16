@@ -1296,7 +1296,7 @@ class SwitchRoleView(APIView):
                 UserActivityLog.objects.create(
                     user=user,
                     action=action,
-                    details=f"User switched to role: {role_name}",
+                    description=f"User switched to role: {role_name}",
                 )
             except Exception as e:
                 logger.error(f"Failed to log role switch: {e}")
