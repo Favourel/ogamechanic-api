@@ -105,6 +105,7 @@ class RepairRequest(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+    arrived_at = models.DateTimeField(null=True, blank=True)
     # failed_at = models.DateTimeField(null=True, blank=True)
     rejected_at = models.DateTimeField(null=True, blank=True)
     in_transit_at = models.DateTimeField(null=True, blank=True)
@@ -226,6 +227,15 @@ class RepairRequest(models.Model):
             return True
         return False
 
+    def arrive_at_location(self):
+        """Mark repair as arrived at location"""
+        if self.status == "arrived":
+            self.status = "arrived"
+            self.arrived_at = timezone.now()
+            self.save()
+            return True
+        return False
+
     def save(self, *args, **kwargs):
         """
         Override save to automatically update timestamp fields
@@ -259,6 +269,8 @@ class RepairRequest(models.Model):
                         self.cancelled_at = now
                     elif self.status == "rejected" and not self.rejected_at:
                         self.rejected_at = now
+                    elif self.status == "arrived" and not self.arrived_at:
+                        self.arrived_at = now
             except RepairRequest.DoesNotExist:
                 logger.warning(
                     "Previous RepairRequest instance with id %s not found "

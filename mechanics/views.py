@@ -502,6 +502,7 @@ class RepairRequestDetailView(APIView):
             "accepted",
             "in_transit",
             "in_progress",
+            "arrived",
             "completed",
             "cancelled",
             "rejected"
@@ -599,6 +600,7 @@ class RepairRequestDetailView(APIView):
             "accepted",
             "in_transit",
             "in_progress",
+            "arrived",
             "completed",
             "cancelled",
             "rejected",
