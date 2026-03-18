@@ -31,7 +31,7 @@ class RepairRequestSerializer(serializers.ModelSerializer):
     mechanic_id = serializers.UUIDField(
         write_only=True, required=False, allow_null=True)
     notified_mechanics = UserSerializer(many=True, read_only=True)
-    problem_resolutions = RepairProblemResolveSerializer(many=True, read_only=True)
+    problem_resolutions = RepairProblemResolveSerializer(many=True, required=False)
     can_accept = serializers.SerializerMethodField()
 
     class Meta:
@@ -129,10 +129,20 @@ class RepairRequestSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"mechanic_id": "Mechanic not found."})
 
+        resolutions_data = validated_data.pop('problem_resolutions', None)
+
         # Handle normal update for other fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
+        # Handle problem_resolutions if provided
+        if resolutions_data is not None:
+            # Delete existing resolutions and create new ones
+            instance.problem_resolutions.all().delete()
+            for res_data in resolutions_data:
+                RepairProblemResolve.objects.create(repair_request=instance, **res_data)
+
         return instance
 
 
