@@ -465,6 +465,19 @@ ORDER_STATUS_CHOICES = [
 ]
 
 
+PAYMENT_METHOD_CHOICES = [
+    ('online', 'Online (Paystack)'),
+    ('cash_on_delivery', 'Cash on Delivery'),
+]
+
+PAYMENT_STATUS_CHOICES = [
+    ('pending', 'Pending'),
+    ('paid', 'Paid'),
+    ('failed', 'Failed'),
+    ('refunded', 'Refunded'),
+]
+
+
 class Order(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     customer = models.ForeignKey(
@@ -477,8 +490,30 @@ class Order(models.Model):
         choices=ORDER_STATUS_CHOICES,
         default='pending'
     )
+    payment_method = models.CharField(
+        max_length=32,
+        choices=PAYMENT_METHOD_CHOICES,
+        default='online'
+    )
+    payment_status = models.CharField(
+        max_length=32,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='pending'
+    )
+    payment_reference = models.CharField(
+        max_length=128,
+        blank=True,
+        null=True
+    )
     total_amount = models.DecimalField(
         max_digits=12, decimal_places=2, default=0)
+    
+    # Timestamps for status changes
+    paid_at = models.DateTimeField(blank=True, null=True)
+    shipped_at = models.DateTimeField(blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    cancelled_at = models.DateTimeField(blank=True, null=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -492,6 +527,30 @@ class Order(models.Model):
 
     def __str__(self):
         return f"Order {self.id} by {self.customer.email}"
+
+    def save(self, *args, **kwargs):
+        from django.utils import timezone
+        if not self._state.adding:
+            try:
+                old_instance = Order.objects.get(pk=self.pk)
+                if old_instance.status != self.status:
+                    now = timezone.now()
+                    if self.status == 'paid':
+                        self.paid_at = now
+                    elif self.status == 'shipped':
+                        self.shipped_at = now
+                    elif self.status == 'completed':
+                        self.completed_at = now
+                    elif self.status == 'cancelled':
+                        self.cancelled_at = now
+                
+                # Also handle payment_status change to 'paid' if not already handled
+                if old_instance.payment_status != self.payment_status and self.payment_status == 'paid':
+                    self.paid_at = self.paid_at or timezone.now()
+            except Order.DoesNotExist:
+                pass
+
+        super().save(*args, **kwargs)
 
 
 class OrderItem(models.Model):
@@ -542,38 +601,9 @@ class CartItem(models.Model):
         return f"{self.product.name} x{self.quantity} (Cart {self.cart.id})"
 
 
-PAYMENT_METHOD_CHOICES = [
-    ('online', 'Online (Paystack)'),
-    ('cash_on_delivery', 'Cash on Delivery'),
-]
+# PAYMENT choices moved above Order model.
 
-PAYMENT_STATUS_CHOICES = [
-    ('pending', 'Pending'),
-    ('paid', 'Paid'),
-    ('failed', 'Failed'),
-    ('refunded', 'Refunded'),
-]
-
-# Update Order model
-Order.add_to_class('payment_method', models.CharField(
-    max_length=32,
-    choices=PAYMENT_METHOD_CHOICES,
-    default='online',
-))
-Order.add_to_class('payment_status', models.CharField(
-    max_length=32,
-    choices=PAYMENT_STATUS_CHOICES,
-    default='pending',
-))
-Order.add_to_class('payment_reference', models.CharField(
-    max_length=128,
-    blank=True,
-    null=True,
-))
-Order.add_to_class('paid_at', models.DateTimeField(
-    blank=True,
-    null=True,
-))
+# Timestamps for status changes are already implemented in Order model above.
 
 
 class ProductReview(models.Model):
