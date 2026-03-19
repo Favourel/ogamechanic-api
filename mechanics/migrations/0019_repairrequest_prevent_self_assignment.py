@@ -3,12 +3,19 @@
 from django.db import migrations, models
 
 
+def clean_self_assignments(apps, schema_editor):
+    RepairRequest = apps.get_model("mechanics", "RepairRequest")
+    from django.db.models import F
+    RepairRequest.objects.filter(customer=F('mechanic')).update(mechanic=None)
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("mechanics", "0018_repairrequest_arrived_at"),
     ]
 
     operations = [
+        migrations.RunPython(clean_self_assignments, reverse_code=migrations.RunPython.noop),
         migrations.AddConstraint(
             model_name="repairrequest",
             constraint=models.CheckConstraint(
