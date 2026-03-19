@@ -813,7 +813,8 @@ class MechanicResponseView(APIView):
                     title="Mechanic Accepted Your Request",
                     message=(
                         f"{mechanic_name} has accepted your repair request. "
-                        f"They will contact you soon."
+                        f"They will contact you soon. Please provide them with "
+                        f"this OTP code to start the repair: {repair_request.otp_code}"
                     ),
                     notification_type='success',
                     related_object=repair_request,
