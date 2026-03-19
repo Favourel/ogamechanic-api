@@ -23,6 +23,7 @@ class RepairRequest(models.Model):
         ("arrived", "Arrived at Location"),
         ("in_progress", "In Progress"),
         ("completed", "Completed"),
+        ("verify_completed", "Verify Completed"),
         ("cancelled", "Cancelled"),
         ("rejected", "Rejected"),
     ]
@@ -105,6 +106,7 @@ class RepairRequest(models.Model):
     accepted_at = models.DateTimeField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    verify_completed_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
     arrived_at = models.DateTimeField(null=True, blank=True)
     # failed_at = models.DateTimeField(null=True, blank=True)
@@ -301,6 +303,8 @@ class RepairRequest(models.Model):
                         self.started_at = now
                     elif self.status == "completed" and not self.completed_at:
                         self.completed_at = now
+                    elif self.status == "verify_completed" and not self.verify_completed_at:
+                        self.verify_completed_at = now
                     elif self.status == "cancelled" and not self.cancelled_at:
                         self.cancelled_at = now
                     elif self.status == "rejected" and not self.rejected_at:

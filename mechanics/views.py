@@ -500,18 +500,18 @@ class RepairRequestDetailView(APIView):
         # Check specific status transitions
         new_status = data.get('status')
         if new_status:
-            if user_is_mechanic and new_status in ['in_progress', 'completed']:
+            if user_is_mechanic and new_status in ['in_progress', 'verify_completed']:
                 return Response(
                     api_response(
-                        message="Mechanics cannot manually transition status to in_progress or completed.",
+                        message="Mechanics cannot manually transition status to in_progress or verify_completed.",
                         status=False,
                     ),
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            if user_is_customer and new_status not in [repair_request.status, 'completed', 'cancelled']:
+            if user_is_customer and new_status not in [repair_request.status, 'verify_completed', 'cancelled']:
                 return Response(
                     api_response(
-                        message="Customers cannot arbitrarily change the status to mechanic-owned states.",
+                        message="Customers can only transition status to verify_completed or cancelled.",
                         status=False,
                     ),
                     status=status.HTTP_403_FORBIDDEN,
@@ -520,6 +520,7 @@ class RepairRequestDetailView(APIView):
         # Restrict customer general updates based on current status
         forbidden_statuses_for_customer = [
             "completed",
+            "verify_completed",
             "cancelled",
             "rejected"
         ]
@@ -614,18 +615,18 @@ class RepairRequestDetailView(APIView):
         # Check specific status transitions
         new_status = data.get('status')
         if new_status:
-            if user_is_mechanic and new_status in ['in_progress', 'completed']:
+            if user_is_mechanic and new_status in ['in_progress', 'verify_completed']:
                 return Response(
                     api_response(
-                        message="Mechanics cannot manually transition status to in_progress or completed.",
+                        message="Mechanics cannot manually transition status to in_progress or verify_completed.",
                         status=False,
                     ),
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            if user_is_customer and new_status not in [repair_request.status, 'completed', 'cancelled']:
+            if user_is_customer and new_status not in [repair_request.status, 'verify_completed', 'cancelled']:
                 return Response(
                     api_response(
-                        message="Customers cannot arbitrarily change the status to mechanic-owned states.",
+                        message="Customers can only transition status to verify_completed or cancelled.",
                         status=False,
                     ),
                     status=status.HTTP_403_FORBIDDEN,
@@ -634,6 +635,7 @@ class RepairRequestDetailView(APIView):
         # Restrict customer general updates based on current status
         forbidden_statuses_for_customer = [
             "completed",
+            "verify_completed",
             "cancelled",
             "rejected"
         ]
