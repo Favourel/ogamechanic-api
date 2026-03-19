@@ -56,6 +56,15 @@ def find_and_notify_mechanics_task(self, repair_request_id, radius_km=10.0):
             latitude__isnull=False,
             longitude__isnull=False
         ).exclude(user=repair_request.customer).select_related('user')
+        
+        # Ensure we log the explicit exclusion of the creator if they have a mechanic profile
+        creator_is_mechanic = MechanicProfile.objects.filter(user=repair_request.customer).exists()
+        if creator_is_mechanic:
+            logger.info(
+                f"Explicitly excluded request creator {repair_request.customer.id} "
+                f"from nearby mechanics search for RepairRequest {repair_request_id}"
+            )
+
         logger.info(f"Found {mechanics.count()} mechanics for notification")
 
         mechanics_within_radius = []
@@ -65,6 +74,14 @@ def find_and_notify_mechanics_task(self, repair_request_id, radius_km=10.0):
         )
 
         for mechanic_profile in mechanics:
+            # Fallback safeguard against self-notification
+            if mechanic_profile.user_id == repair_request.customer_id:
+                logger.warning(
+                    f"Fallback exclusion triggered for creator {mechanic_profile.user_id} "
+                    f"in nearby search for RepairRequest {repair_request_id}"
+                )
+                continue
+
             mechanic_lat = float(mechanic_profile.latitude)
             mechanic_lon = float(mechanic_profile.longitude)
             logger.info(

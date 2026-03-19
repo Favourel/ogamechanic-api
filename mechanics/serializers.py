@@ -60,7 +60,7 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             'updated_at',
             'notes',
             'cancellation_reason', 'actual_cost', 'is_active',
-            'can_be_cancelled', 'notified_mechanics', 'can_accept'
+            'can_be_cancelled', 'notified_mechanics', 'can_accept', 'otp_code'
         ]
         read_only_fields = [
             'id', 'customer', 'mechanic',
@@ -86,6 +86,14 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             if request.user.roles.filter(name="mechanic").exists():
                 return obj.can_mechanic_accept(request.user)
         return False
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get('request')
+        # Only reveal OTP if the authenticated user is the customer
+        if not (request and request.user.is_authenticated and instance.customer_id == request.user.id):
+            ret.pop('otp_code', None)
+        return ret
 
     def validate_mechanic_id(self, value):
         if value is not None and not User.objects.filter(id=value).exists():
@@ -130,6 +138,15 @@ class RepairRequestSerializer(serializers.ModelSerializer):
                     {"mechanic_id": "Mechanic not found."})
 
         resolutions_data = validated_data.pop('problem_resolutions', None)
+
+        # Handle OTP validation for starting repair
+        new_status = validated_data.get('status', instance.status)
+        if new_status == 'in_progress' and instance.status != 'in_progress':
+            submitted_otp = validated_data.pop('otp_code', None)
+            if not submitted_otp or submitted_otp != instance.otp_code:
+                raise serializers.ValidationError({"otp_code": "Valid OTP code is required to start repair."})
+        # Remove otp_code from validated_data to prevent manual overwriting otherwise
+        validated_data.pop('otp_code', None)
 
         # Handle normal update for other fields
         for attr, value in validated_data.items():
@@ -187,8 +204,17 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
             'cancellation_reason',
             'actual_cost',
             'is_active',
-            'can_be_cancelled'
+            'can_be_cancelled',
+            'otp_code'
         ]
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get('request')
+        # Only reveal OTP if the authenticated user is the customer
+        if not (request and request.user.is_authenticated and instance.customer_id == request.user.id):
+            ret.pop('otp_code', None)
+        return ret
 
 
 class RepairRequestStatusUpdateSerializer(serializers.ModelSerializer):

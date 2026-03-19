@@ -3,6 +3,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 import logging
 
 User = get_user_model()
@@ -127,6 +128,10 @@ class RepairRequest(models.Model):
     actual_cost = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
     )
+    otp_code = models.CharField(
+        max_length=6, blank=True, null=True,
+        help_text="6-digit OTP code required for mechanic to start repair"
+    )
 
     class Meta:
         ordering = ["-requested_at"]
@@ -137,9 +142,24 @@ class RepairRequest(models.Model):
             models.Index(fields=["priority"]),
             models.Index(fields=["requested_at"]),
         ]
+        constraints = [
+            models.CheckConstraint(
+                check=~models.Q(customer=models.F('mechanic')),
+                name='prevent_self_assignment'
+            )
+        ]
 
     def __str__(self):
         return f"Repair #{str(self.id)[:8]} - {self.customer.email} ({self.status})"  # noqa
+
+    def clean(self):
+        super().clean()
+        if self.mechanic_id and self.customer_id and self.mechanic_id == self.customer_id:
+            logger.warning(
+                f"Blocked attempt to assign creator (User {self.customer_id}) "
+                f"as mechanic for RepairRequest {self.id}"
+            )
+            raise ValidationError("A mechanic cannot be assigned to their own repair request.")
 
     @property
     def is_active(self):
@@ -164,6 +184,13 @@ class RepairRequest(models.Model):
             bool: True if assignment successful, False otherwise
         """
         if not mechanic.roles.filter(name="mechanic").exists():
+            return False
+
+        if self.customer_id == mechanic.id:
+            logger.warning(
+                f"Blocked attempt to assign creator (User {self.customer_id}) "
+                f"as mechanic for RepairRequest {self.id}"
+            )
             return False
 
         # If request already has a mechanic, cannot reassign
@@ -241,8 +268,13 @@ class RepairRequest(models.Model):
         Override save to automatically update timestamp fields
         based on status changes
         """
+        # Generate OTP if new instance and not explicitly provided
+        if self._state.adding and not self.otp_code:
+            import random
+            self.otp_code = f"{random.randint(100000, 999999)}"
+
         # Track if this is an update (has pk) or new instance
-        is_update = self.pk is not None
+        is_update = not self._state.adding
 
         if is_update:
             # Get the old instance to check if status changed

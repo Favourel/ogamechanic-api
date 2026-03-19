@@ -610,6 +610,15 @@ class MechanicNotificationService:
     @staticmethod
     def repair_requested(repair):
         """Notify mechanic when repair is requested"""
+        if repair.mechanic_id and repair.mechanic_id == repair.customer_id:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Prevented sending repair request notification to creator "
+                f"{repair.customer_id} for RepairRequest {repair.id}"
+            )
+            return
+
         NotificationService.create_notification(
             user=repair.mechanic,
             title="New Repair Request",
