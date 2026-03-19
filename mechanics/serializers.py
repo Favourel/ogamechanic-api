@@ -60,7 +60,8 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             'updated_at',
             'notes',
             'cancellation_reason', 'actual_cost', 'is_active',
-            'can_be_cancelled', 'notified_mechanics', 'can_accept', 'otp_code'
+            'can_be_cancelled', 'notified_mechanics', 'can_accept', 'otp_code',
+            'is_otp_verified'
         ]
         read_only_fields = [
             'id', 'customer', 'mechanic',
@@ -76,7 +77,8 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
             'is_active',
-            'can_be_cancelled', 'notified_mechanics', 'can_accept'
+            'can_be_cancelled', 'notified_mechanics', 'can_accept',
+            'is_otp_verified'
         ]
 
     def get_can_accept(self, obj):
@@ -139,13 +141,7 @@ class RepairRequestSerializer(serializers.ModelSerializer):
 
         resolutions_data = validated_data.pop('problem_resolutions', None)
 
-        # Handle OTP validation for starting repair
-        new_status = validated_data.get('status', instance.status)
-        if new_status == 'in_progress' and instance.status != 'in_progress':
-            submitted_otp = validated_data.pop('otp_code', None)
-            if not submitted_otp or submitted_otp != instance.otp_code:
-                raise serializers.ValidationError({"otp_code": "Valid OTP code is required to start repair."})
-        # Remove otp_code from validated_data to prevent manual overwriting otherwise
+        # Remove otp_code from validated_data to prevent manual overwriting via generic updates
         validated_data.pop('otp_code', None)
 
         # Handle normal update for other fields
@@ -205,7 +201,8 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
             'actual_cost',
             'is_active',
             'can_be_cancelled',
-            'otp_code'
+            'otp_code',
+            'is_otp_verified'
         ]
 
     def to_representation(self, instance):

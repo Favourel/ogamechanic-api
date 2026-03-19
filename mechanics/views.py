@@ -497,12 +497,28 @@ class RepairRequestDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Restrict customer updates based on status
+        # Check specific status transitions
+        new_status = data.get('status')
+        if new_status:
+            if user_is_mechanic and new_status in ['in_progress', 'completed']:
+                return Response(
+                    api_response(
+                        message="Mechanics cannot manually transition status to in_progress or completed.",
+                        status=False,
+                    ),
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if user_is_customer and new_status not in [repair_request.status, 'completed', 'cancelled']:
+                return Response(
+                    api_response(
+                        message="Customers cannot arbitrarily change the status to mechanic-owned states.",
+                        status=False,
+                    ),
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        # Restrict customer general updates based on current status
         forbidden_statuses_for_customer = [
-            "accepted",
-            "in_transit",
-            "in_progress",
-            "arrived",
             "completed",
             "cancelled",
             "rejected"
@@ -515,7 +531,7 @@ class RepairRequestDetailView(APIView):
                 api_response(
                     message=(
                         "You cannot update this repair request in its "
-                        "current status."
+                        "current finalized status."
                     ),
                     status=False,
                 ),
@@ -595,15 +611,31 @@ class RepairRequestDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Restrict customer updates based on status
+        # Check specific status transitions
+        new_status = data.get('status')
+        if new_status:
+            if user_is_mechanic and new_status in ['in_progress', 'completed']:
+                return Response(
+                    api_response(
+                        message="Mechanics cannot manually transition status to in_progress or completed.",
+                        status=False,
+                    ),
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if user_is_customer and new_status not in [repair_request.status, 'completed', 'cancelled']:
+                return Response(
+                    api_response(
+                        message="Customers cannot arbitrarily change the status to mechanic-owned states.",
+                        status=False,
+                    ),
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        # Restrict customer general updates based on current status
         forbidden_statuses_for_customer = [
-            "accepted",
-            "in_transit",
-            "in_progress",
-            "arrived",
             "completed",
             "cancelled",
-            "rejected",
+            "rejected"
         ]
         if (
             user_is_customer
@@ -613,7 +645,7 @@ class RepairRequestDetailView(APIView):
                 api_response(
                     message=(
                         "You cannot update this repair request in its "
-                        "current status."
+                        "current finalized status."
                     ),
                     status=False,
                 ),
@@ -873,10 +905,83 @@ class MechanicResponseView(APIView):
                     status=True,
                     data=RepairRequestSerializer(
                         repair_request,
-                        context={'request': request}
                     ).data,
                 )
             )
+
+
+class VerifyRepairOTPView(APIView):
+    """
+    Endpoint for a mechanic to submit the OTP to start a repair.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="Mechanic submits OTP to start repair. Only the assigned mechanic can perform this action.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['otp_code'],
+            properties={
+                'otp_code': openapi.Schema(type=openapi.TYPE_STRING, description="6-digit OTP code provided by the customer")
+            }
+        ),
+        responses={200: RepairRequestSerializer()}
+    )
+    def post(self, request, repair_id):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(api_response(message=data, status=False), status=status.HTTP_400_BAD_REQUEST)
+
+        repair_request = get_object_or_404(RepairRequest, id=repair_id)
+
+        # Ensure user is fully mechanic
+        if not request.user.roles.filter(name="mechanic").exists():
+            return Response(
+                api_response(message="Only mechanics can perform this action.", status=False),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Ensure mechanic is exactly the one assigned
+        if repair_request.mechanic != request.user:
+            return Response(
+                api_response(message="You are not the assigned mechanic for this request.", status=False),
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check if already verified
+        if repair_request.is_otp_verified:
+            return Response(
+                api_response(message="OTP has already been verified for this request.", status=False),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Check if status is appropriate
+        if repair_request.status in ['in_progress', 'completed', 'cancelled', 'rejected']:
+            return Response(
+                api_response(message="Repair request cannot be started in its current finalized or active state.", status=False),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        submitted_otp = data.get('otp_code', '')
+        if not submitted_otp or submitted_otp != repair_request.otp_code:
+            return Response(
+                api_response(message="Invalid OTP code.", status=False),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Valid OTP - lock it in
+        repair_request.is_otp_verified = True
+        repair_request.status = 'in_progress'
+        repair_request.save()
+
+        return Response(
+            api_response(
+                message="OTP verified successfully. Repair is now in progress.",
+                status=True,
+                data=RepairRequestSerializer(repair_request, context={'request': request}).data
+            ),
+            status=status.HTTP_200_OK
+        )
 
 
 class TrainingSessionListView(APIView):

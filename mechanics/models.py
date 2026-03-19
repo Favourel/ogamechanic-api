@@ -132,6 +132,10 @@ class RepairRequest(models.Model):
         max_length=6, blank=True, null=True,
         help_text="6-digit OTP code required for mechanic to start repair"
     )
+    is_otp_verified = models.BooleanField(
+        default=False,
+        help_text="True if the mechanic successfully submitted the OTP to start the repair"
+    )
 
     class Meta:
         ordering = ["-requested_at"]

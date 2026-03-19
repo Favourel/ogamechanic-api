@@ -25,6 +25,11 @@ urlpatterns = [
         views.RepairProblemResolveView.as_view(),
         name="repair-problem-resolves",
     ),
+    path(
+        "repair-requests/<uuid:repair_id>/verify-otp/",
+        views.VerifyRepairOTPView.as_view(),
+        name="verify-repair-otp",
+    ),
     # Available Mechanics
     path(
         "available-mechanics/",
