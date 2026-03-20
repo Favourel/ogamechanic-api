@@ -99,8 +99,8 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Internationalization
-LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'Africa/Lagos'
+LANGUAGE_CODE = "en-us"
+TIME_ZONE = "Africa/Lagos"
 USE_I18N = True
 USE_TZ = True
 
@@ -301,6 +301,31 @@ ADMINS = [
     ("Favour", "favourelodimuor16@gmail.com"),
 ]
 
+# Celery Configuration Options
+CELERY_TIMEZONE = 'Africa/Lagos'  # or your actual timezone
+CELERY_ENABLE_UTC = False
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60
+
+REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')  # noqa
+REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))  # noqa
+
+CELERY_BROKER_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/6'
+CELERY_RESULT_BACKEND = f'redis://{REDIS_HOST}:{REDIS_PORT}/6'
+CELERY_ACCEPT_CONTENT = ['application/json']
+# In settings.py or celery.py
+
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TASK_ACKS_LATE = True
+CELERY_BROKER_CONNECTION_TIMEOUT = 30
+CELERY_BROKER_HEARTBEAT = 10
+CELERY_BEAT_DATABASE_SCHEDULER_LOCK = True
+CELERY_BEAT_DATABASE_SCHEDULER_LOCK_TIMEOUT = 300
+CELERY_WORKER_CONCURRENCY = 4  # Adjust based on CPU cores
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # Prevent overloading workers
+
 CELERY_BEAT_SCHEDULE = {
     'cleanup-expired-tokens': {
         'task': 'cleanup_expired_tokens',
@@ -324,3 +349,4 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'

@@ -56,19 +56,6 @@ CACHE_TIMEOUT_VERY_LONG = os.environ.get('CACHE_TIMEOUT_VERY_LONG') # noqa
 SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
 SESSION_CACHE_ALIAS = 'default'
 
-# Celery Configuration Options
-CELERY_TIMEZONE = "UTC"
-CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = 30 * 60
-
-CELERY_BROKER_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/6'
-CELERY_RESULT_BACKEND = f'redis://{REDIS_HOST}:{REDIS_PORT}/6'
-CELERY_ACCEPT_CONTENT = ['application/json']
-
-CELERY_ACCEPT_CONTENT = ["json"]
-CELERY_TASK_SERIALIZER = "json"
-CELERY_RESULT_SERIALIZER = "json"
-
 # CORS settings
 CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS').split(',') # noqa
 CORS_ALLOW_CREDENTIALS = True

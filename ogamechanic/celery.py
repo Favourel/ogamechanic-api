@@ -26,6 +26,9 @@ if not app.conf.get('result_backend'):
 
 # Configure Celery to use Redis
 app.conf.update(
+    enable_utc=False,
+    timezone='Africa/Lagos',                    # ← Most important
+    beat_schedule_timezone='Africa/Lagos',      # ← Explicit for Beat
     broker_url='redis://localhost:6379/5',
     result_backend='redis://localhost:6379/5',
     broker_transport_options={'visibility_timeout': 3600},
@@ -33,8 +36,7 @@ app.conf.update(
     task_serializer='json',
     accept_content=['json'],
     result_serializer='json',
-    timezone='Africa/Lagos',  # Use Lagos timezone
-    enable_utc=False,  # Disable UTC to use local timezone
+
     worker_max_tasks_per_child=1000,  # Restart worker after 1000 tasks
     worker_prefetch_multiplier=1,  # Disable prefetching
     task_acks_late=True,  # Only acknowledge tasks after they complete
