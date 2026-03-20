@@ -361,7 +361,7 @@ class RepairRequestListView(APIView):
             if not repair_request.mechanic:
                 find_and_notify_mechanics_task.delay(
                     str(repair_request.id),
-                    radius_km=10.0
+                    radius_km=20.0
                 )
 
                 message = (
