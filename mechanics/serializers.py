@@ -58,6 +58,7 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             'in_progress_at',
             'created_at',
             'updated_at',
+            'verify_completed_at',
             'notes',
             'cancellation_reason', 'actual_cost', 'is_active',
             'can_be_cancelled', 'notified_mechanics', 'can_accept', 'otp_code',
@@ -76,6 +77,7 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             'in_progress_at',
             'created_at',
             'updated_at',
+            'verify_completed_at',
             'is_active',
             'can_be_cancelled', 'notified_mechanics', 'can_accept',
             'is_otp_verified'
@@ -196,6 +198,7 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
             'started_at',
             'completed_at',
             'cancelled_at',
+            'verify_completed_at',
             'notes',
             'cancellation_reason',
             'actual_cost',
