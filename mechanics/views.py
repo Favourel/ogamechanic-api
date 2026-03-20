@@ -518,26 +518,24 @@ class RepairRequestDetailView(APIView):
                 )
 
         # Restrict customer general updates based on current status
-        forbidden_statuses_for_customer = [
-            "completed",
-            "verify_completed",
-            "cancelled",
-            "rejected"
-        ]
-        if (
-            user_is_customer
-            and repair_request.status in forbidden_statuses_for_customer
-        ):
-            return Response(
-                api_response(
-                    message=(
-                        "You cannot update this repair request in its "
-                        "current finalized status."
+        # Customers can only update if it's not finalized, OR if they are transitioning to verify_completed
+        if user_is_customer:
+            if repair_request.status in ["verify_completed", "cancelled", "rejected"]:
+                return Response(
+                    api_response(
+                        message="You cannot update this repair request in its current finalized status.",
+                        status=False,
                     ),
-                    status=False,
-                ),
-                status=status.HTTP_403_FORBIDDEN,
-            )
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if repair_request.status == "completed" and new_status != "verify_completed":
+                return Response(
+                    api_response(
+                        message="This repair is completed. You can only transition it to 'verify_completed'.",
+                        status=False,
+                    ),
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         serializer = RepairRequestSerializer(
             repair_request, data=data, partial=False,
@@ -633,26 +631,23 @@ class RepairRequestDetailView(APIView):
                 )
 
         # Restrict customer general updates based on current status
-        forbidden_statuses_for_customer = [
-            "completed",
-            "verify_completed",
-            "cancelled",
-            "rejected"
-        ]
-        if (
-            user_is_customer
-            and repair_request.status in forbidden_statuses_for_customer
-        ):
-            return Response(
-                api_response(
-                    message=(
-                        "You cannot update this repair request in its "
-                        "current finalized status."
+        if user_is_customer:
+            if repair_request.status in ["verify_completed", "cancelled", "rejected"]:
+                return Response(
+                    api_response(
+                        message="You cannot update this repair request in its current finalized status.",
+                        status=False,
                     ),
-                    status=False,
-                ),
-                status=status.HTTP_403_FORBIDDEN,
-            )
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if repair_request.status == "completed" and new_status != "verify_completed":
+                return Response(
+                    api_response(
+                        message="This repair is completed. You can only transition it to 'verify_completed'.",
+                        status=False,
+                    ),
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         serializer = RepairRequestSerializer(
             repair_request, data=data, partial=True,
