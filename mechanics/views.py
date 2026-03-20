@@ -336,8 +336,8 @@ class RepairRequestListView(APIView):
                     return Response(
                         api_response(
                             message=(
-                                "Repair request created and "
-                                "mechanic assigned successfully."
+                                f"Repair request created and mechanic assigned successfully. "
+                                f"Your verification OTP is {repair_request.otp_code}."
                             ),
                             status=True,
                             data=RepairRequestSerializer(
@@ -365,14 +365,14 @@ class RepairRequestListView(APIView):
                 )
 
                 message = (
-                    "Repair request created successfully. "
+                    f"Repair request created successfully. Your verification OTP is {repair_request.otp_code}. "
                     "Searching for mechanics within 10km radius. "
                     "You will be notified when mechanics respond."
                 )
             else:
                 message = (
-                    "Repair request created and "
-                    "mechanic assigned successfully."
+                    f"Repair request created and mechanic assigned successfully. "
+                    f"Your verification OTP is {repair_request.otp_code}."
                 )
 
             return Response(
