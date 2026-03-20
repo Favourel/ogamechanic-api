@@ -264,6 +264,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'is_in_favorite_list',
             'vin',
             'repair_history',
+            'is_active',
         ]
         read_only_fields = [
             'id',
@@ -358,7 +359,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
             'negotiable', 'discount', 'availability', 'stock', 'is_rental',
             'airbags', 'abs', 'traction_control', 'lane_assist',
             'blind_spot_monitor', 'delivery_option', 'vehicle_compatibility',
-            'contact_info', 'vin'
+            'contact_info', 'vin', 'is_active'
         ]
 
     def validate(self, attrs):
@@ -427,6 +428,42 @@ class ProductCreateSerializer(serializers.ModelSerializer):
                                     f"Model '{model_obj.name}' (ID {model_id}) does not belong to Make '{make_obj.name}' (ID {make_id})."  # noqa
                                 )
                             })
+
+        # Subscription and Product Limit Validation
+        # Only enforce for merchants
+        active_role = getattr(user, 'active_role', None)
+        if active_role and active_role.name == 'merchant':
+            is_active = attrs.get('is_active', True)
+            
+            # Only check limit if product is being set to active
+            if is_active:
+                # Check if merchant has a subscription
+                from users.models import MerchantProfile
+                try:
+                    merchant_profile = MerchantProfile.objects.get(user=user)
+                    is_subscribed = merchant_profile.is_subscribed
+                    # Also check expiry if subscribed
+                    if is_subscribed and merchant_profile.subscription_expires_at:
+                        from django.utils import timezone
+                        if merchant_profile.subscription_expires_at < timezone.now():
+                            is_subscribed = False
+                except MerchantProfile.DoesNotExist:
+                    is_subscribed = False
+                
+                if not is_subscribed:
+                    # Count current active products for this merchant
+                    active_count = Product.objects.filter(
+                        merchant=user, 
+                        is_active=True
+                    ).exclude(id=self.instance.id if self.instance else None).count()
+                    
+                    if active_count >= 2:
+                        raise serializers.ValidationError({
+                            "is_active": (
+                                "You have reached the limit of 2 active products for non-subscribed merchants. "
+                                "Please subscribe for unlimited uploads or deactivate an existing product."
+                            )
+                        })
 
         return attrs
 

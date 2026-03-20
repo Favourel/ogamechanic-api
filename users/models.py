@@ -403,6 +403,13 @@ class MerchantProfile(models.Model):
         help_text="Live photo of merchant"
     )
 
+    # Subscription fields
+    is_subscribed = models.BooleanField(default=False)
+    subscription_expires_at = models.DateTimeField(null=True, blank=True)
+    subscription_payment_reference = models.CharField(
+        max_length=100, blank=True, null=True
+    )
+    
     # Legacy fields for backward compatibility
     is_approved = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
@@ -1141,6 +1148,7 @@ class Transaction(models.Model):
         ('top_up', _('Top Up')),
         ('transfer', _('Transfer')),
         ('fee', _('Fee')),
+        ('subscription', _('Subscription')),
     )
 
     TRANSACTION_STATUSES = (
@@ -1154,7 +1162,9 @@ class Transaction(models.Model):
     wallet = models.ForeignKey(
         Wallet,
         on_delete=models.CASCADE,
-        related_name='transactions'
+        related_name='transactions',
+        null=True,
+        blank=True
     )
     amount = models.DecimalField(
         max_digits=12, decimal_places=2

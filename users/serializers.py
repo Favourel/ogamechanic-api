@@ -466,11 +466,18 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             "selfie",
             "state",
             "is_approved",
+            "is_subscribed",
+            "subscription_expires_at",
+            "subscription_payment_reference",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "user",
-                            "is_approved", "created_at", "updated_at"]
+        read_only_fields = [
+            "id", "user", "is_approved",
+            "is_subscribed", "subscription_expires_at",
+            "subscription_payment_reference",
+            "created_at", "updated_at"
+        ]
 
     def get_user(self, obj):
         from users.serializers import UserSerializer

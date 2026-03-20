@@ -5882,6 +5882,107 @@ class WalletWithdrawalView(APIView):
         )
 
 
+class MerchantSubscriptionInitView(APIView):
+    """Initialize Paystack payment for merchant subscription."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="Initialize Paystack payment for merchant subscription (₦15,000)",
+        responses={
+            200: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    "payment_reference": openapi.Schema(type=openapi.TYPE_STRING),
+                    "payment_url": openapi.Schema(type=openapi.TYPE_STRING),
+                    "amount": openapi.Schema(type=openapi.TYPE_NUMBER),
+                },
+            )
+        },
+    )
+    def post(self, request):
+        """Initialize merchant subscription payment."""
+        from django.conf import settings
+        from users.models import MerchantProfile, Transaction
+        import requests
+        import uuid
+
+        # Ensure user is a merchant
+        active_role = getattr(request.user, 'active_role', None)
+        if not active_role or active_role.name != 'merchant':
+            return Response(
+                api_response(message="Only merchants can subscribe.", status=False),
+                status=403
+            )
+
+        amount = 15000  # Monthly fee of ₦15,000
+        reference = f"SUB_{uuid.uuid4().hex[:8].upper()}"
+
+        # Create a pending transaction record for the ledger
+        transaction_obj = Transaction.objects.create(
+            amount=amount,
+            transaction_type="subscription",
+            status="pending",
+            reference=reference,
+            description="Monthly Merchant Subscription Fee",
+            # We don't link a wallet here as it's an external payment
+        )
+
+        # Initialize Paystack payment
+        headers = {
+            "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "email": request.user.email,
+            "amount": int(amount * 100),  # Paystack expects kobo
+            "reference": reference,
+            "callback_url": f"{settings.PAYSTACK_CALLBACK_URL}/merchant/subscription/",
+            "metadata": {
+                "subscription_payment": True,
+                "user_id": str(request.user.id),
+                "transaction_id": str(transaction_obj.id),
+                "amount": amount,
+            },
+        }
+
+        try:
+            response = requests.post(
+                "https://api.paystack.co/transaction/initialize",
+                json=payload,
+                headers=headers,
+            )
+
+            if response.status_code == 200:
+                data = response.json().get("data", {})
+                return Response(
+                    api_response(
+                        message="Subscription payment initialized successfully",
+                        status=True,
+                        data={
+                            "payment_reference": data.get("reference"),
+                            "payment_url": data.get("authorization_url"),
+                            "amount": amount,
+                            "transaction_id": str(transaction_obj.id),
+                        },
+                    )
+                )
+            else:
+                transaction_obj.status = 'failed'
+                transaction_obj.save()
+                return Response(
+                    api_response(message="Failed to initialize subscription payment", status=False),
+                    status=400,
+                )
+        except Exception as e:
+            transaction_obj.status = 'failed'
+            transaction_obj.save()
+            return Response(
+                api_response(message=f"Payment initialization error: {str(e)}", status=False),
+                status=500,
+            )
+
+
 class PaystackWebhookView(APIView):
     """Handle Paystack webhooks for wallet transactions."""
 
@@ -5930,6 +6031,9 @@ class PaystackWebhookView(APIView):
                     # Handle wallet top-up
                     if reference.startswith("TOPUP_"):
                         self._handle_wallet_topup(data)
+                    # Handle subscription payment
+                    elif reference.startswith("SUB_"):
+                        self._handle_subscription_payment(data)
                     # Handle order payment
                     else:
                         self._handle_order_payment(data)
@@ -5940,6 +6044,52 @@ class PaystackWebhookView(APIView):
                 return Response({"status": "error"}, status=500)
 
         return Response({"status": "success"})
+
+    def _handle_subscription_payment(self, data):
+        """Handle merchant subscription payment webhook."""
+        reference = data.get("reference")
+        metadata = data.get("metadata", {})
+        user_id = metadata.get("user_id")
+        transaction_id = metadata.get("transaction_id")
+
+        if not user_id:
+            return
+
+        try:
+            from users.models import MerchantProfile, Transaction
+            from django.utils import timezone
+            from datetime import timedelta
+
+            merchant_profile = MerchantProfile.objects.get(user_id=user_id)
+            
+            # Update subscription status
+            merchant_profile.is_subscribed = True
+            # Set expiry to 30 days from now (Monthly)
+            merchant_profile.subscription_expires_at = timezone.now() + timedelta(days=30)
+            merchant_profile.subscription_payment_reference = reference
+            merchant_profile.save()
+
+            # Update transaction status in ledger
+            if transaction_id:
+                try:
+                    transaction = Transaction.objects.get(id=transaction_id)
+                    transaction.status = 'completed'
+                    transaction.save()
+                except Transaction.DoesNotExist:
+                    logger.warning(f"Transaction {transaction_id} not found during subscription success")
+
+            # Send notification
+            from users.services import NotificationService
+            NotificationService.create_notification(
+                user=merchant_profile.user,
+                title="Subscription Successful",
+                message="Your monthly merchant subscription has been activated. You now have unlimited product uploads for the next 30 days!",
+                notification_type="success",
+            )
+        except MerchantProfile.DoesNotExist:
+            logger.error(f"MerchantProfile not found for user_id={user_id} during subscription processing")
+        except Exception as e:
+            logger.error(f"Error processing subscription payment for reference {reference}: {e}")
 
     def _handle_wallet_topup(self, data):
         """Handle wallet top-up webhook."""

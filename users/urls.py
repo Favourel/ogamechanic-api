@@ -88,6 +88,11 @@ urlpatterns = [
         name='merchant_profile'
     ),
     path(
+        'profile/merchant/subscribe/',
+        views.MerchantSubscriptionInitView.as_view(),
+        name='merchant_subscription_init'
+    ),
+    path(
         'profile/mechanic/',
         views.MechanicProfileManagementView.as_view(),
         name='mechanic_profile'

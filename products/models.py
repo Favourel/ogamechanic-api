@@ -328,6 +328,11 @@ class Product(models.Model):
         max_length=50,
         null=True,
         blank=True,)
+    
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether the product is currently visible to customers"
+    )
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)

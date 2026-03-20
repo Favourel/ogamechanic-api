@@ -166,8 +166,18 @@ class ProductListCreateView(APIView):
                 ).order_by('-updated_at', '-created_at')
             )
 
-            # Filtering
-            merchant = request.query_params.get('merchant')
+            # Filtering for active products
+            # If requesting own products (merchant), show all. Otherwise only active.
+            merchant_id = request.query_params.get('merchant')
+            if request.user.is_authenticated and str(request.user.id) == merchant_id:
+                # Merchant looking at their own products
+                pass
+            else:
+                # Public or someone else's profile
+                queryset = queryset.filter(is_active=True)
+
+            # Other Filtering
+            merchant = merchant_id
             category = request.query_params.get('category')
             is_rental = request.query_params.get('is_rental')
             min_price = request.query_params.get('min_price')
@@ -762,6 +772,17 @@ class ProductDetailView(APIView):
                 ),
                 status=status.HTTP_404_NOT_FOUND
             )
+        
+        # Check if product is active OR if the requester is the owner
+        if not product.is_active:
+            if not request.user.is_authenticated or product.merchant != request.user:
+                return Response(
+                    api_response(
+                        message="Product is currently inactive.",
+                        status=False
+                    ),
+                    status=status.HTTP_404_NOT_FOUND
+                )
         serializer = ProductSerializer(
             product, context={'request': self.request})
         return Response(api_response(
@@ -1081,8 +1102,18 @@ class ProductSearchView(APIView):
                     Q(category__name__icontains=query)
                 )
 
-            # Filtering
-            merchant = request.query_params.get('merchant')
+            # Filtering for active products
+            # If requesting own products (merchant), show all. Otherwise only active.
+            merchant_id_param = request.query_params.get('merchant')
+            if request.user.is_authenticated and str(request.user.id) == merchant_id_param:
+                # Merchant looking at their own products
+                pass
+            else:
+                # Public or someone else's profile
+                queryset = queryset.filter(is_active=True)
+
+            # Other Filtering
+            merchant = merchant_id_param
             category = request.query_params.get('category')
             is_rental = request.query_params.get('is_rental')
             min_price = request.query_params.get('min_price')
