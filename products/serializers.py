@@ -625,11 +625,13 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'id', 'customer', 'status', 'total_amount', 'items',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at', 'paid_at', 'cancelled_at',
+            'shipped_at'
         ]
         read_only_fields = [
             'id', 'customer', 'status', 'total_amount',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at', 'paid_at', 'cancelled_at',
+            'shipped_at'
         ]
 
     # def validate_items(self, value):
