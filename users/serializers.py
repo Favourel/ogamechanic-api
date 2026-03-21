@@ -450,6 +450,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 class MerchantProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
+    has_reached_product_limit = serializers.SerializerMethodField()
 
     class Meta:
         model = MerchantProfile
@@ -469,6 +470,7 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             "is_subscribed",
             "subscription_expires_at",
             "subscription_payment_reference",
+            "has_reached_product_limit",
             "created_at",
             "updated_at",
         ]
@@ -476,12 +478,30 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             "id", "user", "is_approved",
             "is_subscribed", "subscription_expires_at",
             "subscription_payment_reference",
+            "has_reached_product_limit",
             "created_at", "updated_at"
         ]
 
     def get_user(self, obj):
         from users.serializers import UserSerializer
         return UserSerializer(obj.user).data
+
+    def get_has_reached_product_limit(self, obj):
+        """Returns True if a non-subscribed merchant has 2 or more active products."""
+        # 1. Check subscription status
+        from django.utils import timezone
+        is_subscribed = obj.is_subscribed
+        if is_subscribed and obj.subscription_expires_at:
+            if obj.subscription_expires_at < timezone.now():
+                is_subscribed = False
+
+        if is_subscribed:
+            return False
+
+        # 2. Count active products
+        from products.models import Product
+        active_count = Product.objects.filter(merchant=obj.user, is_active=True).count()
+        return active_count >= 2
 
     def _get_absolute_url(self, url, request=None):
         if not url:
