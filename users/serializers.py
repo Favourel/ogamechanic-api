@@ -451,6 +451,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 class MerchantProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
     has_reached_product_limit = serializers.SerializerMethodField()
+    active_product_count = serializers.SerializerMethodField()
 
     class Meta:
         model = MerchantProfile
@@ -471,6 +472,7 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             "subscription_expires_at",
             "subscription_payment_reference",
             "has_reached_product_limit",
+            "active_product_count",
             "created_at",
             "updated_at",
         ]
@@ -479,12 +481,22 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             "is_subscribed", "subscription_expires_at",
             "subscription_payment_reference",
             "has_reached_product_limit",
+            "active_product_count",
             "created_at", "updated_at"
         ]
 
     def get_user(self, obj):
         from users.serializers import UserSerializer
         return UserSerializer(obj.user).data
+
+    def _get_active_product_count(self, obj):
+        if not hasattr(self, '_active_count'):
+            from products.models import Product
+            self._active_count = Product.objects.filter(merchant=obj.user, is_active=True).count()
+        return self._active_count
+
+    def get_active_product_count(self, obj):
+        return self._get_active_product_count(obj)
 
     def get_has_reached_product_limit(self, obj):
         """Returns True if a non-subscribed merchant has 2 or more active products."""
@@ -498,9 +510,8 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
         if is_subscribed:
             return False
 
-        # 2. Count active products
-        from products.models import Product
-        active_count = Product.objects.filter(merchant=obj.user, is_active=True).count()
+        # 2. Check active products against limit
+        active_count = self._get_active_product_count(obj)
         return active_count >= 2
 
     def _get_absolute_url(self, url, request=None):
