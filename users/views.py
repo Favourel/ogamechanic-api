@@ -5888,16 +5888,13 @@ class MerchantSubscriptionInitView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_description="Initialize Paystack payment for merchant subscription (₦15,000)",
+        operation_summary="Initialize Merchant Subscription Payment",
+        operation_description="Initialize Paystack payment for merchant subscription (₦15,000 monthly). "
+                              "Returns a payment URL and a transaction reference.",
         responses={
-            200: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    "payment_reference": openapi.Schema(type=openapi.TYPE_STRING),
-                    "payment_url": openapi.Schema(type=openapi.TYPE_STRING),
-                    "amount": openapi.Schema(type=openapi.TYPE_NUMBER),
-                },
-            )
+            200: MerchantSubscriptionInitResponseSerializer,
+            400: "Bad Request - Initialization failed",
+            403: "Forbidden - User is not a merchant",
         },
     )
     def post(self, request):

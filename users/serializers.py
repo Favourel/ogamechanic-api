@@ -556,6 +556,19 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
         return data
 
 
+class MerchantSubscriptionResponseSerializer(serializers.Serializer):
+    payment_reference = serializers.CharField()
+    payment_url = serializers.URLField()
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    transaction_id = serializers.UUIDField()
+
+
+class MerchantSubscriptionInitResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+    status = serializers.BooleanField()
+    data = MerchantSubscriptionResponseSerializer()
+
+
 class MechanicProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
