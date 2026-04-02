@@ -101,6 +101,20 @@ class ProductReviewAdmin(admin.ModelAdmin):
     list_max_show_all = 200
 
 
+@admin.register(models.BiddingWindow)
+class BiddingWindowAdmin(admin.ModelAdmin):
+    list_display = ('id', 'product', 'start_time', 'duration_hours', 'is_closed', 'is_active')
+    search_fields = ('product__name', 'id')
+    list_filter = ('is_closed', 'created_at')
+    readonly_fields = ('created_at', 'updated_at')
+
+@admin.register(models.Bid)
+class BidAdmin(admin.ModelAdmin):
+    list_display = ('id', 'bidding_window', 'user', 'amount', 'status', 'created_at')
+    search_fields = ('bidding_window__product__name', 'user__email')
+    list_filter = ('status', 'created_at')
+    readonly_fields = ('created_at', 'updated_at')
+
 # Register all other models from mechanics app that are not already registered above  # noqa
 already_registered = {
     models.Category,
@@ -112,6 +126,8 @@ already_registered = {
     models.Cart,
     models.CartItem,
     models.ProductReview,
+    models.BiddingWindow,
+    models.Bid,
 }
 
 for model in vars(models).values():

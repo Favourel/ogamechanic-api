@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from .models import (Category, Product, ProductImage,
                      ProductVehicleCompatibility, Order, OrderItem, Cart,
-                     CartItem, ProductReview, FollowMerchant, FavoriteProduct)
+                     CartItem, ProductReview, FollowMerchant, FavoriteProduct,
+                     BiddingWindow, Bid)
 from users.serializers import MechanicProfileSerializer, UserSerializer
 from django.db.models import Avg
 
@@ -887,3 +888,40 @@ class FavoriteProductListSerializer(serializers.ModelSerializer):
         from .models import FavoriteProduct
 
         return FavoriteProduct.objects.filter(product=obj).exists()
+
+
+class BiddingWindowSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BiddingWindow
+        fields = ['id', 'product', 'start_time', 'duration_hours', 'is_closed', 'is_active', 'end_time', 'created_at']
+        read_only_fields = ['id', 'is_active', 'end_time', 'created_at']
+
+    def validate_product(self, value):
+        if BiddingWindow.objects.filter(product=value).exists():
+            raise serializers.ValidationError("This product already has a bidding window.")
+        return value
+
+
+class BidSerializer(serializers.ModelSerializer):
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+    
+    class Meta:
+        model = Bid
+        fields = ['id', 'bidding_window', 'user', 'user_email', 'amount', 'status', 'created_at']
+        read_only_fields = ['id', 'user', 'user_email', 'status', 'created_at']
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            attrs['user'] = request.user
+            
+        bidding_window = attrs.get('bidding_window')
+        if bidding_window and not bidding_window.is_active:
+            raise serializers.ValidationError("This bidding window has closed.")
+        
+        # Don't allow merchant to bid on their own product
+        if bidding_window and request and hasattr(request, 'user'):
+            if bidding_window.product.merchant == request.user:
+                raise serializers.ValidationError("Merchants cannot bid on their own products.")
+                
+        return attrs

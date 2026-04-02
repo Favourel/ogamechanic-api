@@ -2,7 +2,8 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
     RepairRequest, TrainingSession, TrainingSessionParticipant,
-    VehicleMake, MechanicVehicleExpertise, RepairProblemResolve
+    VehicleMake, MechanicVehicleExpertise, RepairProblemResolve,
+    ServiceType, ServicePrice, Settlement
 )
 from users.models import MechanicReview
 from users.serializers import MechanicProfileSerializer
@@ -38,7 +39,7 @@ class RepairRequestSerializer(serializers.ModelSerializer):
         model = RepairRequest
         fields = [
             'id', 'customer', 'mechanic', 'mechanic_id',
-            'service_type',
+            'service_category', 'service_type',
             'vehicle_make',
             'vehicle_model', 'vehicle_year',
             'vehicle_registration',
@@ -176,6 +177,7 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
             'customer',
             'mechanic',
             'notified_mechanics',
+            'service_category',
             'service_type',
             'vehicle_make',
             'vehicle_model',
@@ -363,4 +365,27 @@ class MechanicVehicleExpertiseSerializer(serializers.ModelSerializer):
             'certification_level', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class ServiceTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ServiceType
+        fields = '__all__'
+
+
+class ServicePriceSerializer(serializers.ModelSerializer):
+    service_type_detail = ServiceTypeSerializer(source='service_type', read_only=True)
+    vehicle_make_name = serializers.CharField(source='vehicle_make.name', read_only=True)
+    vehicle_model_name = serializers.CharField(source='vehicle_model.name', read_only=True)
+
+    class Meta:
+        model = ServicePrice
+        fields = '__all__'
+
+
+class SettlementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Settlement
+        fields = '__all__'
+        read_only_fields = ['id', 'total_payable', 'created_at', 'updated_at']
 

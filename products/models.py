@@ -2,6 +2,7 @@ import uuid
 from django.db import models
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 
 class Category(models.Model):
@@ -711,3 +712,83 @@ class FavoriteProduct(models.Model):
 
     def __str__(self):
         return f"{self.user.email} favorited {self.product.name}"
+
+
+class BiddingWindow(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    product = models.OneToOneField(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='bidding_window'
+    )
+    start_time = models.DateTimeField(default=timezone.now)
+    duration_hours = models.PositiveIntegerField(
+        default=24,
+        help_text="Duration of the bidding window in hours"
+    )
+    is_closed = models.BooleanField(
+        default=False,
+        help_text="Merchant can manually close bidding"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    @property
+    def end_time(self):
+        from datetime import timedelta
+        return self.start_time + timedelta(hours=self.duration_hours)
+
+    @property
+    def is_active(self):
+        if self.is_closed:
+            return False
+        return timezone.now() < self.end_time
+
+    def __str__(self):
+        return f"BiddingWindow for {self.product.name}"
+
+
+class Bid(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('rejected', 'Rejected'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bidding_window = models.ForeignKey(
+        BiddingWindow,
+        on_delete=models.CASCADE,
+        related_name='bids'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='bids'
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default='pending'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-amount', '-created_at']
+        indexes = [
+            models.Index(fields=['bidding_window']),
+            models.Index(fields=['user']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"{self.amount} by {self.user.email} on {self.bidding_window.product.name}"
+
+    def clean(self):
+        if not self.bidding_window.is_active and self.status == 'pending':
+            raise ValidationError("Cannot place or update a pending bid because the bidding window is closed.")

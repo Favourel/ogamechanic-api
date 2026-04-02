@@ -41,6 +41,7 @@ from .serializers import (
     EmailSubscriptionCreateSerializer,
     ContactMessageSerializer,
     EmailSubscriptionSerializer,
+    MerchantSubscriptionInitResponseSerializer,
 )
 from django.core.files.storage import default_storage
 from ogamechanic.modules.utils import (

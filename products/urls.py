@@ -19,7 +19,9 @@ from .views import (
     FavoriteProductView,
     FavoriteProductsListView,
     ProductImageListView,
-    ProductImageCreateView
+    ProductImageCreateView,
+    BiddingWindowView,
+    BidView
 )
 
 app_name = 'products'
@@ -123,5 +125,16 @@ urlpatterns = [
         'favorite-products/',
         FavoriteProductsListView.as_view(),
         name='favorite-products'
+    ),
+    # Bidding
+    path(
+        'products/<uuid:product_id>/bidding/',
+        BiddingWindowView.as_view(),
+        name='bidding-window'
+    ),
+    path(
+        'products/<uuid:product_id>/bids/',
+        BidView.as_view(),
+        name='bids-list-create'
     ),
 ]

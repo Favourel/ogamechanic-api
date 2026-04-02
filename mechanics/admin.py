@@ -11,7 +11,7 @@ class RepairProblemResolveInline(admin.TabularInline):
 @admin.register(models.RepairRequest)
 class RepairRequestAdmin(admin.ModelAdmin):
     list_display = [
-        'id', 'customer', 'mechanic', 'service_type', 'vehicle_make',
+        'id', 'customer', 'mechanic', 'service_category', 'service_type', 'vehicle_make',
         'vehicle_model', 'status', 'priority', 'requested_at',
         'notified_mechanics_count'
     ]
@@ -23,7 +23,7 @@ class RepairRequestAdmin(admin.ModelAdmin):
     notified_mechanics_count.short_description = "Notified Mechanics"
 
     list_filter = [
-        'status', 'priority', 'service_type', 'preferred_time_slot',
+        'status', 'priority', 'service_category', 'service_type', 'preferred_time_slot',
         'requested_at', 'accepted_at', 'completed_at'
     ]
     search_fields = [
@@ -47,7 +47,7 @@ class RepairRequestAdmin(admin.ModelAdmin):
         }),
         ('Vehicle Details', {
             'fields': (
-                'service_type', 'vehicle_make', 'vehicle_model',
+                'service_category', 'service_type', 'vehicle_make', 'vehicle_model',
                 'vehicle_year', 'vehicle_registration'
             )
         }),
@@ -210,12 +210,35 @@ class VehicleMakeAdmin(admin.ModelAdmin):
     model_count.admin_order_field = 'models__count'
 
 
+@admin.register(models.ServiceType)
+class ServiceTypeAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name', 'created_at', 'updated_at')
+    search_fields = ('name',)
+    readonly_fields = ('created_at', 'updated_at')
+
+@admin.register(models.ServicePrice)
+class ServicePriceAdmin(admin.ModelAdmin):
+    list_display = ('id', 'service_type', 'vehicle_make', 'vehicle_model', 'base_price')
+    search_fields = ('service_type__name', 'vehicle_make__name', 'vehicle_model__name')
+    list_filter = ('service_type',)
+    readonly_fields = ('created_at', 'updated_at')
+
+@admin.register(models.Settlement)
+class SettlementAdmin(admin.ModelAdmin):
+    list_display = ('id', 'repair_request', 'base_amount', 'total_payable', 'created_at')
+    search_fields = ('repair_request__id',)
+    readonly_fields = ('created_at', 'updated_at')
+
+
 # Register all other models from mechanics app that are not already registered above  # noqa
 already_registered = {
     models.RepairRequest,
     models.TrainingSession,
     models.TrainingSessionParticipant,
     models.RepairProblemResolve,
+    models.ServiceType,
+    models.ServicePrice,
+    models.Settlement,
 }
 
 for model in vars(models).values():

@@ -27,6 +27,7 @@ from .serializers import (
     TrainingSessionParticipantListSerializer,
     MechanicVehicleExpertiseSerializer,
     RepairProblemResolveSerializer,
+    ServiceTypeSerializer, ServicePriceSerializer, SettlementSerializer
 )
 from .tasks import find_and_notify_mechanics_task
 from users.serializers import MechanicProfileSerializer
@@ -2159,4 +2160,107 @@ class RepairProblemResolveView(APIView):
             api_response(message=serializer.errors, status=False),
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+
+class ServiceTypeListView(APIView):
+    """
+    API endpoint to retrieve all standard service types.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_summary="List Service Types",
+        operation_description="Retrieve standard categorized service types.",
+        responses={200: ServiceTypeSerializer(many=True)}
+    )
+    def get(self, request):
+        from .models import ServiceType
+        service_types = ServiceType.objects.all()
+        return Response(api_response(
+            "Service types retrieved successfully", 
+            True, 
+            ServiceTypeSerializer(service_types, many=True).data
+        ))
+
+
+class ServicePriceListView(APIView):
+    """
+    API endpoint to retrieve service base prices.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_summary="List Service Prices",
+        operation_description="Retrieve default prices for standard services.",
+        responses={200: ServicePriceSerializer(many=True)}
+    )
+    def get(self, request):
+        from .models import ServicePrice
+        service_prices = ServicePrice.objects.all()
+        return Response(api_response(
+            "Service prices retrieved successfully", 
+            True, 
+            ServicePriceSerializer(service_prices, many=True).data
+        ))
+
+
+class SettlementDetailView(APIView):
+    """
+    API endpoint to retrieve or compute the specific settlement associated with a repair request.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_summary="Get Settlement Details",
+        operation_description="Retrieve detailed math breakdown of repair costs.",
+        responses={200: SettlementSerializer(), 404: "Settlement not found"}
+    )
+    def get(self, request, repair_id):
+        from .models import Settlement
+        repair_request = get_object_or_404(RepairRequest, id=repair_id)
+        settlement = get_object_or_404(Settlement, repair_request=repair_request)
+        return Response(api_response("Settlement retrieved successfully", True, SettlementSerializer(settlement).data))
+        
+    @swagger_auto_schema(
+        operation_summary="Compute / Formulate Settlement",
+        operation_description="Calculate or update settlement math based on base pricing + labor rate.",
+        request_body=SettlementSerializer,
+        responses={200: SettlementSerializer(), 400: "Invalid data", 403: "Not authorized"}
+    )
+    def post(self, request, repair_id):
+        from .models import Settlement, ServicePrice
+        repair_request = get_object_or_404(RepairRequest, id=repair_id)
+        
+        # Authorization check
+        is_assigned_mechanic = repair_request.mechanic == request.user and request.user.roles.filter(name="mechanic").exists()
+        is_admin = request.user.is_staff
+        if not (is_assigned_mechanic or is_admin):
+            return Response(api_response("Not authorized to compute settlement", False), status=status.HTTP_403_FORBIDDEN)
+            
+        data = request.data.copy()
+        data['repair_request'] = repair_request.id
+        
+        # Formulate base amount if missing based on ServiceCategory and ServicePrice
+        if 'base_amount' not in data and repair_request.service_category:
+            price_obj = ServicePrice.objects.filter(
+                service_type=repair_request.service_category,
+                vehicle_make=repair_request.vehicle_make,
+                vehicle_model=repair_request.vehicle_model
+            ).first()
+            if not price_obj:
+                # Fallback to generic service price
+                price_obj = ServicePrice.objects.filter(
+                    service_type=repair_request.service_category,
+                    vehicle_make__isnull=True
+                ).first()
+            if price_obj:
+                data['base_amount'] = price_obj.base_price
+                
+        settlement, created = Settlement.objects.get_or_create(repair_request=repair_request)
+        serializer = SettlementSerializer(settlement, data=data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(api_response("Settlement calculated successfully", True, serializer.data), status=status.HTTP_200_OK)
+            
+        return Response(api_response("Invalid data", False, serializer.errors), status=status.HTTP_400_BAD_REQUEST)
 

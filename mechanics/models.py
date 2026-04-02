@@ -60,6 +60,14 @@ class RepairRequest(models.Model):
     )
 
     # Service details
+    service_category = models.ForeignKey(
+        'ServiceType',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='repair_requests',
+        help_text="Standardized service category for pricing rules"
+    )
     service_type = models.CharField(max_length=100)
     vehicle_make = models.CharField(max_length=50)
     vehicle_model = models.CharField(max_length=50)
@@ -616,3 +624,100 @@ class MechanicVehicleExpertise(models.Model):
 
     def __str__(self):
         return f"{self.mechanic.user.email} - {self.vehicle_make.name} ({self.certification_level})"  # noqa
+
+
+class ServiceType(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100, unique=True, help_text="e.g., Tire Replacement, Engine Diagnostics")
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class ServicePrice(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    service_type = models.ForeignKey(ServiceType, on_delete=models.CASCADE, related_name='prices')
+    vehicle_make = models.ForeignKey(
+        VehicleMake,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='service_prices_by_make',
+        help_text="Leave blank if this is a generic base price."
+    )
+    vehicle_model = models.ForeignKey(
+        VehicleMake,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='service_prices_by_model',
+        help_text="Leave blank if it applies to all models of the make."
+    )
+    base_price = models.DecimalField(max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('service_type', 'vehicle_make', 'vehicle_model')
+        ordering = ['service_type__name', 'vehicle_make__name', 'vehicle_model__name']
+
+    def __str__(self):
+        make_str = f" {self.vehicle_make.name}" if self.vehicle_make else " Generic"
+        model_str = f" {self.vehicle_model.name}" if self.vehicle_model else ""
+        return f"{self.service_type.name} -{make_str}{model_str} (${self.base_price})"
+
+    def clean(self):
+        if self.vehicle_model and not self.vehicle_make:
+            raise ValidationError("Cannot specify a vehicle model without a vehicle make.")
+        if self.vehicle_model and self.vehicle_make:
+            if self.vehicle_model.parent_make_id != self.vehicle_make.id:
+                raise ValidationError("Vehicle model does not belong to the selected vehicle make.")
+
+
+class Settlement(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    repair_request = models.OneToOneField(RepairRequest, on_delete=models.CASCADE, related_name='settlement')
+    
+    # Base computations
+    base_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    labor_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    labor_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    
+    # Factors
+    complexity_multiplier = models.DecimalField(max_digits=4, decimal_places=2, default=1.0)
+    urgency_multiplier = models.DecimalField(max_digits=4, decimal_places=2, default=1.0)
+    travel_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    parts_markup = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    
+    # Computed Total
+    total_payable = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Settlement for Repair {str(self.repair_request.id)[:8]}"
+
+    def calculate_total(self):
+        """
+        Deterministic calculation:
+        Total = [ (Base + (Labor Hours * Labor Rate) + Travel Cost + Parts Markup) * Complexity * Urgency ]
+        (Can be adjusted based on business logic)
+        For now:
+        Total = Base + (Labor Hours * Labor Rate) + Travel Cost + Parts Markup
+        Total = Total * Complexity * Urgency
+        """
+        labor_cost = self.labor_hours * self.labor_rate
+        subtotal = self.base_amount + labor_cost + self.travel_cost + self.parts_markup
+        self.total_payable = subtotal * self.complexity_multiplier * self.urgency_multiplier
+        return self.total_payable
+
+    def save(self, *args, **kwargs):
+        self.calculate_total()
+        super().save(*args, **kwargs)

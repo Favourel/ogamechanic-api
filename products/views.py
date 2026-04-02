@@ -15,7 +15,8 @@ from .serializers import (
     ProductReviewSerializer, FollowMerchantSerializer,
     FollowMerchantListSerializer, FavoriteProductSerializer,
     FavoriteProductListSerializer, ProductImageSerializer,
-    ProductImageUpdateSerializer
+    ProductImageUpdateSerializer, BiddingWindowSerializer,
+    BidSerializer
 )
 from ogamechanic.modules.utils import (
     api_response, get_incoming_request_checks, incoming_request_checks,
@@ -3737,3 +3738,98 @@ class FavoriteProductsListView(APIView):
                 data=serializer.data
             )
         )
+
+
+class BiddingWindowView(APIView):
+    """
+    API endpoint to retrieve or create a bidding window for a product
+    """
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    @swagger_auto_schema(
+        operation_summary="Get Bidding Window",
+        operation_description="Retrieve the bidding window for a specific product.",
+        responses={200: BiddingWindowSerializer()}
+    )
+    def get(self, request, product_id):
+        from .models import BiddingWindow
+        from django.shortcuts import get_object_or_404
+        window = get_object_or_404(BiddingWindow, product_id=product_id)
+        return Response(
+            api_response(
+                message="Bidding window retrieved successfully",
+                status=True,
+                data=BiddingWindowSerializer(window).data
+            )
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Create Bidding Window",
+        operation_description="Create a bidding window for a specific product (merchant only).",
+        request_body=BiddingWindowSerializer,
+        responses={201: BiddingWindowSerializer(), 400: "Invalid data", 403: "Not authorized"}
+    )
+    def post(self, request, product_id):
+        from django.shortcuts import get_object_or_404
+        product = get_object_or_404(Product, id=product_id)
+        if product.merchant != request.user:
+             return Response(api_response("Not authorized", False), status=status.HTTP_403_FORBIDDEN)
+        
+        data = request.data.copy()
+        data['product'] = product.id
+        serializer = BiddingWindowSerializer(data=data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                api_response("Bidding window created", True, serializer.data),
+                status=status.HTTP_201_CREATED
+            )
+        return Response(api_response("Invalid data", False, serializer.errors), status=status.HTTP_400_BAD_REQUEST)
+
+
+class BidView(APIView):
+    """
+    API endpoint to retrieve or submit bids for a product's bidding window
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="Get Bids",
+        operation_description="Retrieve all bids for a specific product's bidding window.",
+        responses={200: BidSerializer(many=True)}
+    )
+    def get(self, request, product_id):
+        from .models import BiddingWindow, Bid
+        from django.shortcuts import get_object_or_404
+        window = get_object_or_404(BiddingWindow, product_id=product_id)
+        
+        # Merchants can see all bids, users might only see their own depending on business rules
+        # For transparency, we might let everyone see all bids, or filter for privacy
+        bids = Bid.objects.filter(bidding_window=window).order_by('-amount')
+        
+        return Response(
+            api_response("Bids retrieved successfully", True, BidSerializer(bids, many=True).data)
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Submit Bid",
+        operation_description="Submit a new bid for a product's bidding window.",
+        request_body=BidSerializer,
+        responses={201: BidSerializer(), 400: "Invalid data"}
+    )
+    def post(self, request, product_id):
+        from .models import BiddingWindow
+        from django.shortcuts import get_object_or_404
+        window = get_object_or_404(BiddingWindow, product_id=product_id)
+        
+        data = request.data.copy()
+        data['bidding_window'] = window.id
+        serializer = BidSerializer(data=data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                api_response("Bid placed successfully", True, serializer.data),
+                status=status.HTTP_201_CREATED
+            )
+        return Response(api_response("Invalid data", False, serializer.errors), status=status.HTTP_400_BAD_REQUEST)
+

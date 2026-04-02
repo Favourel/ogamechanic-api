@@ -30,6 +30,11 @@ urlpatterns = [
         views.VerifyRepairOTPView.as_view(),
         name="verify-repair-otp",
     ),
+    path(
+        "repair-requests/<uuid:repair_id>/settlement/",
+        views.SettlementDetailView.as_view(),
+        name="repair-request-settlement",
+    ),
     # Available Mechanics
     path(
         "available-mechanics/",
@@ -62,6 +67,16 @@ urlpatterns = [
         "mechanic-analytics/",
         views.MechanicAnalyticsView.as_view(),
         name="mechanic-analytics",
+    ),
+    path(
+        "service-types/",
+        views.ServiceTypeListView.as_view(),
+        name="service-types",
+    ),
+    path(
+        "service-prices/",
+        views.ServicePriceListView.as_view(),
+        name="service-prices",
     ),
     # Training Sessions
     # path(
