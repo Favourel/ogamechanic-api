@@ -3786,6 +3786,34 @@ class BiddingWindowView(APIView):
             )
         return Response(api_response("Invalid data", False, serializer.errors), status=status.HTTP_400_BAD_REQUEST)
 
+    @swagger_auto_schema(
+        operation_summary="Update Bidding Window",
+        operation_description="Close or update a bidding window for a specific product (merchant only).",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "is_closed": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="Set to True to manually close the bidding window")
+            }
+        ),
+        responses={200: BiddingWindowSerializer(), 400: "Invalid data", 403: "Not authorized", 404: "Not found"}
+    )
+    def patch(self, request, product_id):
+        from .models import BiddingWindow
+        from django.shortcuts import get_object_or_404
+        product = get_object_or_404(Product, id=product_id)
+        if product.merchant != request.user:
+             return Response(api_response("Not authorized", False), status=status.HTTP_403_FORBIDDEN)
+             
+        window = get_object_or_404(BiddingWindow, product_id=product_id)
+        serializer = BiddingWindowSerializer(window, data=request.data, partial=True, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                api_response("Bidding window updated", True, serializer.data),
+                status=status.HTTP_200_OK
+            )
+        return Response(api_response("Invalid data", False, serializer.errors), status=status.HTTP_400_BAD_REQUEST)
+
 
 class BidView(APIView):
     """
