@@ -893,7 +893,7 @@ class FavoriteProductListSerializer(serializers.ModelSerializer):
 class BiddingWindowSerializer(serializers.ModelSerializer):
     class Meta:
         model = BiddingWindow
-        fields = ['id', 'product', 'start_time', 'duration_hours', 'is_closed', 'is_active', 'end_time', 'created_at']
+        fields = ['id', 'product', 'start_time', 'duration_days', 'is_closed', 'is_active', 'end_time', 'created_at']
         read_only_fields = ['id', 'is_active', 'end_time', 'created_at']
 
     def validate_product(self, value):

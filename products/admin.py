@@ -103,7 +103,7 @@ class ProductReviewAdmin(admin.ModelAdmin):
 
 @admin.register(models.BiddingWindow)
 class BiddingWindowAdmin(admin.ModelAdmin):
-    list_display = ('id', 'product', 'start_time', 'duration_hours', 'is_closed', 'is_active')
+    list_display = ('id', 'product', 'start_time', 'duration_days', 'is_closed', 'is_active')
     search_fields = ('product__name', 'id')
     list_filter = ('is_closed', 'created_at')
     readonly_fields = ('created_at', 'updated_at')

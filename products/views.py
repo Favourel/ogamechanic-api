@@ -3789,12 +3789,7 @@ class BiddingWindowView(APIView):
     @swagger_auto_schema(
         operation_summary="Update Bidding Window",
         operation_description="Close or update a bidding window for a specific product (merchant only).",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                "is_closed": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="Set to True to manually close the bidding window")
-            }
-        ),
+        request_body=BiddingWindowSerializer,
         responses={200: BiddingWindowSerializer(), 400: "Invalid data", 403: "Not authorized", 404: "Not found"}
     )
     def patch(self, request, product_id):

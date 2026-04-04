@@ -722,9 +722,9 @@ class BiddingWindow(models.Model):
         related_name='bidding_window'
     )
     start_time = models.DateTimeField(default=timezone.now)
-    duration_hours = models.PositiveIntegerField(
-        default=24,
-        help_text="Duration of the bidding window in hours"
+    duration_days = models.PositiveIntegerField(
+        default=1,
+        help_text="Duration of the bidding window in days"
     )
     is_closed = models.BooleanField(
         default=False,
@@ -739,7 +739,7 @@ class BiddingWindow(models.Model):
     @property
     def end_time(self):
         from datetime import timedelta
-        return self.start_time + timedelta(hours=self.duration_hours)
+        return self.start_time + timedelta(days=self.duration_days)
 
     @property
     def is_active(self):
