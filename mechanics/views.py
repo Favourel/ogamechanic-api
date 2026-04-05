@@ -1,4 +1,4 @@
-from rest_framework import status, permissions
+from rest_framework import status, permissions, viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -27,7 +27,7 @@ from .serializers import (
     TrainingSessionParticipantListSerializer,
     MechanicVehicleExpertiseSerializer,
     RepairProblemResolveSerializer,
-    ServiceTypeSerializer, ServicePriceSerializer, SettlementSerializer
+    ServiceTypeSerializer, SettlementSerializer
 )
 from .tasks import find_and_notify_mechanics_task
 from users.serializers import MechanicProfileSerializer
@@ -2162,46 +2162,26 @@ class RepairProblemResolveView(APIView):
         )
 
 
-class ServiceTypeListView(APIView):
+class IsAdminOrReadOnly(permissions.BasePermission):
     """
-    API endpoint to retrieve all standard service types.
+    Custom permission to only allow admins to edit service types.
     """
-    permission_classes = [IsAuthenticated]
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return request.user and request.user.is_authenticated
+        return request.user and request.user.is_staff
+
+
+class ServiceTypeViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint to list, create, retrieve, update or delete standard service types.
+    """
+    permission_classes = [IsAdminOrReadOnly]
+    serializer_class = ServiceTypeSerializer
     
-    @swagger_auto_schema(
-        operation_summary="List Service Types",
-        operation_description="Retrieve standard categorized service types.",
-        responses={200: ServiceTypeSerializer(many=True)}
-    )
-    def get(self, request):
+    def get_queryset(self):
         from .models import ServiceType
-        service_types = ServiceType.objects.all()
-        return Response(api_response(
-            "Service types retrieved successfully", 
-            True, 
-            ServiceTypeSerializer(service_types, many=True).data
-        ))
-
-
-class ServicePriceListView(APIView):
-    """
-    API endpoint to retrieve service base prices.
-    """
-    permission_classes = [IsAuthenticated]
-    
-    @swagger_auto_schema(
-        operation_summary="List Service Prices",
-        operation_description="Retrieve default prices for standard services.",
-        responses={200: ServicePriceSerializer(many=True)}
-    )
-    def get(self, request):
-        from .models import ServicePrice
-        service_prices = ServicePrice.objects.all()
-        return Response(api_response(
-            "Service prices retrieved successfully", 
-            True, 
-            ServicePriceSerializer(service_prices, many=True).data
-        ))
+        return ServiceType.objects.all()
 
 
 class SettlementDetailView(APIView):
@@ -2228,7 +2208,7 @@ class SettlementDetailView(APIView):
         responses={200: SettlementSerializer(), 400: "Invalid data", 403: "Not authorized"}
     )
     def post(self, request, repair_id):
-        from .models import Settlement, ServicePrice
+        from .models import Settlement
         repair_request = get_object_or_404(RepairRequest, id=repair_id)
         
         # Authorization check
@@ -2240,22 +2220,9 @@ class SettlementDetailView(APIView):
         data = request.data.copy()
         data['repair_request'] = repair_request.id
         
-        # Formulate base amount if missing based on ServiceCategory and ServicePrice
+        # Formulate base amount if missing based on ServiceCategory
         if 'base_amount' not in data and repair_request.service_category:
-            price_obj = ServicePrice.objects.filter(
-                service_type=repair_request.service_category,
-                vehicle_make=repair_request.vehicle_make,
-                vehicle_model=repair_request.vehicle_model
-            ).first()
-            if not price_obj:
-                # Fallback to generic service price
-                price_obj = ServicePrice.objects.filter(
-                    service_type=repair_request.service_category,
-                    vehicle_make__isnull=True
-                ).first()
-            if price_obj:
-                data['base_amount'] = price_obj.base_price
-                
+            data['base_amount'] = repair_request.service_category.base_price
         settlement, created = Settlement.objects.get_or_create(repair_request=repair_request)
         serializer = SettlementSerializer(settlement, data=data, partial=True)
         if serializer.is_valid():

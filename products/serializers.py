@@ -925,3 +925,14 @@ class BidSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Merchants cannot bid on their own products.")
                 
         return attrs
+
+
+class BidUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Bid
+        fields = ['status']
+
+    def validate_status(self, value):
+        if value not in ['accepted', 'rejected']:
+            raise serializers.ValidationError("Only 'accepted' or 'rejected' statuses are allowed for updates.")
+        return value

@@ -68,7 +68,7 @@ class RepairRequest(models.Model):
         related_name='repair_requests',
         help_text="Standardized service category for pricing rules"
     )
-    service_type = models.CharField(max_length=100)
+    service_type = models.CharField(max_length=100, blank=True)
     vehicle_make = models.CharField(max_length=50)
     vehicle_model = models.CharField(max_length=50)
     vehicle_vin = models.CharField(max_length=17, blank=True, null=True)
@@ -165,6 +165,12 @@ class RepairRequest(models.Model):
 
     def __str__(self):
         return f"Repair #{str(self.id)[:8]} - {self.customer.email} ({self.status})"  # noqa
+
+    def save(self, *args, **kwargs):
+        # Sync charfield service_type with the name of the assigned service_category
+        if self.service_category and (not self.service_type or self.service_type != self.service_category.name):
+            self.service_type = self.service_category.name
+        super().save(*args, **kwargs)
 
     def clean(self):
         super().clean()
@@ -628,49 +634,36 @@ class MechanicVehicleExpertise(models.Model):
 
 class ServiceType(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=100, unique=True, help_text="e.g., Tire Replacement, Engine Diagnostics")
+    name = models.CharField(max_length=100, help_text="e.g., Tire Replacement, Engine Diagnostics")
     description = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ['name']
-
-    def __str__(self):
-        return self.name
-
-
-class ServicePrice(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    service_type = models.ForeignKey(ServiceType, on_delete=models.CASCADE, related_name='prices')
+    base_price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     vehicle_make = models.ForeignKey(
         VehicleMake,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name='service_prices_by_make',
-        help_text="Leave blank if this is a generic base price."
+        related_name='service_types_by_make',
+        help_text="Leave blank if this is a generic service type."
     )
     vehicle_model = models.ForeignKey(
         VehicleMake,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name='service_prices_by_model',
+        related_name='service_types_by_model',
         help_text="Leave blank if it applies to all models of the make."
     )
-    base_price = models.DecimalField(max_digits=10, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('service_type', 'vehicle_make', 'vehicle_model')
-        ordering = ['service_type__name', 'vehicle_make__name', 'vehicle_model__name']
+        unique_together = ('name', 'vehicle_make', 'vehicle_model')
+        ordering = ['name', 'vehicle_make__name', 'vehicle_model__name']
 
     def __str__(self):
         make_str = f" {self.vehicle_make.name}" if self.vehicle_make else " Generic"
         model_str = f" {self.vehicle_model.name}" if self.vehicle_model else ""
-        return f"{self.service_type.name} -{make_str}{model_str} (${self.base_price})"
+        return f"{self.name} -{make_str}{model_str} - ${self.base_price}"
 
     def clean(self):
         if self.vehicle_model and not self.vehicle_make:

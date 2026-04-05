@@ -212,15 +212,9 @@ class VehicleMakeAdmin(admin.ModelAdmin):
 
 @admin.register(models.ServiceType)
 class ServiceTypeAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'created_at', 'updated_at')
+    list_display = ('id', 'name', 'vehicle_make', 'vehicle_model', 'base_price', 'created_at', 'updated_at')
     search_fields = ('name',)
-    readonly_fields = ('created_at', 'updated_at')
-
-@admin.register(models.ServicePrice)
-class ServicePriceAdmin(admin.ModelAdmin):
-    list_display = ('id', 'service_type', 'vehicle_make', 'vehicle_model', 'base_price')
-    search_fields = ('service_type__name', 'vehicle_make__name', 'vehicle_model__name')
-    list_filter = ('service_type',)
+    list_filter = ('vehicle_make', 'created_at')
     readonly_fields = ('created_at', 'updated_at')
 
 @admin.register(models.Settlement)
@@ -237,7 +231,6 @@ already_registered = {
     models.TrainingSessionParticipant,
     models.RepairProblemResolve,
     models.ServiceType,
-    models.ServicePrice,
     models.Settlement,
 }
 

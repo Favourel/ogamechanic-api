@@ -16,7 +16,7 @@ from .serializers import (
     FollowMerchantListSerializer, FavoriteProductSerializer,
     FavoriteProductListSerializer, ProductImageSerializer,
     ProductImageUpdateSerializer, BiddingWindowSerializer,
-    BidSerializer
+    BidSerializer, BidUpdateSerializer
 )
 from ogamechanic.modules.utils import (
     api_response, get_incoming_request_checks, incoming_request_checks,
@@ -3830,29 +3830,119 @@ class BidView(APIView):
         # For transparency, we might let everyone see all bids, or filter for privacy
         bids = Bid.objects.filter(bidding_window=window).order_by('-amount')
         
-        return Response(
-            api_response("Bids retrieved successfully", True, BidSerializer(bids, many=True).data)
-        )
-
+        serializer = BidSerializer(bids, many=True)
+        return Response(api_response("Bids retrieved successfully", True, serializer.data))
+        
     @swagger_auto_schema(
         operation_summary="Submit Bid",
-        operation_description="Submit a new bid for a product's bidding window.",
+        operation_description="Submit a bid for a specific product's bidding window.",
         request_body=BidSerializer,
-        responses={201: BidSerializer(), 400: "Invalid data"}
+        responses={201: BidSerializer(), 400: "Invalid data", 403: "Not authorized", 404: "Not found"}
     )
     def post(self, request, product_id):
-        from .models import BiddingWindow
         from django.shortcuts import get_object_or_404
+        from .models import BiddingWindow
+        product = get_object_or_404(Product, id=product_id)
+        
+        # User cannot bid on their own product
+        if product.merchant == request.user:
+             return Response(api_response("Cannot bid on your own product", False), status=status.HTTP_403_FORBIDDEN)
+             
         window = get_object_or_404(BiddingWindow, product_id=product_id)
         
         data = request.data.copy()
         data['bidding_window'] = window.id
         serializer = BidSerializer(data=data, context={'request': request})
         if serializer.is_valid():
-            serializer.save()
+            try:
+                serializer.save()
+            except ValueError as e:
+                return Response(api_response(str(e), False), status=status.HTTP_400_BAD_REQUEST)
             return Response(
-                api_response("Bid placed successfully", True, serializer.data),
+                api_response("Bid submitted successfully", True, serializer.data),
                 status=status.HTTP_201_CREATED
             )
         return Response(api_response("Invalid data", False, serializer.errors), status=status.HTTP_400_BAD_REQUEST)
 
+
+class ActiveBiddingProductListView(APIView):
+    """
+    API endpoint to list all products that currently have an active bidding window.
+    """
+    permission_classes = [permissions.AllowAny]
+    pagination_class = CustomLimitOffsetPagination
+
+    @swagger_auto_schema(
+        operation_summary="List Active Bidding Products",
+        operation_description="Retrieve a paginated list of all products currently open for bidding.",
+        responses={200: ProductSerializer(many=True)}
+    )
+    def get(self, request):
+        products = Product.objects.filter(bidding_window__isnull=False).select_related('bidding_window')
+        
+        # Filter for active windows only using the python property
+        active_products = [p for p in products if p.bidding_window.is_active]
+        
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(active_products, request)
+        serializer = ProductSerializer(
+            page, many=True, context={'request': request}
+        )
+        return paginator.get_paginated_response(serializer.data)
+
+
+class BidUpdateView(APIView):
+    """
+    API endpoint for merchants to accept or reject bids.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="Update Bid Status",
+        operation_description="Merchant accepts or rejects a specific bid. If accepted, the bidding window closes.",
+        request_body=BidUpdateSerializer,
+        responses={200: BidSerializer(), 400: "Invalid data", 403: "Not authorized", 404: "Not found"}
+    )
+    def patch(self, request, bid_id):
+        from .models import Bid
+        from django.shortcuts import get_object_or_404
+        from django.db import transaction
+
+        bid = get_object_or_404(Bid, id=bid_id)
+        product = bid.bidding_window.product
+
+        # Only the merchant who owns the product can update bids
+        if product.merchant != request.user:
+            return Response(api_response("Not authorized to manage these bids.", False), status=status.HTTP_403_FORBIDDEN)
+
+        serializer = BidUpdateSerializer(bid, data=request.data, partial=True)
+        if serializer.is_valid():
+            new_status = serializer.validated_data.get('status')
+            
+            with transaction.atomic():
+                if new_status == 'accepted':
+                    # Accept this bid
+                    bid.status = 'accepted'
+                    bid.save()
+
+                    # Close the bidding window
+                    window = bid.bidding_window
+                    window.is_closed = True
+                    window.save()
+
+                    # Reject all other pending bids for this window
+                    Bid.objects.filter(
+                        bidding_window=window,
+                        status='pending'
+                    ).exclude(id=bid.id).update(status='rejected')
+                else:
+                    # Just reject this specific bid
+                    bid.status = 'rejected'
+                    bid.save()
+
+            return Response(
+                api_response(f"Bid {new_status} successfully", True, BidSerializer(bid).data),
+                status=status.HTTP_200_OK
+            )
+        
+        return Response(api_response("Invalid data", False, serializer.errors), status=status.HTTP_400_BAD_REQUEST)

@@ -21,79 +21,37 @@ from .views import (
     ProductImageListView,
     ProductImageCreateView,
     BiddingWindowView,
-    BidView
+    BidView,
+    ActiveBiddingProductListView,
+    BidUpdateView
 )
 
 app_name = 'products'
 
 urlpatterns = [
+    # Search and Discovery
+    path('search/', ProductSearchView.as_view(), name='product-search'),
+    path('categories/', CategoryListView.as_view(), name='category-list'),
     path('home/', HomeView.as_view(), name='home'),
-    path(
-        'products/',
-        ProductListCreateView.as_view(),
-        name='product-list-create'
-    ),
-    path(
-        'products/<id>/',
-        ProductDetailView.as_view(),
-        name='product-detail'
-    ),
-    path(
-        'search-product/',
-        ProductSearchView.as_view(),
-        name='product-search'
-    ),
-    path(
-        'categories/',
-        CategoryListView.as_view(),
-        name='category-list'
-    ),
-    path(
-        'orders/',
-        OrderListView.as_view(),
-        name='order-list-create'
-    ),
-    path(
-        'orders/<uuid:order_id>/status/',
-        OrderStatusUpdateView.as_view(),
-        name='order-status-update'
-    ),
-    path(
-        'cart/',
-        CartView.as_view(),
-        name='cart'
-    ),
-    path(
-        'checkout/',
-        CheckoutView.as_view(),
-        name='checkout'
-    ),
-    # path(
-    #     'paystack/init/',
-    #     PaystackPaymentInitView.as_view(),
-    #     name='paystack-init'
-    # ),
-    path(
-        'paystack/webhook/',
-        PaystackWebhookView.as_view(),
-        name='paystack-webhook'
-    ),
-    path(
-        'orders/verify-payment/',
-        PaymentVerificationView.as_view(),
-        name='verify-payment'
-    ),
-
-    path(
-        'products/<product_id>/images/',
-        ProductImageListView.as_view(),
-        name='product-image-list'
-    ),
-    path(
-        'products/<product_id>/images/upload/',
-        ProductImageCreateView.as_view(),
-        name='product-image-upload'
-    ),
+    
+    # Product Management
+    path('products/', ProductListCreateView.as_view(), name='product-list-create'),
+    path('products/images/create/', ProductImageCreateView.as_view(), name='product-image-create'),
+    path('products/<uuid:pk>/', ProductDetailView.as_view(), name='product-detail'),
+    path('products/<uuid:product_id>/images/', ProductImageListView.as_view(), name='product-image-list'),
+    
+    # Orders and Cart
+    path('orders/', OrderListView.as_view(), name='order-list'),
+    path('cart/', CartView.as_view(), name='cart'),
+    path('checkout/', CheckoutView.as_view(), name='checkout'),
+    
+    # Payments
+    # path('payment/initialize/', PaystackPaymentInitView.as_view(), name='payment-init'),
+    path('payment/webhook/', PaystackWebhookView.as_view(), name='payment-webhook'),
+    path('payment/verify/', PaymentVerificationView.as_view(), name='payment-verify'),
+    
+    # Reviews and Analytics
+    path('orders/<uuid:order_id>/status-update/', OrderStatusUpdateView.as_view(), name='order-status-update'),
     path(
         'products/<uuid:product_id>/reviews/',
         ProductReviewListCreateView.as_view(),
@@ -128,6 +86,11 @@ urlpatterns = [
     ),
     # Bidding
     path(
+        'bidding/active-products/',
+        ActiveBiddingProductListView.as_view(),
+        name='active-bidding-products'
+    ),
+    path(
         'products/<uuid:product_id>/bidding/',
         BiddingWindowView.as_view(),
         name='bidding-window'
@@ -136,5 +99,10 @@ urlpatterns = [
         'products/<uuid:product_id>/bids/',
         BidView.as_view(),
         name='bids-list-create'
+    ),
+    path(
+        'bids/<uuid:bid_id>/',
+        BidUpdateView.as_view(),
+        name='bid-update'
     ),
 ]

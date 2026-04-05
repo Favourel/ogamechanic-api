@@ -1,9 +1,16 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from . import views
 
 app_name = "mechanics"
 
+router = DefaultRouter()
+router.register(r'service-types', views.ServiceTypeViewSet, basename='service-type')
+
 urlpatterns = [
+    # Router URLs
+    path('', include(router.urls)),
+    
     # Repair Requests
     path(
         "repair-requests/",
@@ -68,16 +75,7 @@ urlpatterns = [
         views.MechanicAnalyticsView.as_view(),
         name="mechanic-analytics",
     ),
-    path(
-        "service-types/",
-        views.ServiceTypeListView.as_view(),
-        name="service-types",
-    ),
-    path(
-        "service-prices/",
-        views.ServicePriceListView.as_view(),
-        name="service-prices",
-    ),
+
     # Training Sessions
     # path(
     #     "training-sessions/",

@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from .models import (
     RepairRequest, TrainingSession, TrainingSessionParticipant,
     VehicleMake, MechanicVehicleExpertise, RepairProblemResolve,
-    ServiceType, ServicePrice, Settlement
+    ServiceType, Settlement
 )
 from users.models import MechanicReview
 from users.serializers import MechanicProfileSerializer
@@ -105,6 +105,14 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Mechanic with this ID does not exist.")
         return value
+
+    def validate(self, attrs):
+        # Ensure either service_category (FK) or service_type (String) is provided
+        if not attrs.get('service_category') and not attrs.get('service_type'):
+            raise serializers.ValidationError(
+                "Either 'service_category' or 'service_type' must be provided."
+            )
+        return attrs
 
     def create(self, validated_data):
         # The authenticated user is always the customer
@@ -368,18 +376,11 @@ class MechanicVehicleExpertiseSerializer(serializers.ModelSerializer):
 
 
 class ServiceTypeSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ServiceType
-        fields = '__all__'
-
-
-class ServicePriceSerializer(serializers.ModelSerializer):
-    service_type_detail = ServiceTypeSerializer(source='service_type', read_only=True)
     vehicle_make_name = serializers.CharField(source='vehicle_make.name', read_only=True)
     vehicle_model_name = serializers.CharField(source='vehicle_model.name', read_only=True)
 
     class Meta:
-        model = ServicePrice
+        model = ServiceType
         fields = '__all__'
 
 
