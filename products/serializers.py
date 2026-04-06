@@ -432,7 +432,11 @@ class ProductCreateSerializer(serializers.ModelSerializer):
 
         # Subscription and Product Limit Validation
         # Only enforce for merchants
-        user = self.context['request'].user
+        request = self.context.get('request')
+        if not request:
+            return attrs
+
+        user = request.user
         active_role = getattr(user, 'active_role', None)
         if active_role and active_role.name == 'merchant':
             is_active = attrs.get('is_active', True)
@@ -770,7 +774,11 @@ class ProductReviewSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
-        user = self.context['request'].user
+        request = self.context.get('request')
+        if not request:
+            return attrs
+
+        user = request.user
         product = attrs.get('product')
         if (
             self.instance is None and

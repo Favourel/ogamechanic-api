@@ -298,7 +298,9 @@ class ProductListCreateView(APIView):
                     ),
                     status=status.HTTP_403_FORBIDDEN
                 )
-            serializer = ProductCreateSerializer(data=data)
+            serializer = ProductCreateSerializer(
+                data=data, context={'request': request}
+            )
             if serializer.is_valid():
                 product = serializer.save(merchant=user)
                 # images = request.FILES.getlist('images')
@@ -2776,7 +2778,8 @@ class ProductReviewListCreateView(APIView):
         reviews = ProductReview.objects.filter(
             product_id=product_id
         ).order_by('-created_at')
-        serializer = ProductReviewSerializer(reviews, many=True)
+        serializer = ProductReviewSerializer(
+            reviews, many=True, context={'request': request})
         return Response(
             api_response(
                 message="Product reviews retrieved successfully.",
