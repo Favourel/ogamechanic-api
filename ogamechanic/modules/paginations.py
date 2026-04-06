@@ -31,7 +31,13 @@ class CustomLimitOffsetPagination(BasePagination):
         """Paginate the queryset"""
         self.limit = self.get_limit(request)
         self.offset = self.get_offset(request)
-        self.count = queryset.count()
+        
+        # Determine the count based on whether it's a QuerySet or a list
+        if hasattr(queryset, 'count'):
+            self.count = queryset.count()
+        else:
+            self.count = len(queryset)
+            
         self.request = request
         self.queryset = queryset[self.offset:self.offset + self.limit]
         return self.queryset
