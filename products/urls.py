@@ -36,8 +36,8 @@ urlpatterns = [
     
     # Product Management
     path('products/', ProductListCreateView.as_view(), name='product-list-create'),
-    path('products/images/create/', ProductImageCreateView.as_view(), name='product-image-create'),
-    path('products/<uuid:pk>/', ProductDetailView.as_view(), name='product-detail'),
+    path('products/<uuid:product_id>/images/upload/', ProductImageCreateView.as_view(), name='product-image-create'),
+    path('products/<uuid:id>/', ProductDetailView.as_view(), name='product-detail'),
     path('products/<uuid:product_id>/images/', ProductImageListView.as_view(), name='product-image-list'),
     
     # Orders and Cart
