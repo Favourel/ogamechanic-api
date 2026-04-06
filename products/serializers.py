@@ -432,6 +432,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
 
         # Subscription and Product Limit Validation
         # Only enforce for merchants
+        user = self.context['request'].user
         active_role = getattr(user, 'active_role', None)
         if active_role and active_role.name == 'merchant':
             is_active = attrs.get('is_active', True)
