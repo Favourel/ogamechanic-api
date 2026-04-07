@@ -119,6 +119,7 @@ class ProductSerializer(serializers.ModelSerializer):
         source='merchant.email', read_only=True)
     vehicle_compatibility = ProductVehicleCompatibilityReadSerializer(
         many=True, read_only=True)
+    bidding_window = serializers.SerializerMethodField(read_only=True)
 
     rating = serializers.SerializerMethodField()
     merchant_rating = serializers.SerializerMethodField()
@@ -266,6 +267,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'vin',
             'repair_history',
             'is_active',
+            'bidding_window',
         ]
         read_only_fields = [
             'id',
@@ -285,6 +287,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'purchased_count',
             'is_in_cart',
             'is_in_favorite_list',
+            'bidding_window',
         ]
         ref_name = "ProductsProductSerializer"
 
@@ -329,6 +332,16 @@ class ProductSerializer(serializers.ModelSerializer):
         
         repairs = RepairRequest.objects.filter(vehicle_vin=obj.vin).order_by('-requested_at')
         return RepairRequestListSerializer(repairs, many=True, context={'request': self.context.get('request')}).data
+
+    def get_bidding_window(self, obj):
+        """Return bidding window data if one exists for this product."""
+        try:
+            window = obj.bidding_window
+            return BiddingWindowSerializer(window).data
+        except BiddingWindow.DoesNotExist:
+            return None
+        except Exception:
+            return None
 
 
 class ProductCreateSerializer(serializers.ModelSerializer):

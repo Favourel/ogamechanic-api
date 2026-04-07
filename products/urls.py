@@ -22,6 +22,7 @@ from .views import (
     ProductImageCreateView,
     BiddingWindowView,
     BidView,
+    UserBidsListView,
     ActiveBiddingProductListView,
     BidUpdateView
 )
@@ -91,12 +92,17 @@ urlpatterns = [
         name='active-bidding-products'
     ),
     path(
+        'bidding/my-bids/',
+        UserBidsListView.as_view(),
+        name='user-bids'
+    ),
+    path(
         'products/<uuid:product_id>/bidding/',
         BiddingWindowView.as_view(),
         name='bidding-window'
     ),
     path(
-        'products/<uuid:product_id>/bids/',
+        'bidding/<uuid:bidding_window_id>/bids/',
         BidView.as_view(),
         name='bids-list-create'
     ),
@@ -106,3 +112,4 @@ urlpatterns = [
         name='bid-update'
     ),
 ]
+

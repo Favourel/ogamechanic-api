@@ -3815,44 +3815,47 @@ class BiddingWindowView(APIView):
 
 class BidView(APIView):
     """
-    API endpoint to retrieve or submit bids for a product's bidding window
+    API endpoint to retrieve or submit bids for a bidding window.
+    Uses bidding_window_id directly since Bid has a direct relationship to BiddingWindow.
     """
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="Get Bids",
-        operation_description="Retrieve all bids for a specific product's bidding window.",
+        operation_summary="Get Bids for a Bidding Window",
+        operation_description="Retrieve all bids for a specific bidding window.",
         responses={200: BidSerializer(many=True)}
     )
-    def get(self, request, product_id):
+    def get(self, request, bidding_window_id):
         from .models import BiddingWindow, Bid
         from django.shortcuts import get_object_or_404
-        window = get_object_or_404(BiddingWindow, product_id=product_id)
-        
-        # Merchants can see all bids, users might only see their own depending on business rules
-        # For transparency, we might let everyone see all bids, or filter for privacy
+        window = get_object_or_404(BiddingWindow, id=bidding_window_id)
+
         bids = Bid.objects.filter(bidding_window=window).order_by('-amount')
-        
+
         serializer = BidSerializer(bids, many=True)
-        return Response(api_response("Bids retrieved successfully", True, serializer.data))
-        
+        return Response(
+            api_response("Bids retrieved successfully", True, serializer.data),
+            status=status.HTTP_200_OK
+        )
+
     @swagger_auto_schema(
         operation_summary="Submit Bid",
-        operation_description="Submit a bid for a specific product's bidding window.",
+        operation_description="Submit a bid for a specific bidding window.",
         request_body=BidSerializer,
         responses={201: BidSerializer(), 400: "Invalid data", 403: "Not authorized", 404: "Not found"}
     )
-    def post(self, request, product_id):
+    def post(self, request, bidding_window_id):
         from django.shortcuts import get_object_or_404
         from .models import BiddingWindow
-        product = get_object_or_404(Product, id=product_id)
-        
+        window = get_object_or_404(BiddingWindow, id=bidding_window_id)
+
         # User cannot bid on their own product
-        if product.merchant == request.user:
-             return Response(api_response("Cannot bid on your own product", False), status=status.HTTP_403_FORBIDDEN)
-             
-        window = get_object_or_404(BiddingWindow, product_id=product_id)
-        
+        if window.product.merchant == request.user:
+            return Response(
+                api_response("Cannot bid on your own product", False),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         data = request.data.copy()
         data['bidding_window'] = window.id
         serializer = BidSerializer(data=data, context={'request': request})
@@ -3860,12 +3863,47 @@ class BidView(APIView):
             try:
                 serializer.save()
             except ValueError as e:
-                return Response(api_response(str(e), False), status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    api_response(str(e), False),
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             return Response(
                 api_response("Bid submitted successfully", True, serializer.data),
                 status=status.HTTP_201_CREATED
             )
-        return Response(api_response("Invalid data", False, serializer.errors), status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            api_response("Invalid data", False, serializer.errors),
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+class UserBidsListView(APIView):
+    """
+    API endpoint to retrieve all bids made by the logged-in user.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = CustomLimitOffsetPagination
+
+    @swagger_auto_schema(
+        operation_summary="List My Bids",
+        operation_description="Retrieve all bids placed by the authenticated user.",
+        responses={200: BidSerializer(many=True)}
+    )
+    def get(self, request):
+        from .models import Bid
+        bids = Bid.objects.filter(user=request.user).select_related(
+            'bidding_window', 'bidding_window__product'
+        ).order_by('-created_at')
+
+        serializer = BidSerializer(bids, many=True)
+
+        return Response(
+            api_response(
+                message="Your bids retrieved successfully.",
+                status=True,
+                data=serializer.data
+            )
+        )
 
 
 class ActiveBiddingProductListView(APIView):
@@ -3881,17 +3919,24 @@ class ActiveBiddingProductListView(APIView):
         responses={200: ProductSerializer(many=True)}
     )
     def get(self, request):
-        products = Product.objects.filter(bidding_window__isnull=False).select_related('bidding_window')
-        
+        products = Product.objects.filter(
+            bidding_window__isnull=False
+        ).select_related('bidding_window')
+
         # Filter for active windows only using the python property
         active_products = [p for p in products if p.bidding_window.is_active]
-        
-        paginator = self.pagination_class()
-        page = paginator.paginate_queryset(active_products, request)
+
         serializer = ProductSerializer(
-            page, many=True, context={'request': request}
+            active_products, many=True, context={'request': request}
         )
-        return paginator.get_paginated_response(serializer.data)
+
+        return Response(
+            api_response(
+                message="Active bidding products retrieved successfully.",
+                status=True,
+                data=serializer.data
+            )
+        )
 
 
 class BidUpdateView(APIView):
@@ -3916,30 +3961,29 @@ class BidUpdateView(APIView):
 
         # Only the merchant who owns the product can update bids
         if product.merchant != request.user:
-            return Response(api_response("Not authorized to manage these bids.", False), status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                api_response("Not authorized to manage these bids.", False),
+                status=status.HTTP_403_FORBIDDEN
+            )
 
         serializer = BidUpdateSerializer(bid, data=request.data, partial=True)
         if serializer.is_valid():
             new_status = serializer.validated_data.get('status')
-            
+
             with transaction.atomic():
                 if new_status == 'accepted':
-                    # Accept this bid
                     bid.status = 'accepted'
                     bid.save()
 
-                    # Close the bidding window
                     window = bid.bidding_window
                     window.is_closed = True
                     window.save()
 
-                    # Reject all other pending bids for this window
                     Bid.objects.filter(
                         bidding_window=window,
                         status='pending'
                     ).exclude(id=bid.id).update(status='rejected')
                 else:
-                    # Just reject this specific bid
                     bid.status = 'rejected'
                     bid.save()
 
@@ -3947,5 +3991,9 @@ class BidUpdateView(APIView):
                 api_response(f"Bid {new_status} successfully", True, BidSerializer(bid).data),
                 status=status.HTTP_200_OK
             )
-        
-        return Response(api_response("Invalid data", False, serializer.errors), status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            api_response("Invalid data", False, serializer.errors),
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
