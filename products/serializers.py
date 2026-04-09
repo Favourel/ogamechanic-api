@@ -928,6 +928,9 @@ class BidSerializer(serializers.ModelSerializer):
     user_email = serializers.EmailField(source='user.email', read_only=True)
     bidder = serializers.SerializerMethodField(read_only=True)
     is_me = serializers.SerializerMethodField(read_only=True)
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False
+    )
 
     class Meta:
         model = Bid
@@ -938,7 +941,7 @@ class BidSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'user', 'user_email', 'bidder', 'is_me',
-            'status', 'created_at', 'updated_at'
+            'created_at', 'updated_at'
         ]
 
     def get_is_me(self, obj):
