@@ -483,6 +483,53 @@ class SupportChatConsumer(AsyncWebsocketConsumer):
             message_type=message_type,
         )
 
+        # Handle file attachment: save the file_url to the file_attachment field
+        if file_url and message_type in ("image", "file"):
+            import base64
+            from django.core.files.base import ContentFile
+            from django.core.files.storage import default_storage
+            from urllib.parse import urlparse
+            import os
+
+            if file_url.startswith("data:"):
+                # Base64-encoded data sent directly over WebSocket
+                # Format: data:image/png;base64,iVBOR...
+                try:
+                    header, encoded = file_url.split(",", 1)
+                    # Extract extension from MIME type (e.g., "image/png" -> "png")
+                    mime_type = header.split(":")[1].split(";")[0]
+                    ext = mime_type.split("/")[1] if "/" in mime_type else "bin"
+                    file_data = base64.b64decode(encoded)
+                    file_name = f"support_attachments/{conversation.id}/{msg.id}.{ext}"
+                    saved_path = default_storage.save(file_name, ContentFile(file_data))
+                    msg.file_attachment = saved_path
+                    msg.save(update_fields=["file_attachment"])
+                    file_url = default_storage.url(saved_path)
+                except Exception:
+                    pass  # If base64 parsing fails, keep file_url as-is
+            else:
+                # file_url is a URL from a prior REST upload (/support/upload/)
+                # Extract the relative storage path from the URL
+                parsed = urlparse(file_url)
+                relative_path = parsed.path
+                # Strip leading /media/ prefix if present
+                if relative_path.startswith("/media/"):
+                    relative_path = relative_path[len("/media/"):]
+                elif relative_path.startswith("/"):
+                    relative_path = relative_path[1:]
+
+                # Check if this file already exists in storage
+                if default_storage.exists(relative_path):
+                    msg.file_attachment = relative_path
+                    msg.save(update_fields=["file_attachment"])
+
+        # Build the absolute file URL for the response
+        actual_file_url = None
+        if msg.file_attachment:
+            actual_file_url = msg.file_attachment.url
+        elif file_url:
+            actual_file_url = file_url
+
         # Touch conversation's updated_at
         conversation.save(update_fields=["updated_at"])
 
@@ -490,7 +537,7 @@ class SupportChatConsumer(AsyncWebsocketConsumer):
             "id": str(msg.id),
             "content": msg.content,
             "message_type": msg.message_type,
-            "file_url": file_url,
+            "file_url": actual_file_url,
             "sender": {
                 "id": str(msg.sender.id),
                 "email": msg.sender.email,

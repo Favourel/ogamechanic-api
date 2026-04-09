@@ -24,7 +24,7 @@ from .views import (
     BidView,
     UserBidsListView,
     ActiveBiddingProductListView,
-    BidUpdateView
+    BidDetailView
 )
 
 app_name = 'products'
@@ -108,8 +108,8 @@ urlpatterns = [
     ),
     path(
         'bids/<uuid:bid_id>/',
-        BidUpdateView.as_view(),
-        name='bid-update'
+        BidDetailView.as_view(),
+        name='bid-detail'
     ),
 ]
 

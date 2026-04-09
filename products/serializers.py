@@ -926,30 +926,58 @@ class BiddingWindowSerializer(serializers.ModelSerializer):
 
 class BidSerializer(serializers.ModelSerializer):
     user_email = serializers.EmailField(source='user.email', read_only=True)
-    
+    bidder = serializers.SerializerMethodField(read_only=True)
+    is_me = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Bid
-        fields = ['id', 'bidding_window', 'user', 'user_email', 'amount', 'status', 'created_at']
-        read_only_fields = ['id', 'user', 'user_email', 'status', 'created_at']
+        fields = [
+            'id', 'bidding_window', 'user', 'user_email',
+            'bidder', 'is_me', 'amount', 'status',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'user', 'user_email', 'bidder', 'is_me',
+            'status', 'created_at', 'updated_at'
+        ]
+
+    def get_is_me(self, obj):
+        request = self.context.get('request')
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            return obj.user_id == request.user.id
+        return False
+
+    def get_bidder(self, obj):
+        request = self.context.get('request')
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            if obj.user_id == request.user.id:
+                return {"label": "me"}
+        return {
+            "id": str(obj.user.id),
+            "email": obj.user.email,
+            "first_name": obj.user.first_name,
+            "last_name": obj.user.last_name,
+        }
 
     def validate(self, attrs):
         request = self.context.get('request')
         if request and hasattr(request, 'user'):
             attrs['user'] = request.user
-            
+
         bidding_window = attrs.get('bidding_window')
         if bidding_window and not bidding_window.is_active:
             raise serializers.ValidationError("This bidding window has closed.")
-        
+
         # Don't allow merchant to bid on their own product
         if bidding_window and request and hasattr(request, 'user'):
             if bidding_window.product.merchant == request.user:
                 raise serializers.ValidationError("Merchants cannot bid on their own products.")
-                
+
         return attrs
 
 
 class BidUpdateSerializer(serializers.ModelSerializer):
+    """Used by merchants to accept/reject bids."""
     class Meta:
         model = Bid
         fields = ['status']
@@ -958,3 +986,4 @@ class BidUpdateSerializer(serializers.ModelSerializer):
         if value not in ['accepted', 'rejected']:
             raise serializers.ValidationError("Only 'accepted' or 'rejected' statuses are allowed for updates.")
         return value
+

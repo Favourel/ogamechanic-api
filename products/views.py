@@ -3939,16 +3939,21 @@ class ActiveBiddingProductListView(APIView):
         )
 
 
-class BidUpdateView(APIView):
+class BidDetailView(APIView):
     """
-    API endpoint for merchants to accept or reject bids.
+    API endpoint for managing a specific bid.
+    - Merchants can accept or reject bids.
+    - Bidders can edit or delete their bids if the bidding window is active.
     """
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="Update Bid Status",
-        operation_description="Merchant accepts or rejects a specific bid. If accepted, the bidding window closes.",
-        request_body=BidUpdateSerializer,
+        operation_summary="Update Bid",
+        operation_description=(
+            "If user is the merchant: accepts or rejects a specific bid. "
+            "If user is the bidder: updates the bid amount (allowed only if the bidding window is active)."
+        ),
+        request_body=BidSerializer,  # Use BidSerializer to allow amount updates
         responses={200: BidSerializer(), 400: "Invalid data", 403: "Not authorized", 404: "Not found"}
     )
     def patch(self, request, bid_id):
@@ -3959,41 +3964,93 @@ class BidUpdateView(APIView):
         bid = get_object_or_404(Bid, id=bid_id)
         product = bid.bidding_window.product
 
-        # Only the merchant who owns the product can update bids
-        if product.merchant != request.user:
+        # Case 1: Merchant updating status
+        if product.merchant == request.user:
+            serializer = BidUpdateSerializer(bid, data=request.data, partial=True)
+            if serializer.is_valid():
+                new_status = serializer.validated_data.get('status')
+
+                with transaction.atomic():
+                    if new_status == 'accepted':
+                        bid.status = 'accepted'
+                        bid.save()
+
+                        window = bid.bidding_window
+                        window.is_closed = True
+                        window.save()
+
+                        Bid.objects.filter(
+                            bidding_window=window,
+                            status='pending'
+                        ).exclude(id=bid.id).update(status='rejected')
+                    else:
+                        bid.status = 'rejected'
+                        bid.save()
+
+                return Response(
+                    api_response(f"Bid {new_status} successfully", True, BidSerializer(bid, context={'request': request}).data),
+                    status=status.HTTP_200_OK
+                )
             return Response(
-                api_response("Not authorized to manage these bids.", False),
-                status=status.HTTP_403_FORBIDDEN
+                api_response("Invalid data", False, serializer.errors),
+                status=status.HTTP_400_BAD_REQUEST
             )
 
-        serializer = BidUpdateSerializer(bid, data=request.data, partial=True)
-        if serializer.is_valid():
-            new_status = serializer.validated_data.get('status')
+        # Case 2: Bidder updating amount
+        if bid.user == request.user:
+            # Check if bidding window is still active
+            if not bid.bidding_window.is_active:
+                return Response(
+                    api_response("Cannot edit bid as the bidding window has closed.", False),
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-            with transaction.atomic():
-                if new_status == 'accepted':
-                    bid.status = 'accepted'
-                    bid.save()
-
-                    window = bid.bidding_window
-                    window.is_closed = True
-                    window.save()
-
-                    Bid.objects.filter(
-                        bidding_window=window,
-                        status='pending'
-                    ).exclude(id=bid.id).update(status='rejected')
-                else:
-                    bid.status = 'rejected'
-                    bid.save()
-
+            # Only allow editing if status is pending (optional safety check, but user request implies 'if window hasnt close')
+            serializer = BidSerializer(bid, data=request.data, partial=True, context={'request': request})
+            if serializer.is_valid():
+                serializer.save()
+                return Response(
+                    api_response("Bid updated successfully", True, serializer.data),
+                    status=status.HTTP_200_OK
+                )
             return Response(
-                api_response(f"Bid {new_status} successfully", True, BidSerializer(bid).data),
-                status=status.HTTP_200_OK
+                api_response("Invalid data", False, serializer.errors),
+                status=status.HTTP_400_BAD_REQUEST
             )
 
         return Response(
-            api_response("Invalid data", False, serializer.errors),
-            status=status.HTTP_400_BAD_REQUEST
+            api_response("Not authorized to manage this bid.", False),
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Delete Bid",
+        operation_description="Allows a bidder to delete their bid if the bidding window is still active.",
+        responses={204: "Bid deleted", 400: "Bidding closed", 403: "Not authorized", 404: "Not found"}
+    )
+    def delete(self, request, bid_id):
+        from .models import Bid
+        from django.shortcuts import get_object_or_404
+
+        bid = get_object_or_404(Bid, id=bid_id)
+
+        # Only the bidder can delete their own bid
+        if bid.user != request.user:
+            return Response(
+                api_response("Not authorized to delete this bid.", False),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Check if bidding window is still active
+        if not bid.bidding_window.is_active:
+            return Response(
+                api_response("Cannot delete bid as the bidding window has closed.", False),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        bid.delete()
+        return Response(
+            api_response("Bid deleted successfully", True),
+            status=status.HTTP_200_OK
         )
 
