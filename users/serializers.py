@@ -1180,6 +1180,46 @@ class TransactionSerializer(serializers.ModelSerializer):
         ]  # noqa
 
 
+class WithdrawalTransactionSerializer(TransactionListSerializer):
+    """Specialized serializer for withdrawal transactions with bank details."""
+
+    bank_name = serializers.SerializerMethodField()
+    account_number = serializers.SerializerMethodField()
+
+    class Meta(TransactionListSerializer.Meta):
+        fields = TransactionListSerializer.Meta.fields + [
+            "bank_name",
+            "account_number",
+        ]
+
+    def get_bank_name(self, obj):
+        return obj.metadata.get("bank_name") if obj.metadata else None
+
+    def get_account_number(self, obj):
+        return obj.metadata.get("account_number") if obj.metadata else None
+
+
+class RoleEarningsSerializer(serializers.Serializer):
+    """Breakdown of earnings for a specific role."""
+
+    total_earnings = serializers.DecimalField(max_digits=12, decimal_places=2)
+    pending_earnings = serializers.DecimalField(max_digits=12, decimal_places=2)
+    completed_tasks = serializers.IntegerField()
+
+
+class UserEarningsSerializer(serializers.Serializer):
+    """Consolidated earnings across all user roles."""
+
+    total_combined_earnings = serializers.DecimalField(
+        max_digits=15, decimal_places=2
+    )
+    merchant_earnings = RoleEarningsSerializer(required=False)
+    mechanic_earnings = RoleEarningsSerializer(required=False)
+    driver_earnings = RoleEarningsSerializer(required=False)
+    currency = serializers.CharField(default="NGN")
+
+
+
 class TransactionListSerializer(serializers.ModelSerializer):
     """Serializer for listing transactions."""
 

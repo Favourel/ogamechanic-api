@@ -181,6 +181,17 @@ urlpatterns = [
         views.TransactionListView.as_view(),
         name='transaction-list'
     ),
+    path(
+        'earnings/',
+        views.UserEarningsView.as_view(),
+        name='user-earnings'
+    ),
+    path(
+        'withdrawals/',
+        views.WithdrawalListView.as_view(),
+        name='withdrawal-list'
+    ),
+
 
     # Bank Account Management
     path(

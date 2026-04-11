@@ -88,7 +88,10 @@ from .serializers import (
     WalletWithdrawalSerializer,
     PaystackWebhookSerializer,
     RoleSerializer,
+    UserEarningsSerializer,
+    WithdrawalTransactionSerializer,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -5615,6 +5618,194 @@ class TransactionListView(APIView):
             paginated_transactions, many=True
         )  # noqa
         return paginator.get_paginated_response(serializer.data)
+
+
+class WithdrawalListView(APIView):
+    """List user's withdrawal transactions."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="List user's withdrawal transactions",
+        manual_parameters=[
+            openapi.Parameter(
+                "status",
+                openapi.IN_QUERY,
+                description="Filter by transaction status",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "start_date",
+                openapi.IN_QUERY,
+                description="Filter from date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "end_date",
+                openapi.IN_QUERY,
+                description="Filter to date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+        ],
+        responses={200: WithdrawalTransactionSerializer(many=True)},
+    )
+    def get(self, request):
+        """List user's withdrawal transactions."""
+        wallet, _ = Wallet.objects.get_or_create(user=request.user)
+        withdrawals = wallet.transactions.filter(transaction_type="withdrawal")
+
+        status = request.query_params.get("status")
+        if status:
+            withdrawals = withdrawals.filter(status=status)
+
+        start_date = request.query_params.get("start_date")
+        if start_date:
+            withdrawals = withdrawals.filter(created_at__date__gte=start_date)
+
+        end_date = request.query_params.get("end_date")
+        if end_date:
+            withdrawals = withdrawals.filter(created_at__date__lte=end_date)
+
+        paginator = CustomLimitOffsetPagination()
+        paginated_withdrawals = paginator.paginate_queryset(withdrawals, request)
+
+        serializer = WithdrawalTransactionSerializer(
+            paginated_withdrawals, many=True
+        )
+        return paginator.get_paginated_response(serializer.data)
+
+
+class UserEarningsView(APIView):
+    """Get consolidated earnings across all user roles."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="Get consolidated earnings for all user roles",
+        responses={200: UserEarningsSerializer()},
+    )
+    def get(self, request):
+        """Get consolidated earnings for all user roles."""
+        from products.models import Order
+        from mechanics.models import RepairRequest
+        from rides.models import Ride
+        from django.db.models import Sum
+
+        user = request.user
+        roles = [role.name for role in user.roles.all()]
+        data = {"total_combined_earnings": 0, "currency": "NGN"}
+
+        # Merchant Earnings
+        if "merchant" in roles:
+            from products.models import OrderItem
+            from django.db.models import F
+
+            # Aggregate earnings from order items of merchant's products in completed orders
+            completed_items = OrderItem.objects.filter(
+                product__merchant=user,
+                order__status="completed"
+            )
+            
+            total_earnings = completed_items.aggregate(
+                total=Sum(F("price") * F("quantity"), output_field=models.DecimalField())
+            )["total"] or 0
+            
+            pending_items = OrderItem.objects.filter(
+                product__merchant=user,
+                order__status__in=["paid", "shipped"]
+            )
+            
+            pending_earnings = pending_items.aggregate(
+                total=Sum(F("price") * F("quantity"), output_field=models.DecimalField())
+            )["total"] or 0
+
+            completed_count = Order.objects.filter(
+                items__product__merchant=user,
+                status="completed"
+            ).distinct().count()
+
+            data["merchant_earnings"] = {
+                "total_earnings": total_earnings,
+                "pending_earnings": pending_earnings,
+                "completed_tasks": completed_count
+            }
+            data["total_combined_earnings"] += total_earnings
+
+
+        # Mechanic Earnings
+        if "mechanic" in roles:
+            completed_repairs = RepairRequest.objects.filter(
+                mechanic=user,
+                status="completed"
+            )
+            
+            total_earnings = completed_repairs.aggregate(
+                total=Sum("actual_cost")
+            )["total"] or 0
+            
+            pending_repairs = RepairRequest.objects.filter(
+                mechanic=user,
+                status__in=["accepted", "in_transit", "arrived", "in_progress", "verify_completed"]
+            )
+            
+            pending_earnings = pending_repairs.aggregate(
+                total=Sum("actual_cost")
+            )["total"] or 0
+
+            data["mechanic_earnings"] = {
+                "total_earnings": total_earnings,
+                "pending_earnings": pending_earnings,
+                "completed_tasks": completed_repairs.count()
+            }
+            data["total_combined_earnings"] += total_earnings
+
+        # Driver Earnings
+        if "driver" in roles:
+            # Use total_earnings from profile as the source of truth if available
+            profile = getattr(user, "driver_profile", None)
+            total_earnings = 0
+            if profile:
+                total_earnings = profile.total_earnings or 0
+            else:
+                # Fallback to summing completed rides
+                completed_rides = Ride.objects.filter(
+                    driver=user,
+                    status="completed"
+                )
+                total_earnings = completed_rides.aggregate(
+                    total=Sum("fare")
+                )["total"] or 0
+
+            completed_count = Ride.objects.filter(
+                driver=user,
+                status="completed"
+            ).count()
+
+            pending_earnings = Ride.objects.filter(
+                driver=user,
+                status__in=["accepted", "in_progress"]
+            ).aggregate(
+                total=Sum("fare")
+            )["total"] or 0
+
+            data["driver_earnings"] = {
+                "total_earnings": total_earnings,
+                "pending_earnings": pending_earnings,
+                "completed_tasks": completed_count
+            }
+            data["total_combined_earnings"] += total_earnings
+
+        return Response(
+            api_response(
+                message="Earnings retrieved successfully",
+                status=True,
+                data=data
+            )
+        )
+
 
 
 class WalletTopUpView(APIView):
