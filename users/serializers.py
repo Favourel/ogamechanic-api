@@ -1180,6 +1180,32 @@ class TransactionSerializer(serializers.ModelSerializer):
         ]  # noqa
 
 
+class TransactionListSerializer(serializers.ModelSerializer):
+    """Serializer for listing transactions."""
+
+    transaction_type_display = serializers.CharField(
+        source="get_transaction_type_display", read_only=True
+    )  # noqa
+    status_display = serializers.CharField(
+        source="get_status_display", read_only=True
+    )  # noqa
+
+    class Meta:
+        model = Transaction
+        fields = [
+            "id",
+            "amount",
+            "transaction_type",
+            "transaction_type_display",
+            "reference",
+            "description",
+            "status",
+            "status_display",
+            "fee",
+            "created_at",
+        ]
+
+
 class WithdrawalTransactionSerializer(TransactionListSerializer):
     """Specialized serializer for withdrawal transactions with bank details."""
 
@@ -1218,32 +1244,6 @@ class UserEarningsSerializer(serializers.Serializer):
     driver_earnings = RoleEarningsSerializer(required=False)
     currency = serializers.CharField(default="NGN")
 
-
-
-class TransactionListSerializer(serializers.ModelSerializer):
-    """Serializer for listing transactions."""
-
-    transaction_type_display = serializers.CharField(
-        source="get_transaction_type_display", read_only=True
-    )  # noqa
-    status_display = serializers.CharField(
-        source="get_status_display", read_only=True
-    )  # noqa
-
-    class Meta:
-        model = Transaction
-        fields = [
-            "id",
-            "amount",
-            "transaction_type",
-            "transaction_type_display",
-            "reference",
-            "description",
-            "status",
-            "status_display",
-            "fee",
-            "created_at",
-        ]
 
 
 class WalletTopUpSerializer(serializers.Serializer):
