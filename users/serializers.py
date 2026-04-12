@@ -25,6 +25,7 @@ from .models import UserEmailVerification
 
 
 from django.contrib.auth import get_user_model
+from .models import UserVehicle, UserVehicleImage
 
 
 User = get_user_model()
@@ -1915,13 +1916,13 @@ class ContactMessageAdminSerializer(serializers.ModelSerializer):
             validated_data['responded_at'] = timezone.now()
 
         return super().update(instance, validated_data)
-from .models import UserVehicle, UserVehicleImage
 
 
 class UserVehicleImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserVehicleImage
         fields = ['id', 'image', 'created_at']
+        read_only_fields = ['id', 'created_at']
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -1979,3 +1980,4 @@ class UserVehicleSwaggerSerializer(UserVehicleSerializer):
             'license_plate',
             'created_at', 'updated_at'
         ]
+        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
