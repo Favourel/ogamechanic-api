@@ -195,7 +195,7 @@ SWAGGER_SETTINGS = {
     'TAGS_SORTER': None,
     'DOC_EXPANSION': 'none',
     'DEFAULT_MODEL_RENDERING': 'model',
-    'DEFAULT_INFO': None,
+    'DEFAULT_INFO': 'ogamechanic.urls.schema_info',
     'SECURITY': [],
     'SWAGGER_UI_SETTINGS': {
         'deepLinking': True,

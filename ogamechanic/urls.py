@@ -62,17 +62,19 @@ class DocsAccessPermission(BasePermission):
 API_URL = 'https://api.ogamechanic.org'
 API_SCHEMES = ['https']
 
-schema_view = get_schema_view(
-    openapi.Info(
-        title="OGAMECHANIC API",
-        default_version='v1',
-        description=(
-            "API documentation for OGAMECHANIC"
-        ),
-        terms_of_service="https://www.example.com/terms/",
-        contact=openapi.Contact(email="contact@example.com"),
-        license=openapi.License(name="BSD License"),
+schema_info = openapi.Info(
+    title="OGAMECHANIC API",
+    default_version='v1',
+    description=(
+        "API documentation for OGAMECHANIC"
     ),
+    terms_of_service="https://www.example.com/terms/",
+    contact=openapi.Contact(email="contact@example.com"),
+    license=openapi.License(name="BSD License"),
+)
+
+schema_view = get_schema_view(
+    schema_info,
     public=True,
     permission_classes=(AllowAny,) if settings.DEBUG else (DocsAccessPermission,), # noqa
     url=API_URL,

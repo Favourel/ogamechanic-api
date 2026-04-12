@@ -1965,3 +1965,17 @@ class UserVehicleSerializer(serializers.ModelSerializer):
             for image_data in images_data:
                 UserVehicleImage.objects.create(vehicle=instance, image=image_data)
         return instance
+
+
+class UserVehicleSwaggerSerializer(UserVehicleSerializer):
+    """
+    Serializer used specifically for Swagger documentation to avoid
+    ListField(child=FileField) recursion errors.
+    """
+    class Meta:
+        model = UserVehicle
+        fields = [
+            'id', 'user', 'vin', 'make', 'model', 'year', 
+            'license_plate',
+            'created_at', 'updated_at'
+        ]

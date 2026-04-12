@@ -94,6 +94,7 @@ from .serializers import (
     UserEarningsSerializer,
     WithdrawalTransactionSerializer,
     UserVehicleSerializer,
+    UserVehicleSwaggerSerializer,
 )
 
 
@@ -8143,7 +8144,7 @@ class UserVehicleViewSet(viewsets.ModelViewSet):
     """
     ViewSet for users to manage their vehicles.
     """
-    serializer_class = UserVehicleSerializer
+    serializer_class = UserVehicleSwaggerSerializer
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = (parsers.MultiPartParser, parsers.FormParser)
 
@@ -8170,11 +8171,21 @@ class UserVehicleViewSet(viewsets.ModelViewSet):
 
     @swagger_auto_schema(
         operation_description="Create a new vehicle for the logged-in user",
-        request_body=UserVehicleSerializer,
-        responses={201: UserVehicleSerializer()}
+        request_body=UserVehicleSwaggerSerializer,
+        manual_parameters=[
+            openapi.Parameter(
+                'uploaded_images',
+                openapi.IN_FORM,
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_FILE),
+                description="List of vehicle images (multipart/form-data)"
+            )
+        ],
+        responses={201: UserVehicleSwaggerSerializer()},
+        consumes=['multipart/form-data']
     )
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
+        serializer = UserVehicleSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             self.perform_create(serializer)
             return Response(
@@ -8211,13 +8222,25 @@ class UserVehicleViewSet(viewsets.ModelViewSet):
 
     @swagger_auto_schema(
         operation_description="Update details of a specific vehicle",
-        request_body=UserVehicleSerializer,
-        responses={200: UserVehicleSerializer()}
+        request_body=UserVehicleSwaggerSerializer,
+        manual_parameters=[
+            openapi.Parameter(
+                'uploaded_images',
+                openapi.IN_FORM,
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_FILE),
+                description="List of new vehicle images to append (multipart/form-data)"
+            )
+        ],
+        responses={200: UserVehicleSwaggerSerializer()},
+        consumes=['multipart/form-data']
     )
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer = UserVehicleSerializer(
+            instance, data=request.data, partial=partial, context={'request': request}
+        )
         if serializer.is_valid():
             self.perform_update(serializer)
             return Response(
