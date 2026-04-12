@@ -52,10 +52,6 @@ class UserSerializer(serializers.ModelSerializer):
             "phone_number",
             "created_at",
             "updated_at",
-            "car_make",
-            "car_model",
-            "car_year",
-            "license_plate",
         ]
         read_only_fields = [
             "id",
@@ -1919,3 +1915,53 @@ class ContactMessageAdminSerializer(serializers.ModelSerializer):
             validated_data['responded_at'] = timezone.now()
 
         return super().update(instance, validated_data)
+from .models import UserVehicle, UserVehicleImage
+
+
+class UserVehicleImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserVehicleImage
+        fields = ['id', 'image', 'created_at']
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        if instance.image:
+            # Build absolute URL using the common logic if needed, or DRF default
+            if request:
+                data['image'] = request.build_absolute_uri(instance.image.url)
+        return data
+
+
+class UserVehicleSerializer(serializers.ModelSerializer):
+    images = UserVehicleImageSerializer(many=True, read_only=True)
+    uploaded_images = serializers.ListField(
+        child=serializers.ImageField(max_length=1000000, allow_empty_file=False, use_url=False),
+        write_only=True,
+        required=False
+    )
+
+    class Meta:
+        model = UserVehicle
+        fields = [
+            'id', 'user', 'vin', 'make', 'model', 'year', 
+            'license_plate', 'images', 'uploaded_images',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+
+    def create(self, validated_data):
+        images_data = validated_data.pop('uploaded_images', [])
+        vehicle = UserVehicle.objects.create(**validated_data)
+        for image_data in images_data:
+            UserVehicleImage.objects.create(vehicle=vehicle, image=image_data)
+        return vehicle
+
+    def update(self, instance, validated_data):
+        images_data = validated_data.pop('uploaded_images', [])
+        instance = super().update(instance, validated_data)
+        if images_data:
+            # For update, we append new images
+            for image_data in images_data:
+                UserVehicleImage.objects.create(vehicle=instance, image=image_data)
+        return instance

@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework import viewsets, mixins
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from .serializers import (
@@ -77,6 +78,8 @@ from .models import (
     RiderProfile,
     MerchantProfile,
     MechanicProfile,
+    UserVehicle,
+    UserVehicleImage,
 )
 from .serializers import (
     WalletSerializer,
@@ -90,6 +93,7 @@ from .serializers import (
     RoleSerializer,
     UserEarningsSerializer,
     WithdrawalTransactionSerializer,
+    UserVehicleSerializer,
 )
 
 
@@ -8133,4 +8137,116 @@ class SubscribeView(APIView):
                 errors=serializer.errors
             ),
             status=http_status.HTTP_400_BAD_REQUEST
+        )
+
+class UserVehicleViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for users to manage their vehicles.
+    """
+    serializer_class = UserVehicleSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = (parsers.MultiPartParser, parsers.FormParser)
+
+    def get_queryset(self):
+        return UserVehicle.objects.filter(user=self.request.user).prefetch_related('images')
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @swagger_auto_schema(
+        operation_description="List all vehicles of the logged-in user",
+        responses={200: UserVehicleSerializer(many=True)}
+    )
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(
+            api_response(
+                message="Vehicles retrieved successfully.",
+                status=True,
+                data=serializer.data
+            )
+        )
+
+    @swagger_auto_schema(
+        operation_description="Create a new vehicle for the logged-in user",
+        request_body=UserVehicleSerializer,
+        responses={201: UserVehicleSerializer()}
+    )
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            self.perform_create(serializer)
+            return Response(
+                api_response(
+                    message="Vehicle added successfully.",
+                    status=True,
+                    data=serializer.data
+                ),
+                status=http_status.HTTP_201_CREATED
+            )
+        return Response(
+            api_response(
+                message="Failed to add vehicle.",
+                status=False,
+                data=serializer.errors
+            ),
+            status=http_status.HTTP_400_BAD_REQUEST
+        )
+
+    @swagger_auto_schema(
+        operation_description="Retrieve details of a specific vehicle",
+        responses={200: UserVehicleSerializer()}
+    )
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(
+            api_response(
+                message="Vehicle details retrieved successfully.",
+                status=True,
+                data=serializer.data
+            )
+        )
+
+    @swagger_auto_schema(
+        operation_description="Update details of a specific vehicle",
+        request_body=UserVehicleSerializer,
+        responses={200: UserVehicleSerializer()}
+    )
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            self.perform_update(serializer)
+            return Response(
+                api_response(
+                    message="Vehicle updated successfully.",
+                    status=True,
+                    data=serializer.data
+                )
+            )
+        return Response(
+            api_response(
+                message="Failed to update vehicle.",
+                status=False,
+                data=serializer.errors
+            ),
+            status=http_status.HTTP_400_BAD_REQUEST
+        )
+
+    @swagger_auto_schema(
+        operation_description="Delete a specific vehicle",
+        responses={200: openapi.Response("Vehicle deleted successfully")}
+    )
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response(
+            api_response(
+                message="Vehicle deleted successfully.",
+                status=True
+            ),
+            status=http_status.HTTP_200_OK
         )

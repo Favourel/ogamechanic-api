@@ -1488,6 +1488,15 @@ class CartView(APIView):
                         .select_for_update()
                         .get(id=product_id)
                     )
+                    
+                    # --- BIDDING WINDOW CHECK ---
+                    can_purchase, message = product_obj.can_be_purchased_by(request.user)
+                    if not can_purchase:
+                        return Response(
+                            api_response(message=message, status=False),
+                            status=400
+                        )
+
                     if product_obj.stock is not None and quantity > product_obj.stock: # noqa
                         return Response(
                             api_response(
@@ -1587,6 +1596,15 @@ class CartView(APIView):
                     if action == 'increment':
                         # Check stock
                         product_obj = Product.objects.get(id=product_id)
+                        
+                        # --- BIDDING WINDOW CHECK ---
+                        can_purchase, message = product_obj.can_be_purchased_by(request.user)
+                        if not can_purchase:
+                            return Response(
+                                api_response(message=message, status=False),
+                                status=400
+                            )
+
                         if product_obj.stock is not None and cart_item.quantity + 1 > product_obj.stock: # noqa
                             return Response(
                                 api_response(
@@ -1736,6 +1754,18 @@ class CheckoutView(APIView):
                 api_response(message="Cart is empty.", status=False),
                 status=400
             )
+
+        # --- BIDDING WINDOW CHECK FOR ALL ITEMS ---
+        for item in cart.items.select_related('product'):
+            can_purchase, message = item.product.can_be_purchased_by(request.user)
+            if not can_purchase:
+                return Response(
+                    api_response(
+                        message=f"Item '{item.product.name}': {message}",
+                        status=False
+                    ),
+                    status=400
+                )
 
         # --- PRODUCTION-GRADE LOGIC ---
         # 1. For online payment, do NOT clear cart or decrement stock until payment is successful.  # noqa

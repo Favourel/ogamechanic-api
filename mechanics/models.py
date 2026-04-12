@@ -59,14 +59,21 @@ class RepairRequest(models.Model):
         help_text="Mechanics who were notified about this repair request"
     )
 
-    # Service details
-    service_category = models.ForeignKey(
-        'ServiceType',
+    user_vehicle = models.ForeignKey(
+        'users.UserVehicle',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='repair_requests',
-        help_text="Standardized service category for pricing rules"
+        help_text="The registered vehicle used for this repair request (if any)"
+    )
+
+    # Service details
+    service_categories = models.ManyToManyField(
+        'ServiceType',
+        through='RepairRequestService',
+        related_name='repair_requests',
+        help_text="Standardized service categories for pricing rules"
     )
     service_type = models.CharField(max_length=100, blank=True)
     vehicle_make = models.CharField(max_length=50)
@@ -167,9 +174,7 @@ class RepairRequest(models.Model):
         return f"Repair #{str(self.id)[:8]} - {self.customer.email} ({self.status})"  # noqa
 
     def save(self, *args, **kwargs):
-        # Sync charfield service_type with the name of the assigned service_category
-        if self.service_category and (not self.service_type or self.service_type != self.service_category.name):
-            self.service_type = self.service_category.name
+        # The service_type charfield can be manually set or updated via serializer
         super().save(*args, **kwargs)
 
     def clean(self):
@@ -671,6 +676,39 @@ class ServiceType(models.Model):
         if self.vehicle_model and self.vehicle_make:
             if self.vehicle_model.parent_make_id != self.vehicle_make.id:
                 raise ValidationError("Vehicle model does not belong to the selected vehicle make.")
+
+
+class RepairRequestService(models.Model):
+    """
+    Through model for RepairRequest and ServiceType to support multiple services
+    per request with production-grade indexing and scalability.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    repair_request = models.ForeignKey(
+        'RepairRequest',
+        on_delete=models.CASCADE,
+        related_name='service_relationships'
+    )
+    service_type = models.ForeignKey(
+        'ServiceType',
+        on_delete=models.CASCADE,
+        related_name='request_relationships'
+    )
+    notes = models.TextField(blank=True, help_text="Specific notes for this service on this request")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('repair_request', 'service_type')
+        indexes = [
+            models.Index(fields=['repair_request']),
+            models.Index(fields=['service_type']),
+            models.Index(fields=['created_at']),
+        ]
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.repair_request.id} - {self.service_type.name}"
+
 
 
 class Settlement(models.Model):

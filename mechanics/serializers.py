@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from .models import (
     RepairRequest, TrainingSession, TrainingSessionParticipant,
     VehicleMake, MechanicVehicleExpertise, RepairProblemResolve,
-    ServiceType, Settlement
+    ServiceType, Settlement, RepairRequestService
 )
 from users.models import MechanicReview
 from users.serializers import MechanicProfileSerializer
@@ -33,20 +33,22 @@ class RepairRequestSerializer(serializers.ModelSerializer):
         write_only=True, required=False, allow_null=True)
     notified_mechanics = UserSerializer(many=True, read_only=True)
     problem_resolutions = RepairProblemResolveSerializer(many=True, required=False)
+    service_categories = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=ServiceType.objects.all(), required=False
+    )
     can_accept = serializers.SerializerMethodField()
 
     class Meta:
         model = RepairRequest
         fields = [
             'id', 'customer', 'mechanic', 'mechanic_id',
-            'service_category', 'service_type',
+            'service_categories', 'service_type',
             'vehicle_make',
             'vehicle_model', 'vehicle_year',
             'vehicle_registration',
             'vehicle_vin',
             'problem_description',
             'problem_resolutions',
-            # 'symptoms',
             'estimated_cost', 'service_address', 'service_latitude',
             'service_longitude', 'schedule', 'preferred_date', 'preferred_time_slot',
             'status',
@@ -57,6 +59,7 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             'arrived_at',
             'in_transit_at',
             'in_progress_at',
+            'user_vehicle',
             'created_at',
             'updated_at',
             'verify_completed_at',
@@ -107,37 +110,62 @@ class RepairRequestSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        # Ensure either service_category (FK) or service_type (String) is provided
-        if not attrs.get('service_category') and not attrs.get('service_type'):
+        # Ensure either service_categories or service_type (String) is provided
+        if not attrs.get('service_categories') and not attrs.get('service_type'):
             raise serializers.ValidationError(
-                "Either 'service_category' or 'service_type' must be provided."
+                "Either 'service_categories' (IDs) or 'service_type' (name) must be provided."
             )
         return attrs
 
     def create(self, validated_data):
+        from django.db import transaction
+        
         # The authenticated user is always the customer
         request = self.context.get('request')
-        if not request or not hasattr(request, 'user') or not request.user.is_authenticated: # noqa
+        if not request or not hasattr(request, 'user') or not request.user.is_authenticated:
             raise serializers.ValidationError(
                 "Authenticated user required to create a repair request."
             )
 
         customer = request.user
-
+        service_categories = validated_data.pop('service_categories', [])
         mechanic_id = validated_data.pop('mechanic_id', None)
+        
         mechanic = None
         if mechanic_id:
             try:
                 mechanic = User.objects.get(id=mechanic_id)
             except User.DoesNotExist:
-                raise serializers.ValidationError(
-                    {"mechanic_id": "Mechanic not found."})
+                raise serializers.ValidationError({"mechanic_id": "Mechanic not found."})
 
         validated_data['customer'] = customer
         if mechanic:
             validated_data['mechanic'] = mechanic
 
-        return super().create(validated_data)
+        # Automatically calculate estimated_cost as the sum of base_price of all selected services
+        # if estimated_cost was not explicitly provided by the user.
+        if not validated_data.get('estimated_cost') and service_categories:
+            total_base_price = sum(service.base_price for service in service_categories)
+            validated_data['estimated_cost'] = total_base_price
+
+        # Populate service_type charfield for easy reference and notification
+        if service_categories and not validated_data.get('service_type'):
+            validated_data['service_type'] = ", ".join([s.name for s in service_categories[:3]])
+            if len(service_categories) > 3:
+                validated_data['service_type'] += "..."
+
+        with transaction.atomic():
+            # Create the RepairRequest
+            repair_request = RepairRequest.objects.create(**validated_data)
+            
+            # Create the many-to-many relationships through the through model
+            repair_request_services = [
+                RepairRequestService(repair_request=repair_request, service_type=service)
+                for service in service_categories
+            ]
+            RepairRequestService.objects.bulk_create(repair_request_services)
+
+        return repair_request
 
     def update(self, instance, validated_data):
         # Optionally support updating mechanic if mechanic_id provided (write_only) # noqa
@@ -177,6 +205,7 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
     can_be_cancelled = serializers.ReadOnlyField()
     problem_resolutions = RepairProblemResolveSerializer(many=True, read_only=True)
     notified_mechanics = UserSerializer(many=True, read_only=True)
+    service_categories = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
 
     class Meta:
         model = RepairRequest
@@ -185,7 +214,7 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
             'customer',
             'mechanic',
             'notified_mechanics',
-            'service_category',
+            'service_categories',
             'service_type',
             'vehicle_make',
             'vehicle_model',
@@ -215,7 +244,8 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
             'is_active',
             'can_be_cancelled',
             'otp_code',
-            'is_otp_verified'
+            'is_otp_verified',
+            'user_vehicle',
         ]
 
     def to_representation(self, instance):

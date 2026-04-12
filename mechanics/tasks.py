@@ -27,7 +27,7 @@ def find_and_notify_mechanics_task(self, repair_request_id, radius_km=20.0):
         int: Number of mechanics found and notified
     """
     try:
-        repair_request = RepairRequest.objects.get(id=repair_request_id)
+        repair_request = RepairRequest.objects.prefetch_related('service_categories').get(id=repair_request_id)
     except RepairRequest.DoesNotExist as exc:
         logger.error(
             f"RepairRequest {repair_request_id} not found for "

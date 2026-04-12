@@ -750,6 +750,13 @@ class BiddingWindow(models.Model):
     def __str__(self):
         return f"BiddingWindow for {self.product.name}"
 
+    def get_highest_bidder(self):
+        """
+        Returns the User instance of the highest bidder if the window has ended and bids exist.
+        """
+        highest_bid = self.bids.filter(status__in=['pending', 'accepted']).order_by('-amount', '-created_at').first()
+        return highest_bid.user if highest_bid else None
+
 
 class Bid(models.Model):
     STATUS_CHOICES = [
@@ -792,3 +799,33 @@ class Bid(models.Model):
     def clean(self):
         if not self.bidding_window.is_active and self.status == 'pending':
             raise ValidationError("Cannot place or update a pending bid because the bidding window is closed.")
+
+def product_can_be_purchased_by(self, user):
+    """
+    Check if a product can be purchased by a specific user.
+    Rules:
+    1. If bidding window is active: NO ONE can purchase.
+    2. If bidding window expired:
+        a. If there were NO bids: EVERYONE can purchase.
+        b. If there WERE bids: ONLY the highest bidder can purchase.
+    3. If no bidding window: EVERYONE can purchase.
+    """
+    if hasattr(self, 'bidding_window'):
+        window = self.bidding_window
+        if window.is_active:
+            return False, "This product is currently in an active bidding window."
+        
+        # Window has expired or is closed
+        highest_bidder = window.get_highest_bidder()
+        if highest_bidder:
+            if user != highest_bidder:
+                return False, "This product is reserved for the highest bidder."
+            return True, "Highest bidder allowed."
+        else:
+            # No bids placed, move to general purchasing phase
+            return True, "No bids placed, anyone can purchase."
+            
+    return True, "Purchase allowed."
+
+# Attach the method to Product model
+setattr(Product, 'can_be_purchased_by', product_can_be_purchased_by)

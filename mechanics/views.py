@@ -60,6 +60,13 @@ class RepairRequestListView(APIView):
                 type=openapi.TYPE_STRING,
                 required=False,
             ),
+            openapi.Parameter(
+                "service_category",
+                openapi.IN_QUERY,
+                description="Filter by service category IDs (comma-separated)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
         ],
         responses={200: RepairRequestListSerializer(many=True)},
     )
@@ -96,6 +103,9 @@ class RepairRequestListView(APIView):
             # No active role or unsupported role
             repair_requests = RepairRequest.objects.none()
 
+        # Optimize for Many-to-Many
+        repair_requests = repair_requests.prefetch_related('service_categories')
+
         logger.info(f"Repair requests: {repair_requests}")
 
         # Apply filters
@@ -106,6 +116,13 @@ class RepairRequestListView(APIView):
         priority_filter = request.query_params.get("priority")
         if priority_filter:
             repair_requests = repair_requests.filter(priority=priority_filter)
+
+        service_category_filter = request.query_params.get("service_category")
+        if service_category_filter:
+            # Support comma-separated IDs and apply OR logic
+            category_ids = [cid.strip() for cid in service_category_filter.split(",") if cid.strip()]
+            if category_ids:
+                repair_requests = repair_requests.filter(service_categories__id__in=category_ids).distinct()
 
         # Paginate
         paginator = self.pagination_class()
@@ -149,6 +166,11 @@ class RepairRequestListView(APIView):
                             format='uuid',
                             description="UUID of the mechanic (optional)",
                         ),
+                        'service_categories': openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Schema(type=openapi.TYPE_STRING, format='uuid'),
+                            description="List of service category UUIDs"
+                        ),
                         'service_type': openapi.Schema(
                             type=openapi.TYPE_STRING,
                             description="Type of service requested",
@@ -173,14 +195,10 @@ class RepairRequestListView(APIView):
                             type=openapi.TYPE_STRING,
                             description="Description of the problem"
                         ),
-                        # 'symptoms': openapi.Schema(
-                        #     type=openapi.TYPE_STRING,
-                        #     description="Symptoms (optional)"
-                        # ),
                         'estimated_cost': openapi.Schema(
                             type=openapi.TYPE_NUMBER,
                             format='decimal',
-                            description="Estimated cost (optional)"
+                            description="Estimated cost (optional). If not provided, it will be calculated from selected services."
                         ),
                         'service_address': openapi.Schema(
                             type=openapi.TYPE_STRING,
@@ -210,10 +228,6 @@ class RepairRequestListView(APIView):
                             description="Preferred time slot",
                             enum=["morning", "afternoon", "evening"]
                         ),
-                        # 'status': openapi.Schema(
-                        #     type=openapi.TYPE_STRING,
-                        #     description="Status (optional)"
-                        # ),
                         'priority': openapi.Schema(
                             type=openapi.TYPE_STRING,
                             description="Priority (optional)"
@@ -304,11 +318,14 @@ class RepairRequestListView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+        from django.db import transaction
+
         serializer = RepairRequestSerializer(
             data=data, context={'request': request}
         )
         if serializer.is_valid():
-            repair_request = serializer.save()
+            with transaction.atomic():
+                repair_request = serializer.save()
 
             # If mechanic was provided and validated above, assign and return
             if mechanic:

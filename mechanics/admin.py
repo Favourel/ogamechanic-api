@@ -8,14 +8,20 @@ class RepairProblemResolveInline(admin.TabularInline):
     extra = 1
 
 
+class RepairRequestServiceInline(admin.TabularInline):
+    model = models.RepairRequestService
+    extra = 1
+    autocomplete_fields = ['service_type']
+
+
 @admin.register(models.RepairRequest)
 class RepairRequestAdmin(admin.ModelAdmin):
     list_display = [
-        'id', 'customer', 'mechanic', 'service_category', 'service_type', 'vehicle_make',
+        'id', 'customer', 'mechanic', 'service_type', 'vehicle_make',
         'vehicle_model', 'status', 'priority', 'requested_at',
         'notified_mechanics_count'
     ]
-    inlines = [RepairProblemResolveInline]
+    inlines = [RepairProblemResolveInline, RepairRequestServiceInline]
 
     def notified_mechanics_count(self, obj):
         """Count of mechanics notified about this request"""
@@ -23,7 +29,7 @@ class RepairRequestAdmin(admin.ModelAdmin):
     notified_mechanics_count.short_description = "Notified Mechanics"
 
     list_filter = [
-        'status', 'priority', 'service_category', 'service_type', 'preferred_time_slot',
+        'status', 'priority', 'service_type', 'preferred_time_slot',
         'requested_at', 'accepted_at', 'completed_at'
     ]
     search_fields = [
@@ -45,9 +51,9 @@ class RepairRequestAdmin(admin.ModelAdmin):
                 'status', 'priority'
             )
         }),
-        ('Vehicle Details', {
+        ('Vehicle & Service Summary', {
             'fields': (
-                'service_category', 'service_type', 'vehicle_make', 'vehicle_model',
+                'service_type', 'vehicle_make', 'vehicle_model',
                 'vehicle_year', 'vehicle_registration'
             )
         }),

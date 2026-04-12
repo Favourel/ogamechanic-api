@@ -138,12 +138,6 @@ class User(AbstractBaseUser, PermissionsMixin):
         null=True
     )
 
-    # Car details (for customers)
-    car_make = models.CharField(max_length=50, blank=True, null=True)
-    car_model = models.CharField(max_length=50, blank=True, null=True)
-    car_year = models.IntegerField(blank=True, null=True)
-    license_plate = models.CharField(max_length=20, blank=True, null=True)
-
     objects = CustomUserManager()
 
     USERNAME_FIELD = 'email'
@@ -1351,3 +1345,59 @@ class EmailSubscription(models.Model):
     def is_active(self):
         """Check if the subscription is active"""
         return self.status == 'active'
+
+
+class UserVehicle(models.Model):
+    """
+    Model to store multiple vehicles registered by a user.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='vehicles',
+        limit_choices_to={'roles__name': 'primary_user'}
+    )
+    vin = models.CharField(
+        max_length=17,
+        blank=True,
+        null=True,
+        help_text="Vehicle Identification Number (VIN)"
+    )
+    make = models.CharField(max_length=100)
+    model = models.CharField(max_length=100)
+    year = models.PositiveIntegerField()
+    license_plate = models.CharField(max_length=20, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _('user vehicle')
+        verbose_name_plural = _('user vehicles')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user']),
+            models.Index(fields=['vin']),
+            models.Index(fields=['license_plate']),
+        ]
+
+    def __str__(self):
+        return f"{self.year} {self.make} {self.model} ({self.user.email})"
+
+
+class UserVehicleImage(models.Model):
+    """
+    Model to store multiple images for a user's vehicle.
+    """
+    vehicle = models.ForeignKey(
+        UserVehicle,
+        on_delete=models.CASCADE,
+        related_name='images'
+    )
+    image = models.ImageField(upload_to='users/vehicles/')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _('user vehicle image')
+        verbose_name_plural = _('user vehicle images')
+        ordering = ['-created_at']

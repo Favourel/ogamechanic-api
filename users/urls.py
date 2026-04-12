@@ -74,6 +74,26 @@ urlpatterns = [
     path('roles/', views.RoleManagementView.as_view(), name='role_management'),
     path('roles/list/', views.RoleListView.as_view(), name='role_list'),
 
+    # Vehicle management
+    path(
+        'my-vehicles/',
+        views.UserVehicleViewSet.as_view({
+            'get': 'list',
+            'post': 'create'
+        }),
+        name='user-vehicles'
+    ),
+    path(
+        'my-vehicles/<uuid:pk>/',
+        views.UserVehicleViewSet.as_view({
+            'get': 'retrieve',
+            'put': 'update',
+            'patch': 'partial_update',
+            'delete': 'destroy'
+        }),
+        name='user-vehicle-detail'
+    ),
+
     # Email verification
     path(
         'verify-email/',
