@@ -1927,10 +1927,21 @@ class UserVehicleImageSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get('request')
-        if instance.image:
-            # Build absolute URL using the common logic if needed, or DRF default
-            if request:
-                data['image'] = request.build_absolute_uri(instance.image.url)
+        if getattr(instance, 'image', None):
+            # Try to build absolute URL using request first, then fallback to SITE_DOMAIN
+            try:
+                if request:
+                    data['image'] = request.build_absolute_uri(instance.image.url)
+                else:
+                    from django.conf import settings
+                    domain = getattr(settings, 'SITE_DOMAIN', 'https://api.ogamechanic.org').rstrip('/')
+                    url = instance.image.url
+                    if url and not url.startswith('http'):
+                        data['image'] = f"{domain}{url}"
+                    else:
+                        data['image'] = url
+            except (AttributeError, ValueError):
+                pass
         return data
 
 
@@ -1977,7 +1988,7 @@ class UserVehicleSwaggerSerializer(UserVehicleSerializer):
         model = UserVehicle
         fields = [
             'id', 'user', 'vin', 'make', 'model', 'year', 
-            'license_plate',
+            'license_plate', 'images',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'user', 'created_at', 'updated_at']
