@@ -14,6 +14,9 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework import viewsets, mixins
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
+from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+from dj_rest_auth.registration.views import SocialLoginView
 from .serializers import (
     UserSerializer,
     ChangePasswordSerializer,
@@ -700,6 +703,27 @@ class UserRegistrationView(APIView):
                 api_response(message=f"Registration failed: {str(e)}", status=False),
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class GoogleLogin(SocialLoginView):
+    """
+    Google Login / Signup endpoint.
+    
+    This endpoint allows users to log in or sign up using their Google account.
+    The client should provide the 'access_token' or 'code' received from Google.
+    """
+    adapter_class = GoogleOAuth2Adapter
+    callback_url = "https://ogamechanic.twopikin.com/api/users/google/callback/"  # Example callback
+    client_class = OAuth2Client
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="Google Social Login",
+        operation_description="Authenticate using Google Social Account",
+        responses={200: "JWT tokens returned"}
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
 
 
 class VerifyEmailCodeView(APIView):

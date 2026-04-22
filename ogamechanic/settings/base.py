@@ -30,6 +30,14 @@ INSTALLED_APPS = [
     'django_filters',
     "django_celery_beat",
 
+    # Auth & Social Auth
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'dj_rest_auth',
+    'dj_rest_auth.registration',
+
     # Local apps    
     'users.apps.UsersConfig',
     'adminpanel.apps.AdminpanelConfig',
@@ -50,6 +58,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'ogamechanic.modules.middleware.ResponseTimeMiddleware',
@@ -60,6 +69,7 @@ MIDDLEWARE = [
 AUTHENTICATION_BACKENDS = [
     'users.authentication.LockoutBackend',
     'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
 ROOT_URLCONF = 'ogamechanic.urls'
@@ -350,3 +360,31 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# Social Auth Configuration
+ACCOUNT_AUTHENTICATION_METHOD = 'email'
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = False
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+ACCOUNT_EMAIL_VERIFICATION = 'none'  # Adjust as needed
+
+REST_AUTH = {
+    'USE_JWT': True,
+    'JWT_AUTH_COOKIE': 'jwt-auth',
+    'JWT_AUTH_REFRESH_COOKIE': 'jwt-refresh-auth',
+    'JWT_AUTH_HTTPONLY': False,  # Set to True in production
+    'TOKEN_MODEL': None,
+}
+
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        },
+        'OAUTH_PKCE_ENABLED': True,
+    }
+}

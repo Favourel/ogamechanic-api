@@ -330,7 +330,10 @@ class ProductSerializer(serializers.ModelSerializer):
         from mechanics.models import RepairRequest
         from mechanics.serializers import RepairRequestListSerializer
         
-        repairs = RepairRequest.objects.filter(vehicle_vin=obj.vin).order_by('-requested_at')
+        repairs = RepairRequest.objects.filter(
+            vehicle_vin=obj.vin,
+            status='completed'
+        ).order_by('-requested_at')
         return RepairRequestListSerializer(repairs, many=True, context={'request': self.context.get('request')}).data
 
     def get_bidding_window(self, obj):

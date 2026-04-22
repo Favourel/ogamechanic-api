@@ -120,6 +120,13 @@ class ProductListCreateView(APIView):
                 type=openapi.TYPE_NUMBER,
                 required=False
             ),
+            openapi.Parameter(
+                'vin',
+                openapi.IN_QUERY,
+                description="Filter by VIN (exact or partial)",
+                type=openapi.TYPE_STRING,
+                required=False
+            ),
         ],
         responses={
             200: ProductSerializer(many=True),
@@ -250,6 +257,10 @@ class ProductListCreateView(APIView):
                             status=False),
                         status=400
                     )
+
+            vin = request.query_params.get('vin')
+            if vin:
+                queryset = queryset.filter(vin__icontains=vin)
 
             paginated_response = self.get_paginated_response(queryset)
             return Response(api_response(
@@ -1184,6 +1195,10 @@ class ProductSearchView(APIView):
                             status=False),
                         status=400
                     )
+
+            vin = request.query_params.get('vin')
+            if vin:
+                queryset = queryset.filter(vin__icontains=vin)
 
             serializer = self.get_paginated_response(queryset)
 

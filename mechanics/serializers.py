@@ -142,6 +142,32 @@ class RepairRequestSerializer(serializers.ModelSerializer):
         if mechanic:
             validated_data['mechanic'] = mechanic
 
+        # Auto-fill vehicle details from user_vehicle or last repair request
+        user_vehicle = validated_data.get('user_vehicle')
+        if user_vehicle:
+            # If user_vehicle is provided, populate missing fields
+            if not validated_data.get('vehicle_make'):
+                validated_data['vehicle_make'] = user_vehicle.make
+            if not validated_data.get('vehicle_model'):
+                validated_data['vehicle_model'] = user_vehicle.model
+            if not validated_data.get('vehicle_year'):
+                validated_data['vehicle_year'] = user_vehicle.year
+            if not validated_data.get('vehicle_vin'):
+                validated_data['vehicle_vin'] = user_vehicle.vin
+            if not validated_data.get('vehicle_registration'):
+                validated_data['vehicle_registration'] = user_vehicle.license_plate
+        elif not any([validated_data.get('vehicle_make'), validated_data.get('vehicle_model'), validated_data.get('vehicle_vin')]):
+            # If no vehicle info provided, try to fetch the last repair request by this user
+            last_request = RepairRequest.objects.filter(customer=customer).order_by('-requested_at').first()
+            if last_request:
+                validated_data['vehicle_make'] = last_request.vehicle_make
+                validated_data['vehicle_model'] = last_request.vehicle_model
+                validated_data['vehicle_year'] = last_request.vehicle_year
+                validated_data['vehicle_vin'] = last_request.vehicle_vin
+                validated_data['vehicle_registration'] = last_request.vehicle_registration
+                if not validated_data.get('user_vehicle'):
+                    validated_data['user_vehicle'] = last_request.user_vehicle
+
         # Automatically calculate estimated_cost as the sum of base_price of all selected services
         # if estimated_cost was not explicitly provided by the user.
         if not validated_data.get('estimated_cost') and service_categories:

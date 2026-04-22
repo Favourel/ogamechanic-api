@@ -41,6 +41,7 @@ urlpatterns = [
     #     name='step_by_step_register'
     # ),
     path('login/', views.LoginView.as_view(), name='login'),
+    path('google/', views.GoogleLogin.as_view(), name='google_login'),
     path(
         'token/refresh/',
         views.TokenRefreshView.as_view(),
