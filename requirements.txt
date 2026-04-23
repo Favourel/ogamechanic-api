@@ -31,7 +31,6 @@ dj-rest-auth==7.2.0
 Django==4.2.23
 django-allauth==65.16.1
 django-anymail==10.3
-django-auth-ldap==4.8.0
 django-axes==6.5.2
 django-celery-beat==2.8.1
 django-cors-headers==4.7.0
@@ -81,7 +80,6 @@ jmespath==1.0.1
 jsonschema==4.25.0
 jsonschema-specifications==2025.4.1
 kombu==5.5.4
-ldap3==2.9.1
 mccabe==0.7.0
 msgpack==1.1.1
 mypy_extensions==1.1.0
@@ -114,7 +112,6 @@ python-crontab==3.3.0
 python-dateutil==2.9.0.post0
 python-decouple==3.8
 python-dotenv==1.1.1
-python-ldap==3.4.4
 pytz==2025.2
 PyYAML==6.0.2
 qrcode==8.2
