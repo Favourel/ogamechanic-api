@@ -1096,7 +1096,8 @@ class ProductSearchView(APIView):
                     vector = (
                         SearchVector('name', weight='A') +
                         SearchVector('description', weight='B') +
-                        SearchVector('category__name', weight='B')
+                        SearchVector('category__name', weight='C') +
+                        SearchVector('vin', weight='D')
                     )
                     search_query = SearchQuery(query)
                     queryset = Product.objects.annotate(
@@ -1107,13 +1108,15 @@ class ProductSearchView(APIView):
                     queryset = Product.objects.filter(
                         Q(name__icontains=query) |
                         Q(description__icontains=query) |
-                        Q(category__name__icontains=query)
+                        Q(category__name__icontains=query) |
+                        Q(vin__icontains=query)
                     )
             else:
                 queryset = Product.objects.filter(
                     Q(name__icontains=query) |
                     Q(description__icontains=query) |
-                    Q(category__name__icontains=query)
+                    Q(category__name__icontains=query) |
+                    Q(vin__icontains=query)
                 )
 
             # Filtering for active products

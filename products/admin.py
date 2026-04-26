@@ -32,7 +32,7 @@ class ProductAdmin(admin.ModelAdmin):
         'name', 'merchant', 'category', 'price', 'is_rental',
         'created_at', 'updated_at'
     )
-    search_fields = ('name', 'merchant__email', 'category__name', 'id')
+    search_fields = ('name', 'merchant__email', 'category__name', 'id', 'vin')
     list_filter = ('is_rental', 'category', 'created_at')
     readonly_fields = ('created_at', 'updated_at')
     inlines = [ProductImageInline, ProductVehicleCompatibilityInline]
