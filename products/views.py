@@ -1066,6 +1066,13 @@ class ProductSearchView(APIView):
                 type=openapi.TYPE_NUMBER,
                 required=False
             ),
+            openapi.Parameter(
+                'vin',
+                openapi.IN_QUERY,
+                description="Filter by VIN (exact or partial)",
+                type=openapi.TYPE_STRING,
+                required=False
+            ),
         ],
         responses={200: ProductSerializer(many=True)}
     )
