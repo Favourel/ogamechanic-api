@@ -75,7 +75,9 @@ class NotificationService:
             role=role,
             title=title,
             message=message,
-            notification_type=notification_type
+            notification_type=notification_type,
+            related_object_id=getattr(related_object, 'id', related_object) if related_object else None,
+            related_object_type=related_object_type
         )
 
         # Send real-time notification if user is online
@@ -102,10 +104,13 @@ class NotificationService:
         if hasattr(user, 'devices'):
             try:
                 if user.devices.filter(is_active=True).exists():
-                    if hasattr(NotificationService, 'send_push_notification'):
-                        NotificationService.send_push_notification.delay(
-                            user.id, title, message, notification_type
-                        )
+                    send_expo_push_notification.delay(
+                        user.id, title, message, notification_type,
+                        data={
+                            "related_object_id": str(notification.related_object_id) if notification.related_object_id else None,
+                            "related_object_type": notification.related_object_type
+                        }
+                    )
             except Exception:
                 pass  # Fail silently for push notifications
 
@@ -171,6 +176,8 @@ class NotificationService:
                         "title": notification.title,
                         "message": notification.message,
                         "notification_type": notification.notification_type,
+                        "related_object_id": str(notification.related_object_id) if notification.related_object_id else None,
+                        "related_object_type": notification.related_object_type,
                         "created_at": notification.created_at.isoformat(),
                         "is_read": notification.is_read
                     }
@@ -314,9 +321,9 @@ def send_bulk_email_notifications(user_ids, title, message, notification_type='i
 
 
 @shared_task
-def send_push_notification(user_id, title, message, notification_type='info'):
+def send_expo_push_notification(user_id, title, message, notification_type='info', data=None):
     """
-    Send push notification asynchronously
+    Send push notification using Expo Push API
     """
     try:
         user = User.objects.get(id=user_id)
@@ -325,99 +332,133 @@ def send_push_notification(user_id, title, message, notification_type='info'):
         if not devices.exists():
             return
 
-        # Import FCM here to avoid circular imports
-        from firebase_admin import messaging
+        import requests
 
-        # Prepare notification data
-        notification_data = {
-            'title': title,
-            'body': message,
-            'notification_type': notification_type,
-            'timestamp': str(timezone.now()),
-            'click_action': 'FLUTTER_NOTIFICATION_CLICK'
-        }
+        expo_push_url = "https://exp.host/--/api/v2/push/send"
 
-        # Send to all user devices
+        # Prepare notifications for all active devices
+        notifications = []
+        active_devices = []
         for device in devices:
-            try:
-                message = messaging.Message(
-                    notification=messaging.Notification(
-                        title=title,
-                        body=message
-                    ),
-                    data=notification_data,
-                    token=device.fcm_token,
-                )
+            # Expo tokens should look like ExponentPushToken[xxx]
+            token = device.fcm_token
+            if not token or not token.startswith("ExponentPushToken"):
+                continue
 
-                messaging.send(message)
+            payload = {
+                "to": token,
+                "title": title,
+                "body": message,
+                "sound": "default",
+                "data": data or {}
+            }
+            # Add basic info to data if not present
+            payload["data"].setdefault("notification_type", notification_type)
 
-            except Exception as e:
-                print(f"Failed to send push notification to device {device.id}: {e}") # noqa
-                # Mark device as inactive if FCM token is invalid
-                device.is_active = False
-                device.save()
+            notifications.append(payload)
+            active_devices.append(device)
+
+        if not notifications:
+            return
+
+        # Send in chunks (Expo allows up to 100 per request)
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        if settings.EXPO_ACCESS_TOKEN:
+            headers["Authorization"] = f"Bearer {settings.EXPO_ACCESS_TOKEN}"
+
+        response = requests.post(
+            expo_push_url,
+            json=notifications,
+            headers=headers
+        )
+
+        if response.status_code == 200:
+            # Expo returns a status for each notification
+            results = response.json().get("data", [])
+            for idx, result in enumerate(results):
+                if result.get("status") == "error":
+                    details = result.get("details", {})
+                    if details.get("error") == "DeviceNotRegistered":
+                        # Mark device as inactive if token is no longer valid
+                        device_to_disable = active_devices[idx]
+                        device_to_disable.is_active = False
+                        device_to_disable.save()
 
     except Exception as e:
-        print(f"Failed to send push notification: {e}")
+        print(f"Failed to send Expo push notification: {e}")
 
 
 @shared_task
-def send_bulk_push_notifications(user_ids, title, message, notification_type='info'): # noqa
+def send_bulk_expo_push_notifications(user_ids, title, message, notification_type='info', data=None):
     """
-    Send bulk push notifications asynchronously
+    Send bulk push notifications using Expo Push API
     """
     try:
-        users = User.objects.filter(id__in=user_ids)
+        from users.models import Device
+        devices = Device.objects.filter(user__id__in=user_ids, is_active=True)
 
-        # Import FCM here to avoid circular imports
-        from firebase_admin import messaging
-
-        # Prepare notification data
-        notification_data = {
-            'title': title,
-            'body': message,
-            'notification_type': notification_type,
-            'timestamp': str(timezone.now()),
-            'click_action': 'FLUTTER_NOTIFICATION_CLICK'
-        }
-
-        # Group devices by FCM token
-        tokens = []
-        for user in users:
-            user_tokens = user.devices.filter(is_active=True).values_list('fcm_token', flat=True) # noqa
-            tokens.extend(user_tokens)
-
-        if not tokens:
+        if not devices.exists():
             return
 
-        # Send to all devices
-        try:
-            message = messaging.MulticastMessage(
-                notification=messaging.Notification(
-                    title=title,
-                    body=message
-                ),
-                data=notification_data,
-                tokens=tokens,
+        import requests
+        expo_push_url = "https://exp.host/--/api/v2/push/send"
+
+        notifications = []
+        active_devices = []
+
+        for device in devices:
+            token = device.fcm_token
+            if not token or not token.startswith("ExponentPushToken"):
+                continue
+
+            payload = {
+                "to": token,
+                "title": title,
+                "body": message,
+                "sound": "default",
+                "data": data or {}
+            }
+            payload["data"].setdefault("notification_type", notification_type)
+
+            notifications.append(payload)
+            active_devices.append(device)
+
+        if not notifications:
+            return
+
+        # Send in chunks of 100
+        for i in range(0, len(notifications), 100):
+            chunk = notifications[i:i + 100]
+            device_chunk = active_devices[i:i + 100]
+
+            headers = {
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            }
+            if settings.EXPO_ACCESS_TOKEN:
+                headers["Authorization"] = f"Bearer {settings.EXPO_ACCESS_TOKEN}"
+
+            response = requests.post(
+                expo_push_url,
+                json=chunk,
+                headers=headers
             )
 
-            response = messaging.send_multicast(message)
-
-            # Handle failed tokens
-            if response.failure_count > 0:
-                failed_tokens = []
-                for i, result in enumerate(response.responses):
-                    if not result.success:
-                        failed_tokens.append(tokens[i])
-
-                # Mark failed devices as inactive
-                Device.objects.filter(fcm_token__in=failed_tokens).update(is_active=False) # noqa
-
-        except Exception as e:
-            print(f"Failed to send bulk push notifications: {e}")
+            if response.status_code == 200:
+                results = response.json().get("data", [])
+                for idx, result in enumerate(results):
+                    if result.get("status") == "error":
+                        details = result.get("details", {})
+                        if details.get("error") == "DeviceNotRegistered":
+                            device_to_disable = device_chunk[idx]
+                            device_to_disable.is_active = False
+                            device_to_disable.save()
 
     except Exception as e:
-        print(f"Failed to send bulk push notifications: {e}")
+        print(f"Failed to send bulk Expo push notifications: {e}")
 
 
 @shared_task
@@ -622,8 +663,10 @@ class MechanicNotificationService:
         NotificationService.create_notification(
             user=repair.mechanic,
             title="New Repair Request",
-            message=f"You have a new repair request from {repair.customer.email}.", # noqa
-            notification_type='info'
+            message=f"You have a new repair request from {repair.customer.get_full_name() or repair.customer.email}.", # noqa
+            notification_type='info',
+            related_object=repair,
+            related_object_type='RepairRequest'
         )
 
     @staticmethod
@@ -642,7 +685,9 @@ class MechanicNotificationService:
             user=repair.customer,
             title=f"Repair {repair.status.title()}",
             message=message,
-            notification_type='repair_status'
+            notification_type='repair_status',
+            related_object=repair,
+            related_object_type='RepairRequest'
         )
 
 

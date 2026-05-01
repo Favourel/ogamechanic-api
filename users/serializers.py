@@ -135,6 +135,8 @@ class RiderProfileSerializer(serializers.ModelSerializer):
             "is_active",
             "disapproved",
             "disapproval_reason",
+            "nin_number",
+            "nin_document",
             "created_at",
             "updated_at",
         ]
@@ -234,6 +236,7 @@ class RiderProfileSerializer(serializers.ModelSerializer):
             'selfie',
             "government_id_front",
             "government_id_back",
+            "nin_document",
         ]
         for field_name in file_fields:
             value = getattr(instance, field_name, None)
@@ -316,6 +319,8 @@ class NotificationSerializer(serializers.ModelSerializer):
             "notification_type",
             "is_read",
             "is_sent",
+            "related_object_id",
+            "related_object_type",
             "created_at",
             "read_at",
         ]
@@ -470,6 +475,8 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             "subscription_payment_reference",
             "has_reached_product_limit",
             "active_product_count",
+            "nin_number",
+            "nin_document",
             "created_at",
             "updated_at",
         ]
@@ -544,7 +551,7 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get('request', None)
-        for field_name in ['cac_document', 'selfie']:
+        for field_name in ['cac_document', 'selfie', 'nin_document']:
             value = getattr(instance, field_name, None)
             if value and hasattr(value, 'url'):
                 data[field_name] = self._get_absolute_url(value.url, request)
@@ -580,12 +587,14 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             "location",
             "latitude",
             "longitude",
-            "area_of_specialisation",
+            "areas_of_specialisation",
             "bio",
             "lga",
             "cac_number",
             "cac_document",
             "selfie",
+            "nin_number",
+            "nin_document",
             "govt_id_type",
             "government_id_front",
             "government_id_back",
@@ -688,7 +697,7 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get('request', None)
-        for field_name in ['cac_document', 'selfie', 'government_id_front', 'government_id_back']:
+        for field_name in ['cac_document', 'selfie', 'government_id_front', 'government_id_back', 'nin_document']:
             value = getattr(instance, field_name, None)
             if value and hasattr(value, 'url'):
                 data[field_name] = self._get_absolute_url(value.url, request)
@@ -739,6 +748,8 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "vehicle_registration_number",
             "insurance_document",
             "driver_license",
+            "nin_number",
+            "nin_document",
             "rating",
         ]
         read_only_fields = [

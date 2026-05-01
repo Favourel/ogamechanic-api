@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from ogamechanic.modules.utils import (
     get_incoming_request_checks,
@@ -12,8 +13,15 @@ from ogamechanic.modules.utils import (
     api_response,
 )
 from ogamechanic.modules.paginations import CustomLimitOffsetPagination
+from users.models import (
+    MechanicProfile, Device, Notification
+)
+from users.services import (
+    NotificationService, MechanicNotificationService
+)
 from .models import (
-    RepairRequest, TrainingSession, VehicleMake, MechanicVehicleExpertise,
+    RepairRequest, TrainingSession, TrainingSessionParticipant,
+    VehicleMake, MechanicVehicleExpertise,
     RepairProblemResolve
 )
 from .serializers import (
@@ -348,6 +356,9 @@ class RepairRequestListView(APIView):
                     # (this clears any accidental pre-populated entries)
                     repair_request.notified_mechanics.clear()
 
+                    # Notify the assigned mechanic
+                    MechanicNotificationService.repair_requested(repair_request)
+
                     # If you keep track of notification jobs, cancel them here (if possible)
                     # e.g. revoke celery tasks if you stored task IDs on the model
 
@@ -563,6 +574,7 @@ class RepairRequestDetailView(APIView):
         if serializer.is_valid():
             logger.info(f"Serializer valid. Validated data: {serializer.validated_data}")
             updated_instance = serializer.save()  # <--- DRF calls update()
+            MechanicNotificationService.repair_status_updated(updated_instance)
             logger.info(
                 f"Updated instance status: {updated_instance.status}, "
                 f"ID: {updated_instance.id}"
@@ -678,6 +690,7 @@ class RepairRequestDetailView(APIView):
                 f"{serializer.validated_data}"
             )
             updated_instance = serializer.save()   # <-- calls update()
+            MechanicNotificationService.repair_status_updated(updated_instance)
             logger.info(
                 f"Updated instance status: {updated_instance.status}, "
                 f"ID: {updated_instance.id}"

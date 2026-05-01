@@ -301,6 +301,21 @@ class Notification(models.Model):
     is_read = models.BooleanField(_('is read'), default=False)
     is_sent = models.BooleanField(_('is sent'), default=False)
 
+    # Related object (e.g., RepairRequest, Ride, etc.)
+    related_object_id = models.UUIDField(
+        _('related object id'),
+        null=True,
+        blank=True,
+        help_text=_('UUID of the object this notification is related to')
+    )
+    related_object_type = models.CharField(
+        _('related object type'),
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text=_('Type of the object this notification is related to (e.g., RepairRequest)')
+    )
+
     # Timestamps
     created_at = models.DateTimeField(_('created at'), auto_now_add=True)
     read_at = models.DateTimeField(_('read at'), null=True, blank=True)
@@ -396,6 +411,12 @@ class MerchantProfile(models.Model):
         blank=True, null=True,
         help_text="Live photo of merchant"
     )
+    nin_number = models.CharField(max_length=20, blank=True, null=True)
+    nin_document = models.FileField(
+        upload_to='merchant/nin_documents/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True
+    )
 
     # Subscription fields
     is_subscribed = models.BooleanField(default=False)
@@ -442,8 +463,9 @@ class MechanicProfile(models.Model):
         max_digits=20, decimal_places=17, null=True, blank=True,
         help_text="Mechanic's location longitude for proximity-based requests"
     )
-    area_of_specialisation = models.CharField(
-        max_length=255, blank=True, null=True
+    areas_of_specialisation = models.JSONField(
+        default=list, blank=True, null=True,
+        help_text="Multiple areas of specialization"
     )
     bio = models.TextField(null=True, blank=True)
     lga = models.CharField(
@@ -460,6 +482,12 @@ class MechanicProfile(models.Model):
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png'])],
         blank=True, null=True,
         help_text="Live photo of mechanic"
+    )
+    nin_number = models.CharField(max_length=20, blank=True, null=True)
+    nin_document = models.FileField(
+        upload_to='mechanic/nin_documents/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True
     )
     GOVT_ID_TYPE_CHOICES = [
         ("NIN", "NIN"),
@@ -579,6 +607,12 @@ class DriverProfile(models.Model):
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png'])],
         blank=True, null=True,
         help_text="Live photo of driver"
+    )
+    nin_number = models.CharField(max_length=20, blank=True, null=True)
+    nin_document = models.FileField(
+        upload_to='driver/nin_documents/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True
     )
 
     # License Information
@@ -785,6 +819,12 @@ class RiderProfile(models.Model):
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png'])],
         blank=True, null=True,
         help_text="Live photo of rider"
+    )
+    nin_number = models.CharField(max_length=20, blank=True, null=True)
+    nin_document = models.FileField(
+        upload_to='rider/nin_documents/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True
     )
 
     GOVT_ID_TYPE_CHOICES = [

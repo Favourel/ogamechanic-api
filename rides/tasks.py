@@ -9,8 +9,6 @@ from users.models import Notification
 from django.utils import timezone
 from datetime import timedelta
 
-from firebase_admin import messaging, credentials
-from firebase_admin import initialize_app
 from django_redis import get_redis_connection
 import json
 
@@ -18,11 +16,6 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
-# Initialize Firebase app (called once in settings.py or at module level)
-if not hasattr(settings, 'FIREBASE_INITIALIZED'):
-    cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
-    initialize_app(cred)
-    settings.FIREBASE_INITIALIZED = True
 
 
 @shared_task(bind=True, max_retries=3, retry_backoff=True)
@@ -40,52 +33,65 @@ def notify_drivers_task_fcm(self, ride_id, driver_ids, surge_multiplier):
             )
             return
 
+        import requests
+        expo_push_url = "https://exp.host/--/api/v2/push/send"
+
         for driver_id in driver_ids:
             try:
                 driver = User.objects.get(id=driver_id)
                 devices = Device.objects.filter(user=driver, is_active=True)
-                if not devices:
-                    logger.warning(
-                        f"No active devices for driver {driver_id}"
-                    )
-                    continue
-
-                # Prepare notification payload
-                message = messaging.MulticastMessage(
-                    notification=messaging.Notification(
-                        title="New Ride Request",
-                        body=(
+                
+                notifications = []
+                active_devices = []
+                for device in devices:
+                    token = device.fcm_token
+                    if not token or not token.startswith("ExponentPushToken"):
+                        continue
+                    
+                    payload = {
+                        "to": token,
+                        "title": "New Ride Request",
+                        "body": (
                             f"Ride from {ride.pickup_address} for "
                             f"₦{ride.fare:.2f} (Surge: {surge_multiplier}x)"
                         ),
-                    ),
-                    data={
-                        "ride_id": str(ride.id),
-                        "pickup_address": ride.pickup_address,
-                        "dropoff_address": ride.dropoff_address,
-                        "suggested_fare": str(ride.suggested_fare),
-                        "surge_multiplier": str(surge_multiplier),
-                    },
-                    tokens=[device.fcm_token for device in devices],
+                        "sound": "default",
+                        "data": {
+                            "ride_id": str(ride.id),
+                            "pickup_address": ride.pickup_address,
+                            "dropoff_address": ride.dropoff_address,
+                            "suggested_fare": str(ride.suggested_fare),
+                            "surge_multiplier": str(surge_multiplier),
+                            "notification_type": "ride_request"
+                        }
+                    }
+                    notifications.append(payload)
+                    active_devices.append(device)
+
+                if not notifications:
+                    continue
+
+                response = requests.post(
+                    expo_push_url,
+                    json=notifications,
+                    headers={"Accept": "application/json", "Content-Type": "application/json"}
                 )
 
-                # Send notification
-                response = messaging.send_multicast(message)
-                success_count = response.success_count
-                failure_count = response.failure_count
-
-                if success_count > 0:
+                if response.status_code == 200:
+                    results = response.json().get("data", [])
+                    success_count = sum(1 for r in results if r.get("status") == "ok")
                     logger.info(
-                        f"Sent notification to {success_count} devices for "
+                        f"Sent Expo notification to {success_count} devices for "
                         f"driver {driver_id}, ride {ride_id}"
                     )
-                if failure_count > 0:
-                    for idx, resp in enumerate(response.responses):
-                        if resp.exception:
-                            logger.error(
-                                f"Failed to send to device "
-                                f"{devices[idx].fcm_token}: {resp.exception}"
-                            )
+                    
+                    for idx, result in enumerate(results):
+                        if result.get("status") == "error":
+                            details = result.get("details", {})
+                            if details.get("error") == "DeviceNotRegistered":
+                                device_to_disable = active_devices[idx]
+                                device_to_disable.is_active = False
+                                device_to_disable.save()
 
             except User.DoesNotExist:
                 logger.error(

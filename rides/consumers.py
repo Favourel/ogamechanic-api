@@ -52,11 +52,12 @@ class RideTrackingConsumer(AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection"""
-        # Leave tracking group
-        await self.channel_layer.group_discard(
-            self.tracking_group_name,
-            self.channel_name
-        )
+        # Leave tracking group if it was joined
+        if hasattr(self, 'tracking_group_name'):
+            await self.channel_layer.group_discard(
+                self.tracking_group_name,
+                self.channel_name
+            )
 
     async def receive(self, text_data):
         """Handle incoming WebSocket messages"""
@@ -237,11 +238,12 @@ class DriverLocationConsumer(AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection"""
-        # Leave location group
-        await self.channel_layer.group_discard(
-            self.location_group_name,
-            self.channel_name
-        )
+        # Leave location group if it was joined
+        if hasattr(self, 'location_group_name'):
+            await self.channel_layer.group_discard(
+                self.location_group_name,
+                self.channel_name
+            )
 
     async def receive(self, text_data):
         """Handle incoming WebSocket messages"""
