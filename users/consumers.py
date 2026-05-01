@@ -1,8 +1,11 @@
 import json
+import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
 from .models import Notification
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -29,6 +32,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
         )
 
         await self.accept()
+        logger.info(f"User {self.user.id} connected to NotificationConsumer")
 
         # Send unread notifications count
         unread_count = await self.get_unread_notifications_count()
@@ -45,6 +49,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                 self.notification_group_name,
                 self.channel_name
             )
+            logger.info(f"User {self.user.id} disconnected from NotificationConsumer")
 
     async def receive(self, text_data):
         """Handle incoming WebSocket messages"""
@@ -199,6 +204,7 @@ class NotificationGroupConsumer(AsyncWebsocketConsumer):
         )
 
         await self.accept()
+        logger.info(f"Admin {self.user.id} connected to AdminNotificationConsumer")
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection"""
@@ -208,6 +214,7 @@ class NotificationGroupConsumer(AsyncWebsocketConsumer):
                 self.admin_group_name,
                 self.channel_name
             )
+            logger.info(f"Admin {self.user.id} disconnected from AdminNotificationConsumer")
 
     async def receive(self, text_data):
         """Handle incoming WebSocket messages"""

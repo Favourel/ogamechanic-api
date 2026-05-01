@@ -1,8 +1,11 @@
 import json
+import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
 from .models import ChatRoom, Message, ChatNotification
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -33,6 +36,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
 
         await self.accept()
+        logger.info(f"User {self.user.id} connected to ChatConsumer for room {self.chat_room_id}")
 
         # Send connection confirmation
         await self.send(text_data=json.dumps({
@@ -233,6 +237,7 @@ class CallConsumer(AsyncWebsocketConsumer):
             self.channel_name
         )
         await self.accept()
+        logger.info(f"User {self.user.id} connected to CallConsumer")
         await self.send(text_data=json.dumps({
             "type": "connection_established",
             "message": "Connected to call signaling channel",
@@ -314,6 +319,7 @@ class SupportChatConsumer(AsyncWebsocketConsumer):
             self.channel_name,
         )
         await self.accept()
+        logger.info(f"User {self.user.id} connected to SupportChatConsumer for conversation {self.conversation_id}")
 
         await self.send(text_data=json.dumps({
             "type": "connection_established",
@@ -327,6 +333,7 @@ class SupportChatConsumer(AsyncWebsocketConsumer):
                 self.room_group_name,
                 self.channel_name,
             )
+            logger.info(f"User {self.user.id} disconnected from SupportChatConsumer for conversation {self.conversation_id}")
 
     async def receive(self, text_data):
         try:
@@ -601,6 +608,7 @@ class AdminDashboardConsumer(AsyncWebsocketConsumer):
             self.channel_name,
         )
         await self.accept()
+        logger.info(f"Admin {self.user.id} connected to AdminDashboardConsumer")
 
         # Send initial dashboard data
         dashboard_data = await self.get_dashboard_summary()
@@ -615,6 +623,7 @@ class AdminDashboardConsumer(AsyncWebsocketConsumer):
                 self.dashboard_group,
                 self.channel_name,
             )
+            logger.info(f"Admin {self.user.id} disconnected from AdminDashboardConsumer")
 
     async def receive(self, text_data):
         """Handle admin actions from the dashboard."""

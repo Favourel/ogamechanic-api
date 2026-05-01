@@ -1,10 +1,13 @@
 import json
+import logging
 import time
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
 from rides.models import Ride
 from ogamechanic.modules.location_service import LocationService, RealTimeLocationTracker
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -39,6 +42,7 @@ class RideTrackingConsumer(AsyncWebsocketConsumer):
         )
 
         await self.accept()
+        logger.info(f"User {self.user.id} connected to RideTrackingConsumer for ride {self.ride_id}")
 
         self._last_location_update_ts = 0.0
 
@@ -58,6 +62,7 @@ class RideTrackingConsumer(AsyncWebsocketConsumer):
                 self.tracking_group_name,
                 self.channel_name
             )
+            logger.info(f"User {self.user.id} disconnected from RideTrackingConsumer for ride {self.ride_id}")
 
     async def receive(self, text_data):
         """Handle incoming WebSocket messages"""
@@ -227,6 +232,7 @@ class DriverLocationConsumer(AsyncWebsocketConsumer):
         )
 
         await self.accept()
+        logger.info(f"Driver {self.user.id} connected to DriverLocationConsumer")
 
         # Send current location
         current_location = await self.get_current_location()
@@ -244,6 +250,7 @@ class DriverLocationConsumer(AsyncWebsocketConsumer):
                 self.location_group_name,
                 self.channel_name
             )
+            logger.info(f"Driver {self.user.id} disconnected from DriverLocationConsumer")
 
     async def receive(self, text_data):
         """Handle incoming WebSocket messages"""
@@ -393,6 +400,7 @@ class CourierTrackingConsumer(AsyncWebsocketConsumer):
         )
 
         await self.accept()
+        logger.info(f"User {self.user.id} connected to CourierTrackingConsumer for delivery {self.delivery_id}")
 
         # Send initial delivery data
         delivery_data = await self.get_delivery_data()
