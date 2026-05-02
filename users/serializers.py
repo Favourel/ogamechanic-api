@@ -595,6 +595,7 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             "selfie",
             "nin_number",
             "nin_document",
+            "certificate_of_learning",
             "govt_id_type",
             "government_id_front",
             "government_id_back",
@@ -697,7 +698,7 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get('request', None)
-        for field_name in ['cac_document', 'selfie', 'government_id_front', 'government_id_back', 'nin_document']:
+        for field_name in ['cac_document', 'selfie', 'government_id_front', 'government_id_back', 'nin_document', 'certificate_of_learning']:
             value = getattr(instance, field_name, None)
             if value and hasattr(value, 'url'):
                 data[field_name] = self._get_absolute_url(value.url, request)

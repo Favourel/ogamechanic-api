@@ -489,6 +489,11 @@ class MechanicProfile(models.Model):
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
         blank=True, null=True
     )
+    certificate_of_learning = models.FileField(
+        upload_to='mechanic/certificates/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True
+    )
     GOVT_ID_TYPE_CHOICES = [
         ("NIN", "NIN"),
         ("drivers_license", "Drivers license"),
