@@ -109,6 +109,9 @@ def _is_missing_kyc_value(value):
         return True
     if isinstance(value, str) and value.strip() == "":
         return True
+    # Handle Managers and QuerySets
+    if hasattr(value, "exists"):
+        return not value.exists()
     return False
 
 
@@ -186,15 +189,10 @@ MECHANIC_KYC_REQUIRED_FIELDS = [
     "location",
     "latitude",
     "longitude",
-    "cac_number",
-    "cac_document",
     "selfie",
-    "govt_id_type",
-    "government_id_front",
-    "government_id_back",
     "nin_number",
     "nin_document",
-    "certificate_of_learning",
+    "vehicle_expertise",
 ]
 
 DRIVER_KYC_REQUIRED_FIELDS = [
