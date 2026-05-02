@@ -1511,6 +1511,10 @@ class StepFourDriverDetailsSerializer(serializers.Serializer):
     bank_name = serializers.CharField(max_length=100, required=True)
     account_number = serializers.CharField(max_length=20, required=True)
 
+    # Identification
+    nin_number = serializers.CharField(max_length=20, required=False)
+    nin_document = serializers.FileField(required=False)
+
 
 class StepFourMerchantDetailsSerializer(serializers.Serializer):
     """Step 4: Merchant details"""
@@ -1520,6 +1524,8 @@ class StepFourMerchantDetailsSerializer(serializers.Serializer):
     cac_number = serializers.CharField(max_length=100, required=True)
     cac_document = serializers.FileField(required=True)
     selfie = serializers.ImageField(required=True)
+    nin_number = serializers.CharField(max_length=20, required=False)
+    nin_document = serializers.FileField(required=False)
 
 
 class StepFourMechanicDetailsSerializer(serializers.Serializer):
@@ -1542,6 +1548,9 @@ class StepFourMechanicDetailsSerializer(serializers.Serializer):
     )
     government_id_front = serializers.FileField(required=False)
     government_id_back = serializers.FileField(required=False)
+    nin_number = serializers.CharField(max_length=20, required=False)
+    nin_document = serializers.FileField(required=False)
+    certificate_of_learning = serializers.FileField(required=False)
 
     # Vehicle expertise fields
     # vehicle_make_ids = serializers.ListField(
