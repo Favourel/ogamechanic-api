@@ -19,6 +19,7 @@ class Role(models.Model):
     MERCHANT = 'merchant'
     DEVELOPER = 'developer'
     ADMIN = 'admin'
+    VEHICLE_RENTAL = 'vehicle_rental'
 
     ROLE_CHOICES = [
         (PRIMARY_USER, _('Primary User')),
@@ -28,6 +29,7 @@ class Role(models.Model):
         (MERCHANT, _('Merchant')),
         (DEVELOPER, _('Developer')),
         (ADMIN, _('Admin')),
+        (VEHICLE_RENTAL, _('Vehicle Rental')),
     ]
 
     name = models.CharField(
@@ -180,6 +182,24 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+
+class AreaOfSpecialization(models.Model):
+    """
+    Model for mechanic specializations (e.g., Engine, Electrical, Suspension).
+    """
+    name = models.CharField(_('name'), max_length=100, unique=True)
+    description = models.TextField(_('description'), blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _('area of specialization')
+        verbose_name_plural = _('areas of specialization')
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
 
 
 class UserActivityLog(models.Model):
@@ -465,7 +485,13 @@ class MechanicProfile(models.Model):
     )
     areas_of_specialisation = models.JSONField(
         default=list, blank=True, null=True,
-        help_text="Multiple areas of specialization"
+        help_text="Multiple areas of specialization (legacy)"
+    )
+    specializations = models.ManyToManyField(
+        AreaOfSpecialization,
+        blank=True,
+        related_name='mechanics',
+        help_text="Standardized areas of specialization"
     )
     bio = models.TextField(null=True, blank=True)
     lga = models.CharField(
@@ -1446,3 +1472,56 @@ class UserVehicleImage(models.Model):
         verbose_name = _('user vehicle image')
         verbose_name_plural = _('user vehicle images')
         ordering = ['-created_at']
+
+
+class VehicleRentalProfile(models.Model):
+    """
+    Profile for users with the Vehicle Rental role.
+    """
+    user = models.OneToOneField(
+        'User', on_delete=models.CASCADE, related_name='vehicle_rental_profile'
+    )
+    company_name = models.CharField(max_length=255, blank=True, null=True)
+    location = models.CharField(max_length=255, blank=True, null=True)
+    latitude = models.DecimalField(
+        max_digits=20, decimal_places=17, null=True, blank=True
+    )
+    longitude = models.DecimalField(
+        max_digits=20, decimal_places=17, null=True, blank=True
+    )
+    lga = models.CharField(max_length=100, blank=True, null=True)
+    cac_number = models.CharField(max_length=100, blank=True, null=True)
+    cac_document = models.FileField(
+        upload_to='vehicle_rental/cac_documents/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True
+    )
+    selfie = models.ImageField(
+        upload_to='vehicle_rental/selfies/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png'])],
+        blank=True, null=True,
+        help_text="Live photo of the rental operator"
+    )
+    nin_number = models.CharField(max_length=20, blank=True, null=True)
+    nin_document = models.FileField(
+        upload_to='vehicle_rental/nin_documents/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
+        blank=True, null=True
+    )
+    
+    is_approved = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _('vehicle rental profile')
+        verbose_name_plural = _('vehicle rental profiles')
+        indexes = [
+            models.Index(fields=['user']),
+            models.Index(fields=['company_name']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f"VehicleRentalProfile: {self.user.email}"

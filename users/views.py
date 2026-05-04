@@ -46,6 +46,8 @@ from .serializers import (
     ContactMessageSerializer,
     EmailSubscriptionSerializer,
     MerchantSubscriptionInitResponseSerializer,
+    VehicleRentalProfileSerializer,
+    StepFourVehicleRentalDetailsSerializer,
 )
 from django.core.files.storage import default_storage
 from ogamechanic.modules.utils import (
@@ -81,6 +83,7 @@ from .models import (
     RiderProfile,
     MerchantProfile,
     MechanicProfile,
+    VehicleRentalProfile,
     UserVehicle,
     UserVehicleImage,
 )
@@ -178,6 +181,16 @@ MERCHANT_KYC_REQUIRED_FIELDS = [
     "state",
     "lga",
     "store_name",
+    "cac_number",
+    "cac_document",
+    "selfie",
+    "nin_number",
+    "nin_document",
+]
+
+VEHICLE_RENTAL_KYC_REQUIRED_FIELDS = [
+    "location",
+    "company_name",
     "cac_number",
     "cac_document",
     "selfie",
@@ -586,7 +599,7 @@ class UserRegistrationView(APIView):
                 )
 
             # Validate role
-            valid_roles = ["primary_user", "driver", "merchant", "mechanic", "rider"]
+            valid_roles = ["primary_user", "driver", "merchant", "mechanic", "rider", "vehicle_rental"]
             if role_name not in valid_roles:
                 return Response(
                     api_response(
@@ -1676,6 +1689,151 @@ class MerchantFollowView(APIView):
                 ),
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class VehicleRentalProfileManagementView(APIView):
+    """
+    Comprehensive vehicle rental profile management API.
+    """
+
+    permission_classes = [IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+
+    @swagger_auto_schema(
+        operation_summary="View Vehicle Rental Profile",
+        operation_description="""
+        Retrieve the vehicle rental profile for the authenticated user or another user by UUID.
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                "rental_user_uuid",
+                openapi.IN_QUERY,
+                description="UUID of the user whose rental profile you wish to view",
+                type=openapi.TYPE_STRING,
+            )
+        ],
+        responses={
+            200: VehicleRentalProfileSerializer(),
+            404: "Not Found",
+        },
+    )
+    def get(self, request):
+        from uuid import UUID
+        from users.models import User
+
+        rental_user_uuid = request.query_params.get("rental_user_uuid")
+        is_staff = getattr(request.user, "is_staff", False)
+
+        if not rental_user_uuid:
+            target_user = request.user
+            if not (target_user.active_role and target_user.active_role.name == "vehicle_rental"):
+                return Response(
+                    api_response(
+                        message="Your active role must be 'vehicle_rental' to view your profile.",
+                        status=False,
+                    ),
+                    status=403,
+                )
+        else:
+            try:
+                UUID(rental_user_uuid)
+                target_user = User.objects.get(id=rental_user_uuid)
+            except (ValueError, User.DoesNotExist):
+                return Response(
+                    api_response(message="User not found or invalid UUID.", status=False),
+                    status=404,
+                )
+
+        rental_profile = getattr(target_user, "vehicle_rental_profile", None)
+        if not rental_profile:
+            return Response(
+                api_response(message="Vehicle rental profile not found.", status=False),
+                status=404,
+            )
+
+        is_requester_owner = request.user.id == target_user.id
+        kyc = _compute_kyc(rental_profile, VEHICLE_RENTAL_KYC_REQUIRED_FIELDS)
+
+        if not rental_profile.is_approved and not (is_staff or is_requester_owner):
+            # Return restricted profile
+            data = {
+                "id": str(rental_profile.id),
+                "user": str(target_user.id),
+                "company_name": rental_profile.company_name,
+                "location": rental_profile.location,
+                "is_approved": rental_profile.is_approved,
+            }
+            return Response(api_response(message="Profile retrieved.", status=True, data=data), status=200)
+
+        serializer = VehicleRentalProfileSerializer(rental_profile, context={"request": request})
+        return Response(
+            api_response(
+                message="Profile retrieved successfully.",
+                status=True,
+                data={
+                    "vehicle_rental_profile": serializer.data,
+                    "kyc": kyc,
+                },
+            ),
+            status=200,
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Create Vehicle Rental Profile",
+        request_body=VehicleRentalProfileSerializer,
+        responses={201: VehicleRentalProfileSerializer(), 400: "Bad Request"},
+    )
+    def post(self, request):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(api_response(message=data, status=False), status=400)
+        
+        user = request.user
+        if not (user.active_role and user.active_role.name == "vehicle_rental"):
+            return Response(
+                api_response(message="Active role must be 'vehicle_rental'.", status=False),
+                status=400,
+            )
+
+        if hasattr(user, "vehicle_rental_profile"):
+            return Response(
+                api_response(message="Profile already exists.", status=False),
+                status=400,
+            )
+
+        serializer = VehicleRentalProfileSerializer(data=data, context={"request": request})
+        if serializer.is_valid():
+            serializer.save(user=user)
+            return Response(
+                api_response(message="Profile created.", status=True, data=serializer.data),
+                status=201,
+            )
+        return Response(api_response(message="Invalid data.", status=False, errors=serializer.errors), status=400)
+
+    @swagger_auto_schema(
+        operation_summary="Update Vehicle Rental Profile",
+        request_body=VehicleRentalProfileSerializer,
+        responses={200: VehicleRentalProfileSerializer(), 400: "Bad Request"},
+    )
+    def put(self, request):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(api_response(message=data, status=False), status=400)
+
+        user = request.user
+        if not hasattr(user, "vehicle_rental_profile"):
+            return Response(api_response(message="Profile not found.", status=False), status=404)
+
+        serializer = VehicleRentalProfileSerializer(
+            user.vehicle_rental_profile, data=data, partial=True, context={"request": request}
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                api_response(message="Profile updated.", status=True, data=serializer.data),
+                status=200,
+            )
+        return Response(api_response(message="Invalid data.", status=False, errors=serializer.errors), status=400)
 
 
 class MerchantProfileManagementView(APIView):

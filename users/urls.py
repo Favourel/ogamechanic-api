@@ -128,6 +128,11 @@ urlpatterns = [
         views.RiderProfileManagementView.as_view(),
         name='rider_profile'
     ),
+    path(
+        'profile/vehicle-rental/',
+        views.VehicleRentalProfileManagementView.as_view(),
+        name='vehicle_rental_profile'
+    ),
 
     # Driver location
     path(

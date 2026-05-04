@@ -9,6 +9,8 @@ from .models import (
     MechanicProfile,
     DriverProfile,
     RiderProfile,
+    VehicleRentalProfile,
+    AreaOfSpecialization,
     MechanicReview,
     DriverReview,
     ContactMessage,
@@ -573,11 +575,25 @@ class MerchantSubscriptionInitResponseSerializer(serializers.Serializer):
     data = MerchantSubscriptionResponseSerializer()
 
 
+class AreaOfSpecializationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AreaOfSpecialization
+        fields = ['id', 'name', 'description']
+
+
 class MechanicProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
     has_active_repair_request = serializers.SerializerMethodField()
     vehicle_expertise = serializers.SerializerMethodField()
+    specializations = AreaOfSpecializationSerializer(many=True, read_only=True)
+    specialization_ids = serializers.PrimaryKeyRelatedField(
+        queryset=AreaOfSpecialization.objects.all(),
+        many=True,
+        write_only=True,
+        source='specializations',
+        required=False
+    )
 
     class Meta:
         model = MechanicProfile
@@ -588,6 +604,8 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             "latitude",
             "longitude",
             "areas_of_specialisation",
+            "specializations",
+            "specialization_ids",
             "bio",
             "lga",
             "cac_number",
@@ -699,6 +717,66 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         request = self.context.get('request', None)
         for field_name in ['cac_document', 'selfie', 'government_id_front', 'government_id_back', 'nin_document', 'certificate_of_learning']:
+            value = getattr(instance, field_name, None)
+            if value and hasattr(value, 'url'):
+                data[field_name] = self._get_absolute_url(value.url, request)
+            else:
+                data[field_name] = None
+        return data
+
+
+class VehicleRentalProfileSerializer(serializers.ModelSerializer):
+    user = serializers.SerializerMethodField()
+
+    class Meta:
+        model = VehicleRentalProfile
+        fields = [
+            "id",
+            "user",
+            "company_name",
+            "location",
+            "latitude",
+            "longitude",
+            "lga",
+            "cac_number",
+            "cac_document",
+            "selfie",
+            "nin_number",
+            "nin_document",
+            "is_approved",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "user",
+            "is_approved",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_user(self, obj):
+        from users.serializers import UserSerializer
+        return UserSerializer(obj.user).data
+
+    def _get_absolute_url(self, url, request=None):
+        if not url:
+            return None
+        if url.startswith("http://") or url.startswith("https://"):
+            return url
+        if request is not None:
+            return request.build_absolute_uri(url)
+        from django.conf import settings
+        if hasattr(settings, "SITE_DOMAIN"):
+            return f"{settings.SITE_DOMAIN}{url}"
+        return url
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request', None)
+        file_fields = ['cac_document', 'selfie', 'nin_document']
+        for field_name in file_fields:
             value = getattr(instance, field_name, None)
             if value and hasattr(value, 'url'):
                 data[field_name] = self._get_absolute_url(value.url, request)
@@ -1348,7 +1426,7 @@ class StepOneRoleSelectionSerializer(serializers.Serializer):
 
     def validate_role_id(self, value):
         """Validate that the role exists and is valid for registration"""
-        valid_roles = ["primary_user", "driver", "mechanic", "merchant"]
+        valid_roles = ["primary_user", "driver", "mechanic", "merchant", "vehicle_rental"]
         if value.name not in valid_roles:
             raise serializers.ValidationError(
                 f"Role '{value.name}' is not available for registration."
@@ -1519,6 +1597,19 @@ class StepFourDriverDetailsSerializer(serializers.Serializer):
 class StepFourMerchantDetailsSerializer(serializers.Serializer):
     """Step 4: Merchant details"""
 
+    location = serializers.CharField(max_length=255, required=True)
+    lga = serializers.CharField(max_length=100, required=True)
+    cac_number = serializers.CharField(max_length=100, required=True)
+    cac_document = serializers.FileField(required=True)
+    selfie = serializers.ImageField(required=True)
+    nin_number = serializers.CharField(max_length=20, required=False)
+    nin_document = serializers.FileField(required=False)
+
+
+class StepFourVehicleRentalDetailsSerializer(serializers.Serializer):
+    """Step 4: Vehicle Rental details"""
+
+    company_name = serializers.CharField(max_length=255, required=True)
     location = serializers.CharField(max_length=255, required=True)
     lga = serializers.CharField(max_length=100, required=True)
     cac_number = serializers.CharField(max_length=100, required=True)

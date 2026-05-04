@@ -150,6 +150,22 @@ class MechanicProfileAdmin(admin.ModelAdmin):
     autocomplete_fields = ("user",)
     list_per_page = 25  # Enable pagination, 25 per page by default
     list_max_show_all = 200  # Optional: limit max "Show all" to 200
+    filter_horizontal = ("specializations",)
+
+
+@admin.register(models.AreaOfSpecialization)
+class AreaOfSpecializationAdmin(admin.ModelAdmin):
+    list_display = ("name", "description")
+    search_fields = ("name",)
+
+
+@admin.register(models.VehicleRentalProfile)
+class VehicleRentalProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "company_name", "cac_number", "is_approved", "created_at")
+    list_filter = ("is_approved", "created_at")
+    search_fields = ("user__email", "company_name", "cac_number")
+    readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ("user",)
 
 
 @admin.register(models.DriverProfile)
@@ -372,6 +388,8 @@ already_registered = {
     models.BankAccount,
     models.Wallet,
     models.Transaction,
+    models.AreaOfSpecialization,
+    models.VehicleRentalProfile,
 }
 
 for model in vars(models).values():
