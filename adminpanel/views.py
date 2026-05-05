@@ -28,6 +28,8 @@ from users.models import (
     MechanicProfile,
     DriverProfile,
     RiderProfile,
+    AreaOfSpecialization,
+    VehicleRentalProfile,
 )
 from users.serializers import (
     MechanicProfileSerializer,
@@ -39,6 +41,8 @@ from users.serializers import (
     ContactMessageSerializer,
     ContactMessageAdminSerializer,
     EmailSubscriptionSerializer,
+    AreaOfSpecializationSerializer,
+    VehicleRentalProfileSerializer,
 )
 from users.views import (
     _compute_kyc,
@@ -635,18 +639,18 @@ class EcommerceManagementView(APIView):
 class AccountManagementView(APIView):
     """
     Unified account management endpoint
-    Query params: type=mechanic|driver|merchant|bank|wallet|transaction|primary_user
+    Query params: type=mechanic|driver|merchant|bank|wallet|transaction|primary_user|vehicle_rental
     """
 
     permission_classes = [IsAdminUser]
 
     @swagger_auto_schema(
-        operation_description="Get account data (mechanic, driver, merchant, bank, wallet, transaction, primary_user)",
+        operation_description="Get account data (mechanic, driver, merchant, bank, wallet, transaction, primary_user, vehicle_rental)",
         manual_parameters=[
             openapi.Parameter(
                 "type",
                 openapi.IN_QUERY,
-                description="Type of data (mechanic, driver, merchant, bank, wallet, transaction, primary_user)",
+                description="Type of data (mechanic, driver, merchant, bank, wallet, transaction, primary_user, vehicle_rental)",
                 type=openapi.TYPE_STRING,
                 required=True,
             ),
@@ -696,7 +700,7 @@ class AccountManagementView(APIView):
         if not data_type:
             return Response(
                 api_response(
-                    message="Query parameter 'type' is required (mechanic, driver, merchant, bank, wallet, transaction, primary_user)",  # noqa
+                    message="Query parameter 'type' is required (mechanic, driver, merchant, bank, wallet, transaction, primary_user, vehicle_rental)",  # noqa
                     status=False,
                 ),
                 status=http_status.HTTP_400_BAD_REQUEST,
@@ -716,10 +720,12 @@ class AccountManagementView(APIView):
             return self._get_transactions(limit, offset, search)
         elif data_type == "primary_user":
             return self._get_primary_users(limit, offset, search, approved)
+        elif data_type == "vehicle_rental":
+            return self._get_vehicle_rental_profiles(limit, offset, search, approved)
         else:
             return Response(
                 api_response(
-                    message="Invalid type. Use: mechanic, driver, merchant, bank, wallet, transaction, or primary_user",  # noqa
+                    message="Invalid type. Use: mechanic, driver, merchant, bank, wallet, transaction, primary_user, or vehicle_rental",  # noqa
                     status=False,
                 ),
                 status=http_status.HTTP_400_BAD_REQUEST,
@@ -1033,6 +1039,40 @@ class AccountManagementView(APIView):
             )
         )
 
+    def _get_vehicle_rental_profiles(self, limit, offset, search, approved):
+        """Get vehicle rental profiles"""
+        queryset = VehicleRentalProfile.objects.all()
+
+        if approved:
+            is_approved = approved.lower() == "true"
+            queryset = queryset.filter(is_approved=is_approved)
+
+        if search:
+            queryset = queryset.filter(
+                Q(user__email__icontains=search)
+                | Q(user__first_name__icontains=search)
+                | Q(user__last_name__icontains=search)
+                | Q(company_name__icontains=search)
+            )
+
+        total_count = queryset.count()
+        profiles = queryset.select_related("user")[offset: offset + limit]
+
+        serializer = VehicleRentalProfileSerializer(profiles, many=True)
+
+        return Response(
+            api_response(
+                message="Vehicle rental profiles retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "profiles": serializer.data,
+                },
+            )
+        )
+
 
 class MechanicManagementView(APIView):
     """
@@ -1314,6 +1354,131 @@ class AdminCategoryCreateView(APIView):
             ),
             status=400,
         )
+
+
+class AreaOfSpecializationManagementView(APIView):
+    permission_classes = [IsAdminUser]
+
+    @swagger_auto_schema(
+        operation_description="List all areas of specialization with optional search",
+        manual_parameters=[
+            openapi.Parameter(
+                "search",
+                openapi.IN_QUERY,
+                description="Search by name or description",
+                type=openapi.TYPE_STRING,
+            ),
+        ],
+        responses={200: AreaOfSpecializationSerializer(many=True)},
+    )
+    def get(self, request):
+        search = request.query_params.get("search", "")
+        queryset = AreaOfSpecialization.objects.all().order_by("name")
+
+        if search:
+            queryset = queryset.filter(
+                Q(name__icontains=search) | Q(description__icontains=search)
+            )
+
+        serializer = AreaOfSpecializationSerializer(queryset, many=True)
+        return Response(
+            api_response(
+                message="Specializations retrieved successfully.",
+                status=True,
+                data=serializer.data,
+            ),
+            status=200,
+        )
+
+    @swagger_auto_schema(
+        operation_description="Create a new area of specialization (admin only)",
+        request_body=AreaOfSpecializationSerializer,
+        responses={201: AreaOfSpecializationSerializer(), 400: "Bad Request"},
+    )
+    def post(self, request):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(api_response(message=data, status=False), status=400)
+
+        serializer = AreaOfSpecializationSerializer(data=data)
+        if serializer.is_valid():
+            specialization = serializer.save()
+            return Response(
+                api_response(
+                    message="Specialization created successfully.",
+                    status=True,
+                    data=AreaOfSpecializationSerializer(specialization).data,
+                ),
+                status=201,
+            )
+        return Response(
+            api_response(
+                message="Invalid data",
+                status=False,
+                errors=serializer.errors,
+            ),
+            status=400,
+        )
+
+
+class AreaOfSpecializationDetailView(APIView):
+    permission_classes = [IsAdminUser]
+
+    @swagger_auto_schema(
+        operation_description="Update an area of specialization (admin only)",
+        request_body=AreaOfSpecializationSerializer,
+        responses={200: AreaOfSpecializationSerializer(), 400: "Bad Request", 404: "Not Found"},
+    )
+    def put(self, request, pk):
+        try:
+            specialization = AreaOfSpecialization.objects.get(pk=pk)
+        except AreaOfSpecialization.DoesNotExist:
+            return Response(
+                api_response(message="Specialization not found.", status=False),
+                status=404,
+            )
+
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(api_response(message=data, status=False), status=400)
+
+        serializer = AreaOfSpecializationSerializer(specialization, data=data)
+        if serializer.is_valid():
+            specialization = serializer.save()
+            return Response(
+                api_response(
+                    message="Specialization updated successfully.",
+                    status=True,
+                    data=AreaOfSpecializationSerializer(specialization).data,
+                ),
+                status=200,
+            )
+        return Response(
+            api_response(
+                message="Invalid data",
+                status=False,
+                errors=serializer.errors,
+            ),
+            status=400,
+        )
+
+    @swagger_auto_schema(
+        operation_description="Delete an area of specialization (admin only)",
+        responses={200: "Deleted successfully", 404: "Not Found"},
+    )
+    def delete(self, request, pk):
+        try:
+            specialization = AreaOfSpecialization.objects.get(pk=pk)
+            specialization.delete()
+            return Response(
+                api_response(message="Specialization deleted successfully.", status=True),
+                status=200,
+            )
+        except AreaOfSpecialization.DoesNotExist:
+            return Response(
+                api_response(message="Specialization not found.", status=False),
+                status=404,
+            )
 
 
 class PendingVerificationsView(APIView):

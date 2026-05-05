@@ -16,6 +16,8 @@ from .views import (
     AdminCategoryCreateView,
     AdminNotificationView,
     RoleNotificationView,
+    AreaOfSpecializationManagementView,
+    AreaOfSpecializationDetailView,
     # Analytics endpoints
     DashboardOverviewView,
     UserGrowthAnalyticsView,
@@ -119,6 +121,16 @@ urlpatterns = [
         'categories/create/',
         AdminCategoryCreateView.as_view(),
         name='admin-category-create',
+    ),
+    path(
+        'mechanics/specializations/',
+        AreaOfSpecializationManagementView.as_view(),
+        name='specialization-management'
+    ),
+    path(
+        'mechanics/specializations/<int:pk>/',
+        AreaOfSpecializationDetailView.as_view(),
+        name='specialization-detail'
     ),
 
     path(
