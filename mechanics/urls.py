@@ -69,6 +69,11 @@ urlpatterns = [
         views.MechanicDetailView.as_view(),
         name="mechanic-detail",
     ),
+    path(
+        "specializations/",
+        views.AreaOfSpecializationListView.as_view(),
+        name="specialization-list",
+    ),
 
     path(
         "mechanic-analytics/",

@@ -14,7 +14,7 @@ from ogamechanic.modules.utils import (
 )
 from ogamechanic.modules.paginations import CustomLimitOffsetPagination
 from users.models import (
-    MechanicProfile, Device, Notification
+    MechanicProfile, Device, Notification, AreaOfSpecialization
 )
 from users.services import (
     NotificationService, MechanicNotificationService
@@ -38,7 +38,7 @@ from .serializers import (
     ServiceTypeSerializer, SettlementSerializer
 )
 from .tasks import find_and_notify_mechanics_task
-from users.serializers import MechanicProfileSerializer
+from users.serializers import MechanicProfileSerializer, AreaOfSpecializationSerializer
 from users.models import User
 from users.services import NotificationService
 from django.db import models
@@ -1740,6 +1740,27 @@ class MechanicDetailView(APIView):
         return Response(
             api_response(
                 message="Mechanic details retrieved successfully.",
+                status=True,
+                data=serializer.data,
+            ),
+            status=status.HTTP_200_OK,
+        )
+
+
+class AreaOfSpecializationListView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="List All Areas of Specialization",
+        operation_description="Returns a list of all available areas of specialization for mechanics.",
+        responses={200: AreaOfSpecializationSerializer(many=True)},
+    )
+    def get(self, request):
+        specializations = AreaOfSpecialization.objects.all().order_by("name")
+        serializer = AreaOfSpecializationSerializer(specializations, many=True)
+        return Response(
+            api_response(
+                message="Specializations retrieved successfully.",
                 status=True,
                 data=serializer.data,
             ),
