@@ -1122,11 +1122,13 @@ class SwitchRoleView(APIView):
         - driver: Driver/Rider
         - merchant: Merchant/Seller
         - mechanic: Mechanic/Service provider
+        - vehicle_rental: Vehicle Rental Provider
         
         **Next Steps After Role Switch:**
         - **merchant**: Complete profile at `/api/users/profile/merchant/`
         - **mechanic**: Complete profile at `/api/users/profile/mechanic/`
         - **driver**: Complete profile at `/api/users/profile/driver/`
+        - **vehicle_rental**: Complete profile at `/api/users/profile/vehicle-rental/`
         - **primary_user**: No additional setup required
         """,
         request_body=openapi.Schema(
@@ -1137,7 +1139,7 @@ class SwitchRoleView(APIView):
                     type=openapi.TYPE_STRING,
                     description="Role name to switch to",
                     example="merchant",
-                    enum=["primary_user", "driver", "merchant", "mechanic"],
+                    enum=["primary_user", "driver", "merchant", "mechanic", "vehicle_rental"],
                 ),
             },
         ),
@@ -1193,7 +1195,7 @@ class SwitchRoleView(APIView):
                 )
 
             # Validate role
-            valid_roles = ["primary_user", "driver", "merchant", "mechanic", 'rider']
+            valid_roles = ["primary_user", "driver", "merchant", "mechanic", 'rider', 'vehicle_rental']
             if role_name not in valid_roles:
                 return Response(
                     api_response(
@@ -1253,7 +1255,13 @@ class SwitchRoleView(APIView):
                     from users.models import RiderProfile
                     profile, created = RiderProfile.objects.get_or_create(user=user)
                     print(
-                        f"Driver profile for user {user.email}: created={created}"
+                        f"Rider profile for user {user.email}: created={created}"
+                    )
+                elif role_name == "vehicle_rental":
+                    from users.models import VehicleRentalProfile
+                    profile, created = VehicleRentalProfile.objects.get_or_create(user=user)
+                    print(
+                        f"Vehicle rental profile for user {user.email}: created={created}"
                     )
             else:
                 print(f"User {user.email} already has role {role_name}")
@@ -1306,6 +1314,18 @@ class SwitchRoleView(APIView):
                     profile_exists = True
                     logger.info(f"Fallback: Created driver profile for user {user.email}")
             
+            elif role_name == "vehicle_rental":
+                profile_exists = hasattr(user, "vehicle_rental_profile")
+                profile_required = not profile_exists
+                profile_endpoint = "/api/users/profile/vehicle-rental/"
+                logger.info(f"Vehicle rental profile exists for {user.email}: {profile_exists}")
+
+                if not profile_exists:
+                    from users.models import VehicleRentalProfile
+                    VehicleRentalProfile.objects.create(user=user)
+                    profile_exists = True
+                    logger.info(f"Fallback: Created vehicle rental profile for user {user.email}")
+
             elif role_name == "rider":
                 profile_exists = hasattr(user, "rider_profile")
                 profile_required = not profile_exists
@@ -1341,6 +1361,11 @@ class SwitchRoleView(APIView):
                 kyc = _compute_kyc(
                     getattr(user, "rider_profile", None),
                     RIDER_KYC_REQUIRED_FIELDS,
+                )
+            elif role_name == "vehicle_rental":
+                kyc = _compute_kyc(
+                    getattr(user, "vehicle_rental_profile", None),
+                    VEHICLE_RENTAL_KYC_REQUIRED_FIELDS,
                 )
 
             # Log activity
@@ -6726,6 +6751,7 @@ class RoleListView(APIView):
         - **rider**: Users who need ride services (sub-role of driver)
         - **merchant**: Business users selling products/services
         - **mechanic**: Service providers offering mechanical services
+        - **vehicle_rental**: Vehicle rental providers
         - **developer**: System administrators and developers
         
         **Usage in Registration:**
