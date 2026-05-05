@@ -5,7 +5,7 @@ from .models import (
     VehicleMake, MechanicVehicleExpertise, RepairProblemResolve,
     ServiceType, Settlement, RepairRequestService
 )
-from users.models import MechanicReview
+from users.models import MechanicReview, MechanicProfile
 from users.serializers import MechanicProfileSerializer
 
 User = get_user_model()
