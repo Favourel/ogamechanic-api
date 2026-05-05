@@ -421,11 +421,14 @@ class MechanicVehicleExpertiseSerializer(serializers.ModelSerializer):
     """Serializer for MechanicVehicleExpertise model"""
     vehicle_make = VehicleMakeSerializer(read_only=True)
     vehicle_make_id = serializers.IntegerField(write_only=True)
+    mechanic = serializers.PrimaryKeyRelatedField(
+        queryset=MechanicProfile.objects.all(), required=False
+    )
 
     class Meta:
         model = MechanicVehicleExpertise
         fields = [
-            'id', 'vehicle_make', 'vehicle_make_id', 'years_of_experience',
+            'id', 'mechanic', 'vehicle_make', 'vehicle_make_id', 'years_of_experience',
             'certification_level', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']

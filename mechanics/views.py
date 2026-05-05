@@ -1505,7 +1505,7 @@ class VehicleMakeListView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class MechanicVehicleExpertiseListCreateView(APIView):
+class MechanicVehicleExpertiseListView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
@@ -1603,12 +1603,11 @@ class MechanicVehicleExpertiseDetailView(APIView):
         )
 
     @swagger_auto_schema(
-        operation_summary="Update Vehicle Expertise",
-        operation_description="Update an existing vehicle expertise record.",
-        request_body=MechanicVehicleExpertiseSerializer,
+        operation_summary="Get Vehicle Expertise Detail",
+        operation_description="Get details of a specific vehicle expertise record.",
         responses={200: MechanicVehicleExpertiseSerializer()},
     )
-    def patch(self, request, expertise_id):
+    def get(self, request, expertise_id):
         expertise = self._get_expertise(request, expertise_id)
         if expertise is None:
             return Response(
@@ -1619,39 +1618,14 @@ class MechanicVehicleExpertiseDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = MechanicVehicleExpertiseSerializer(
-            expertise, data=request.data, partial=True
-        )
-        if serializer.is_valid():
-            serializer.save()
-            return Response(
-                api_response(
-                    message="Vehicle expertise updated successfully.",
-                    status=True,
-                    data=serializer.data,
-                )
-            )
-
+        serializer = MechanicVehicleExpertiseSerializer(expertise)
         return Response(
-            api_response(message=serializer.errors, status=False),
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    @swagger_auto_schema(
-        operation_summary="Delete Vehicle Expertise",
-        operation_description="Delete an existing vehicle expertise record.",
-        responses={204: "No Content"},
-    )
-    def delete(self, request, expertise_id):
-        expertise = self._get_expertise(request, expertise_id)
-        if expertise is None:
-            return Response(
-                api_response(message="Mechanic profile not found.", status=False),
-                status=status.HTTP_404_NOT_FOUND,
+            api_response(
+                message="Vehicle expertise retrieved successfully.",
+                status=True,
+                data=serializer.data,
             )
-
-        expertise.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        )
 
 
 class MechanicDetailView(APIView):

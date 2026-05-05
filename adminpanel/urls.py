@@ -18,6 +18,8 @@ from .views import (
     RoleNotificationView,
     AreaOfSpecializationManagementView,
     AreaOfSpecializationDetailView,
+    AdminMechanicExpertiseView,
+    AdminMechanicExpertiseDetailView,
     # Analytics endpoints
     DashboardOverviewView,
     UserGrowthAnalyticsView,
@@ -131,6 +133,16 @@ urlpatterns = [
         'mechanics/specializations/<int:pk>/',
         AreaOfSpecializationDetailView.as_view(),
         name='specialization-detail'
+    ),
+    path(
+        'mechanics/expertise/',
+        AdminMechanicExpertiseView.as_view(),
+        name='admin-mechanic-expertise'
+    ),
+    path(
+        'mechanics/expertise/<int:pk>/',
+        AdminMechanicExpertiseDetailView.as_view(),
+        name='admin-mechanic-expertise-detail'
     ),
 
     path(

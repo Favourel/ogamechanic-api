@@ -56,8 +56,8 @@ urlpatterns = [
     ),
     path(
         "vehicle-expertise/",
-        views.MechanicVehicleExpertiseListCreateView.as_view(),
-        name="vehicle-expertise-list-create",
+        views.MechanicVehicleExpertiseListView.as_view(),
+        name="vehicle-expertise-list",
     ),
     path(
         "vehicle-expertise/<int:expertise_id>/",
