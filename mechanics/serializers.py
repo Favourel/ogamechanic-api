@@ -431,6 +431,11 @@ class MechanicVehicleExpertiseSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'mechanic', 'created_at', 'updated_at']
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance:
+            self.fields['vehicle_make_id'].read_only = True
+
 
 class AdminMechanicVehicleExpertiseSerializer(serializers.ModelSerializer):
     """Serializer for MechanicVehicleExpertise model for admins"""
@@ -447,6 +452,12 @@ class AdminMechanicVehicleExpertiseSerializer(serializers.ModelSerializer):
             'certification_level', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance:
+            self.fields['mechanic'].read_only = True
+            self.fields['vehicle_make_id'].read_only = True
 
 
 class ServiceTypeSerializer(serializers.ModelSerializer):
