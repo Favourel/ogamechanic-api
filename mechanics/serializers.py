@@ -426,15 +426,10 @@ class MechanicVehicleExpertiseSerializer(serializers.ModelSerializer):
     class Meta:
         model = MechanicVehicleExpertise
         fields = [
-            'id', 'mechanic', 'vehicle_make', 'vehicle_make_id', 'years_of_experience',
+            'id', 'mechanic', 'vehicle_make_id', 'years_of_experience',
             'certification_level', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'mechanic', 'created_at', 'updated_at']
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance:
-            self.fields['vehicle_make_id'].read_only = True
+        read_only_fields = ['id', 'mechanic', 'created_at', 'updated_at', 'vehicle_make']
 
 
 class AdminMechanicVehicleExpertiseSerializer(serializers.ModelSerializer):
@@ -448,16 +443,10 @@ class AdminMechanicVehicleExpertiseSerializer(serializers.ModelSerializer):
     class Meta:
         model = MechanicVehicleExpertise
         fields = [
-            'id', 'mechanic', 'vehicle_make', 'vehicle_make_id', 'years_of_experience',
+            'id', 'mechanic', 'vehicle_make_id', 'years_of_experience',
             'certification_level', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance:
-            self.fields['mechanic'].read_only = True
-            self.fields['vehicle_make_id'].read_only = True
+        read_only_fields = ['id', 'created_at', 'updated_at', 'vehicle_make']
 
 
 class ServiceTypeSerializer(serializers.ModelSerializer):
