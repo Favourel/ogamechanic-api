@@ -205,7 +205,7 @@ MECHANIC_KYC_REQUIRED_FIELDS = [
     "selfie",
     "nin_number",
     "nin_document",
-    "vehicle_expertise",
+    # "vehicle_expertise",
 ]
 
 DRIVER_KYC_REQUIRED_FIELDS = [
