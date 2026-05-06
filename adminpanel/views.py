@@ -52,7 +52,7 @@ from users.views import (
     RIDER_KYC_REQUIRED_FIELDS,
 )
 from mechanics.models import MechanicVehicleExpertise
-from mechanics.serializers import MechanicVehicleExpertiseSerializer
+from mechanics.serializers import MechanicVehicleExpertiseSerializer, AdminMechanicVehicleExpertiseSerializer
 from products.models import Order, OrderItem, ProductReview
 from products.serializers import CategorySerializer
 from users.services import NotificationService
@@ -1512,7 +1512,7 @@ class AdminMechanicExpertiseView(APIView):
                 | Q(vehicle_make__name__icontains=search)
             )
 
-        serializer = MechanicVehicleExpertiseSerializer(queryset, many=True)
+        serializer = AdminMechanicVehicleExpertiseSerializer(queryset, many=True)
         return Response(
             api_response(
                 message="Mechanic expertise retrieved successfully.",
@@ -1524,15 +1524,15 @@ class AdminMechanicExpertiseView(APIView):
 
     @swagger_auto_schema(
         operation_description="Create a new vehicle expertise record for a mechanic (admin only)",
-        request_body=MechanicVehicleExpertiseSerializer,
-        responses={201: MechanicVehicleExpertiseSerializer(), 400: "Bad Request"},
+        request_body=AdminMechanicVehicleExpertiseSerializer,
+        responses={201: AdminMechanicVehicleExpertiseSerializer(), 400: "Bad Request"},
     )
     def post(self, request):
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(api_response(message=data, status=False), status=400)
 
-        serializer = MechanicVehicleExpertiseSerializer(data=data)
+        serializer = AdminMechanicVehicleExpertiseSerializer(data=data)
         if serializer.is_valid():
             mechanic = serializer.validated_data.get("mechanic")
             vehicle_make_id = serializer.validated_data.get("vehicle_make_id")
@@ -1553,7 +1553,7 @@ class AdminMechanicExpertiseView(APIView):
                 api_response(
                     message="Mechanic expertise created successfully.",
                     status=True,
-                    data=MechanicVehicleExpertiseSerializer(expertise).data,
+                    data=AdminMechanicVehicleExpertiseSerializer(expertise).data,
                 ),
                 status=201,
             )
@@ -1572,8 +1572,8 @@ class AdminMechanicExpertiseDetailView(APIView):
 
     @swagger_auto_schema(
         operation_description="Update a mechanic vehicle expertise record (admin only)",
-        request_body=MechanicVehicleExpertiseSerializer,
-        responses={200: MechanicVehicleExpertiseSerializer(), 400: "Bad Request", 404: "Not Found"},
+        request_body=AdminMechanicVehicleExpertiseSerializer,
+        responses={200: AdminMechanicVehicleExpertiseSerializer(), 400: "Bad Request", 404: "Not Found"},
     )
     def put(self, request, pk):
         try:
@@ -1588,14 +1588,14 @@ class AdminMechanicExpertiseDetailView(APIView):
         if not status_:
             return Response(api_response(message=data, status=False), status=400)
 
-        serializer = MechanicVehicleExpertiseSerializer(expertise, data=data)
+        serializer = AdminMechanicVehicleExpertiseSerializer(expertise, data=data)
         if serializer.is_valid():
             expertise = serializer.save()
             return Response(
                 api_response(
                     message="Mechanic expertise updated successfully.",
                     status=True,
-                    data=MechanicVehicleExpertiseSerializer(expertise).data,
+                    data=AdminMechanicVehicleExpertiseSerializer(expertise).data,
                 ),
                 status=200,
             )
