@@ -1555,6 +1555,12 @@ class MechanicVehicleExpertiseListView(APIView):
         responses={201: MechanicVehicleExpertiseSerializer()},
     )
     def post(self, request):
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         user = request.user
         mechanic_profile = getattr(user, "mechanic_profile", None)
         if mechanic_profile is None:
@@ -1563,7 +1569,7 @@ class MechanicVehicleExpertiseListView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = MechanicVehicleExpertiseCreateSerializer(data=request.data)
+        serializer = MechanicVehicleExpertiseCreateSerializer(data=data)
         if serializer.is_valid():
             vehicle_make_id = serializer.validated_data.get("vehicle_make_id")
             if MechanicVehicleExpertise.objects.filter(
