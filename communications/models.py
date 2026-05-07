@@ -29,7 +29,6 @@ class ChatRoom(models.Model):
         """Get the last message in this chat room"""
         return self.messages.order_by("-created_at").first()
 
-    @property
     def unread_count(self, user):
         """Get unread message count for a specific user"""
         return self.messages.filter(
