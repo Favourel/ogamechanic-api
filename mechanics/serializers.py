@@ -418,35 +418,65 @@ class VehicleMakeSerializer(serializers.ModelSerializer):
 
 
 class MechanicVehicleExpertiseSerializer(serializers.ModelSerializer):
-    """Serializer for MechanicVehicleExpertise model for mechanics"""
-    # vehicle_make = VehicleMakeSerializer(read_only=True)
-    vehicle_make_id = serializers.IntegerField(write_only=True)
+    """Serializer for MechanicVehicleExpertise model for mechanics (Output)"""
+    vehicle_make = VehicleMakeSerializer(read_only=True)
     mechanic = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = MechanicVehicleExpertise
         fields = [
-            'id', 'mechanic', 'vehicle_make_id', 'years_of_experience',
+            'id', 'mechanic', 'vehicle_make', 'years_of_experience',
             'certification_level', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'mechanic', 'created_at', 'updated_at']
 
 
+class MechanicVehicleExpertiseCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating/updating MechanicVehicleExpertise (Input)"""
+    vehicle_make_id = serializers.PrimaryKeyRelatedField(
+        queryset=VehicleMake.objects.all(),
+        source='vehicle_make',
+        write_only=True,
+        required=True
+    )
+
+    class Meta:
+        model = MechanicVehicleExpertise
+        fields = ['vehicle_make_id', 'years_of_experience', 'certification_level']
+        extra_kwargs = {
+            'vehicle_make_id': {'required': True}
+        }
+
+
 class AdminMechanicVehicleExpertiseSerializer(serializers.ModelSerializer):
-    """Serializer for MechanicVehicleExpertise model for admins"""
+    """Serializer for MechanicVehicleExpertise model for admins (Output)"""
     vehicle_make = VehicleMakeSerializer(read_only=True)
-    vehicle_make_id = serializers.IntegerField(write_only=True)
+    mechanic = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = MechanicVehicleExpertise
+        fields = [
+            'id', 'mechanic', 'vehicle_make', 'years_of_experience',
+            'certification_level', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'mechanic', 'created_at', 'updated_at']
+
+
+class AdminMechanicVehicleExpertiseCreateSerializer(serializers.ModelSerializer):
+    """Serializer for admins to create/update MechanicVehicleExpertise (Input)"""
+    vehicle_make_id = serializers.PrimaryKeyRelatedField(
+        queryset=VehicleMake.objects.all(),
+        source='vehicle_make',
+        write_only=True,
+        required=True
+    )
     mechanic = serializers.PrimaryKeyRelatedField(
         queryset=MechanicProfile.objects.all(), required=True
     )
 
     class Meta:
         model = MechanicVehicleExpertise
-        fields = [
-            'id', 'mechanic', 'vehicle_make', 'vehicle_make_id', 'years_of_experience',
-            'certification_level', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'vehicle_make']
+        fields = ['mechanic', 'vehicle_make_id', 'years_of_experience', 'certification_level']
 
 
 class ServiceTypeSerializer(serializers.ModelSerializer):

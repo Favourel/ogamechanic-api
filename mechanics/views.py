@@ -39,6 +39,10 @@ from .serializers import (
 )
 from .tasks import find_and_notify_mechanics_task
 from users.serializers import MechanicProfileSerializer, AreaOfSpecializationSerializer
+from .serializers import (
+    MechanicVehicleExpertiseSerializer,
+    MechanicVehicleExpertiseCreateSerializer
+)
 from users.models import User
 from users.services import NotificationService
 from django.db import models
@@ -1547,7 +1551,7 @@ class MechanicVehicleExpertiseListView(APIView):
             "Create a new vehicle expertise record for the authenticated mechanic. "
             "One expertise per vehicle make."
         ),
-        request_body=MechanicVehicleExpertiseSerializer,
+        request_body=MechanicVehicleExpertiseCreateSerializer,
         responses={201: MechanicVehicleExpertiseSerializer()},
     )
     def post(self, request):
@@ -1559,7 +1563,7 @@ class MechanicVehicleExpertiseListView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = MechanicVehicleExpertiseSerializer(data=request.data)
+        serializer = MechanicVehicleExpertiseCreateSerializer(data=request.data)
         if serializer.is_valid():
             vehicle_make_id = serializer.validated_data.get("vehicle_make_id")
             if MechanicVehicleExpertise.objects.filter(
