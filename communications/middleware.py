@@ -16,6 +16,11 @@ from django.contrib.auth.models import AnonymousUser
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import TokenError
 
+import logging
+from django.core.exceptions import ValidationError
+
+logger = logging.getLogger(__name__)
+
 User = get_user_model()
 
 
@@ -25,8 +30,10 @@ def get_user_from_token(token_str):
     try:
         token = AccessToken(token_str)
         user_id = token.get("user_id")
-        return User.objects.get(id=user_id, is_active=True)
-    except (TokenError, User.DoesNotExist, KeyError):
+        user = User.objects.get(id=user_id, is_active=True)
+        return user
+    except (TokenError, User.DoesNotExist, KeyError, ValidationError) as e:
+        logger.warning(f"JWTAuthMiddleware: Authentication failed for token. Error: {str(e)}")
         return AnonymousUser()
 
 

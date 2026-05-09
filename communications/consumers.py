@@ -309,6 +309,10 @@ class SupportChatConsumer(AsyncWebsocketConsumer):
         # Verify the user has access to this conversation
         has_access = await self.check_access()
         if not has_access:
+            logger.warning(
+                f"SupportChatConsumer Reject: User {self.user.id} (is_staff={self.user.is_staff}) "
+                f"denied access to conversation {self.conversation_id}"
+            )
             await self.close()
             return
 
@@ -457,17 +461,20 @@ class SupportChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def check_access(self):
         from .models import SupportConversation
+        from django.core.exceptions import ValidationError
 
         try:
             conv = SupportConversation.objects.get(id=self.conversation_id)
             # Customer can access their own conversation
-            if conv.customer_id == self.user.id:
+            # Use str() comparison to avoid UUID/string mismatch issues
+            if str(conv.customer_id) == str(self.user.id):
                 return True
             # Staff/admin can access any conversation
             if self.user.is_staff:
                 return True
             return False
-        except SupportConversation.DoesNotExist:
+        except (SupportConversation.DoesNotExist, ValidationError) as e:
+            logger.error(f"SupportChatConsumer check_access error: {str(e)}")
             return False
 
     @database_sync_to_async
@@ -598,6 +605,11 @@ class AdminDashboardConsumer(AsyncWebsocketConsumer):
         self.user = self.scope.get("user")
 
         if not self.user or not self.user.is_authenticated or not self.user.is_staff:
+            logger.warning(
+                f"AdminDashboardConsumer Reject: User {getattr(self.user, 'id', 'Anonymous')} "
+                f"authenticated={getattr(self.user, 'is_authenticated', False)} "
+                f"is_staff={getattr(self.user, 'is_staff', False)}"
+            )
             await self.close()
             return
 
