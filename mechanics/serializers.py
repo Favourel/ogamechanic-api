@@ -205,6 +205,7 @@ class RepairRequestSerializer(serializers.ModelSerializer):
                     {"mechanic_id": "Mechanic not found."})
 
         resolutions_data = validated_data.pop('problem_resolutions', None)
+        service_categories = validated_data.pop('service_categories', None)
 
         # Remove otp_code from validated_data to prevent manual overwriting via generic updates
         validated_data.pop('otp_code', None)
@@ -213,6 +214,29 @@ class RepairRequestSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
+        # Handle service_categories if provided
+        if service_categories is not None:
+            from django.db import transaction
+            with transaction.atomic():
+                # Clear existing relationships
+                RepairRequestService.objects.filter(repair_request=instance).delete()
+                
+                # Create new relationships
+                repair_request_services = [
+                    RepairRequestService(repair_request=instance, service_type=service)
+                    for service in service_categories
+                ]
+                RepairRequestService.objects.bulk_create(repair_request_services)
+
+                # Update the service_type summary field
+                if service_categories:
+                    instance.service_type = ", ".join([s.name for s in service_categories[:3]])
+                    if len(service_categories) > 3:
+                        instance.service_type += "..."
+                else:
+                    instance.service_type = ""
+                instance.save()
 
         # Handle problem_resolutions if provided
         if resolutions_data is not None:
