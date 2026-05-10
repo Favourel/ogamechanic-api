@@ -118,7 +118,8 @@ class NotificationService:
 
     @staticmethod
     def create_bulk_notifications(users, title, message,
-                                notification_type='info', role=None): # noqa
+                                notification_type='info', role=None,
+                                related_object=None, related_object_type=None): # noqa
         """
         Create notifications for multiple users.
         
@@ -128,6 +129,8 @@ class NotificationService:
             message: Notification message
             notification_type: Type of notification
             role: Role for which notifications are intended (optional)
+            related_object: Related object (optional)
+            related_object_type: Type of related object (optional)
         """
         notifications = []
         for user in users:
@@ -139,9 +142,17 @@ class NotificationService:
                 role=user_role,
                 title=title,
                 message=message,
-                notification_type=notification_type
+                notification_type=notification_type,
+                related_object_id=getattr(related_object, 'id', related_object) if related_object else None,
+                related_object_type=related_object_type
             )
             notifications.append(notification)
+            
+            # Send real-time notification
+            try:
+                NotificationService.send_realtime_notification(user, notification)
+            except Exception:
+                pass
 
         # Send bulk email notifications
         from users.services import send_bulk_email_notifications
@@ -150,9 +161,13 @@ class NotificationService:
         )
 
         # Send bulk push notifications
-        from users.services import send_bulk_push_notifications
-        send_bulk_push_notifications.delay(
-            [user.id for user in users], title, message, notification_type
+        from users.services import send_bulk_expo_push_notifications
+        send_bulk_expo_push_notifications.delay(
+            [user.id for user in users], title, message, notification_type,
+            data={
+                "related_object_id": str(getattr(related_object, 'id', related_object)) if related_object else None,
+                "related_object_type": related_object_type
+            }
         )
 
         return notifications
