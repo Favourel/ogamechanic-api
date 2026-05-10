@@ -562,6 +562,19 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
         return data
 
 
+class MerchantSubscriptionInitSerializer(serializers.Serializer):
+    """Serializer for initializing merchant subscription."""
+    callback_url = serializers.URLField(
+        required=False, 
+        help_text="Optional custom callback URL after successful payment."
+    )
+    plan = serializers.CharField(
+        required=False,
+        default="monthly",
+        help_text="Subscription plan (currently only 'monthly' is supported)."
+    )
+
+
 class MerchantSubscriptionResponseSerializer(serializers.Serializer):
     payment_reference = serializers.CharField()
     payment_url = serializers.URLField()

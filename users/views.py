@@ -1,4 +1,5 @@
  # flake8: noqa: E501,W293
+from users.serializers import MerchantSubscriptionInitSerializer
 import logging
 import traceback
 from django.contrib.auth import get_user_model
@@ -6366,6 +6367,18 @@ class MerchantSubscriptionInitView(APIView):
             "After successful completion of payment on the Paystack page, the merchant's profile "
             "will be updated automatically via webhooks."
         ),
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['requestType', 'data'],
+            properties={
+                'requestType': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Type of request (e.g., 'inbound')",
+                    example="inbound"
+                ),
+                'data': MerchantSubscriptionInitSerializer()
+            }
+        ),
         responses={
             200: openapi.Response(
                 description="Subscription payment initialized successfully",
@@ -6411,6 +6424,14 @@ class MerchantSubscriptionInitView(APIView):
         import requests
         import uuid
 
+        # Standard check for incoming request wrapper
+        status_, incoming_data = incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=incoming_data, status=False),
+                status=400
+            )
+
         # Ensure user is a merchant
         active_role = getattr(request.user, 'active_role', None)
         if not active_role or active_role.name != 'merchant':
@@ -6419,6 +6440,14 @@ class MerchantSubscriptionInitView(APIView):
                 status=403
             )
 
+        serializer = MerchantSubscriptionInitSerializer(data=incoming_data)
+        if not serializer.is_valid():
+            return Response(
+                api_response(message=serializer.errors, status=False),
+                status=400
+            )
+
+        custom_callback = serializer.validated_data.get('callback_url')
         amount = 15000  # Monthly fee of ₦15,000
         reference = f"SUB_{uuid.uuid4().hex[:8].upper()}"
 
@@ -6437,11 +6466,14 @@ class MerchantSubscriptionInitView(APIView):
             "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
             "Content-Type": "application/json",
         }
+        
+        callback_url = custom_callback or f"{settings.PAYSTACK_CALLBACK_URL}/merchant/subscription/"
+        
         payload = {
             "email": request.user.email,
             "amount": int(amount * 100),  # Paystack expects kobo
             "reference": reference,
-            "callback_url": f"{settings.PAYSTACK_CALLBACK_URL}/merchant/subscription/",
+            "callback_url": callback_url,
             "metadata": {
                 "subscription_payment": True,
                 "user_id": str(request.user.id),
