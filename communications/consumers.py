@@ -189,16 +189,27 @@ class ChatConsumer(AsyncWebsocketConsumer):
         chat_room = message.chat_room
         other_participants = chat_room.participants.exclude(id=self.user.id)
 
-        notifications = []
+        chat_notifications = []
         for participant in other_participants:
-            notification = ChatNotification(
+            chat_notifications.append(ChatNotification(
                 user=participant,
                 chat_room=chat_room,
                 message=message
-            )
-            notifications.append(notification)
+            ))
 
-        ChatNotification.objects.bulk_create(notifications)
+        ChatNotification.objects.bulk_create(chat_notifications)
+
+        # Also create standard notifications for the central Notification list
+        from users.services import NotificationService
+        for participant in other_participants:
+            NotificationService.create_notification(
+                user=participant,
+                title=f"New message from {self.user.first_name or self.user.email}",
+                message=message.content[:100],
+                notification_type='chat',
+                related_object=chat_room,
+                related_object_type='ChatRoom'
+            )
 
     @database_sync_to_async
     def mark_messages_as_read(self, message_ids):

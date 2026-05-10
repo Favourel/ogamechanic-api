@@ -293,6 +293,12 @@ class Notification(models.Model):
         ('warning', _('Warning')),
         ('error', _('Error')),
         ('success', _('Success')),
+        ('support_chat', _('Admin Support Chat')),
+        ('chat', _('User-to-User Chat')),
+        ('order_status', _('Order Status Update')),
+        ('ride_status', _('Ride Status Update')),
+        ('repair_status', _('Repair Status Update')),
+        ('rental_status', _('Rental Status Update')),
     ]
 
     user = models.ForeignKey(

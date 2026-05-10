@@ -2153,12 +2153,23 @@ class RoleNotificationView(APIView):
         # Get users with specific role
         users = User.objects.filter(roles__name=role, is_active=True)
 
+        # Get Role object
+        from users.models import Role
+        try:
+            target_role = Role.objects.get(name=role)
+        except Role.DoesNotExist:
+            return Response(
+                api_response(message=f"Role '{role}' not found", status=False),
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+
         # Create notifications for users with role
         notifications = NotificationService.create_bulk_notifications(
             users=users,
             title=title,
             message=message,
             notification_type=notification_type,
+            role=target_role
         )
 
         return Response(

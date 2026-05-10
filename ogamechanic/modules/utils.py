@@ -114,7 +114,13 @@ def mask_character(number_to_mask, num_chars_to_mask, mask_char="*"):
 
 
 def create_notification(user, text):
-    Notification.objects.create(user=user, message=text)
+    from users.services import NotificationService
+    NotificationService.create_notification(
+        user=user,
+        title="Notification",
+        message=text,
+        notification_type='info'
+    )
     return True
 
 

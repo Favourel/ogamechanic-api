@@ -575,11 +575,14 @@ class RideNotificationService:
     @staticmethod
     def ride_requested(ride):
         """Notify driver when ride is requested"""
+        from users.models import Role
+        driver_role, _ = Role.objects.get_or_create(name=Role.DRIVER)
         NotificationService.create_notification(
             user=ride.driver,
             title="New Ride Request",
             message=f"You have a new ride request from {ride.customer.email}.",
-            notification_type='info'
+            notification_type='ride_status',
+            role=driver_role
         )
 
     @staticmethod
@@ -608,7 +611,7 @@ class RideNotificationService:
             user=ride.customer,
             title="Driver Location Updated",
             message="Your driver's location has been updated.",
-            notification_type='info'
+            notification_type='ride_status'
         )
 
 
@@ -660,11 +663,14 @@ class MechanicNotificationService:
             )
             return
 
+        from users.models import Role
+        mechanic_role, _ = Role.objects.get_or_create(name=Role.MECHANIC)
         NotificationService.create_notification(
             user=repair.mechanic,
             title="New Repair Request",
             message=f"You have a new repair request from {repair.customer.get_full_name() or repair.customer.email}.", # noqa
-            notification_type='info',
+            notification_type='repair_status',
+            role=mechanic_role,
             related_object=repair,
             related_object_type='RepairRequest'
         )

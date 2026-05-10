@@ -119,6 +119,8 @@ def find_and_notify_mechanics_task(self, repair_request_id, radius_km=20.0):
 
             # Send notification to mechanic
             try:
+                from users.models import Role
+                mechanic_role, _ = Role.objects.get_or_create(name=Role.MECHANIC)
                 NotificationService.create_notification(
                     user=mechanic,
                     title="New Repair Request Nearby",
@@ -129,7 +131,8 @@ def find_and_notify_mechanics_task(self, repair_request_id, radius_km=20.0):
                         f"{repair_request.vehicle_model}. "
                         f"Click to view details."
                     ),
-                    notification_type='info',
+                    notification_type='repair_status',
+                    role=mechanic_role,
                     related_object=repair_request,
                     related_object_type='RepairRequest'
                 )

@@ -69,7 +69,8 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             elif message_type == 'get_notifications':
                 page = data.get('page', 1)
                 limit = data.get('limit', 10)
-                await self.send_notifications_page(page, limit)
+                category = data.get('category')
+                await self.send_notifications_page(page, limit, category)
 
         except json.JSONDecodeError:
             await self.send(text_data=json.dumps({
@@ -99,8 +100,8 @@ class NotificationConsumer(AsyncWebsocketConsumer):
         }))
 
     @database_sync_to_async
-    def get_unread_notifications_count(self):
-        """Get count of unread notifications for user and active role"""
+    def get_unread_notifications_count(self, category=None):
+        """Get count of unread notifications for user, active role, and category"""
         from django.db.models import Q
         active_role = getattr(self.user, 'active_role', None)
         
@@ -113,6 +114,20 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             queryset = queryset.filter(
                 Q(role=active_role) | Q(role__isnull=True)
             )
+            
+            # Defensive fix for legacy untagged notifications
+            if active_role.name == 'primary_user':
+                queryset = queryset.exclude(
+                    Q(role__isnull=True) & (Q(title__icontains='Repair') | Q(title__icontains='Ride'))
+                )
+
+        if category:
+            if category == "admin_chat":
+                queryset = queryset.filter(notification_type="support_chat")
+            elif category == "user_chat":
+                queryset = queryset.filter(Q(notification_type="chat") | Q(notification_type="user_chat"))
+            elif category == "general":
+                queryset = queryset.exclude(notification_type__in=["support_chat", "chat", "user_chat"])
             
         return queryset.count()
 
@@ -152,12 +167,18 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                 Q(role=active_role) | Q(role__isnull=True)
             )
             
+            # Defensive fix for legacy untagged notifications
+            if active_role.name == 'primary_user':
+                queryset = queryset.exclude(
+                    Q(role__isnull=True) & (Q(title__icontains='Repair') | Q(title__icontains='Ride'))
+                )
+            
         updated_count = queryset.update(is_read=True, read_at=timezone.now())
         return updated_count
 
     @database_sync_to_async
-    def get_notifications_page(self, page, limit):
-        """Get paginated notifications for user and active role"""
+    def get_notifications_page(self, page, limit, category=None):
+        """Get paginated notifications for user, active role, and category"""
         from django.core.paginator import Paginator
         from django.db.models import Q
         
@@ -171,6 +192,20 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             notifications = notifications.filter(
                 Q(role=active_role) | Q(role__isnull=True)
             )
+            
+            # Defensive fix for legacy untagged notifications
+            if active_role.name == 'primary_user':
+                notifications = notifications.exclude(
+                    Q(role__isnull=True) & (Q(title__icontains='Repair') | Q(title__icontains='Ride'))
+                )
+
+        if category:
+            if category == "admin_chat":
+                notifications = notifications.filter(notification_type="support_chat")
+            elif category == "user_chat":
+                notifications = notifications.filter(Q(notification_type="chat") | Q(notification_type="user_chat"))
+            elif category == "general":
+                notifications = notifications.exclude(notification_type__in=["support_chat", "chat", "user_chat"])
             
         notifications = notifications.order_by('-created_at')
 
@@ -197,22 +232,23 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             'total_count': paginator.count
         }
 
-    async def send_notifications_page(self, page, limit):
+    async def send_notifications_page(self, page, limit, category=None):
         """Send paginated notifications to WebSocket"""
-        notifications_data = await self.get_notifications_page(page, limit)
+        notifications_data = await self.get_notifications_page(page, limit, category)
         await self.send(text_data=json.dumps({
             'type': 'notifications.page',
             'data': notifications_data
         }))
 
-    async def send_notification_count_update(self):
+    async def send_notification_count_update(self, category=None):
         """Send updated notification count to WebSocket"""
-        unread_count = await self.get_unread_notifications_count()
+        unread_count = await self.get_unread_notifications_count(category)
         await self.channel_layer.group_send(
             self.notification_group_name,
             {
                 'type': 'notification.count_update',
-                'unread_count': unread_count
+                'unread_count': unread_count,
+                'category': category
             }
         )
 
@@ -305,20 +341,32 @@ class NotificationGroupConsumer(AsyncWebsocketConsumer):
             'message': f'Notification sent to {len(users)} users'
         }))
 
-    async def send_notification_to_role(self, role, message, notification_type):
+    async def send_notification_to_role(self, role_name, message, notification_type):
         """Send notification to users with specific role"""
         from .services import NotificationService
+        from .models import Role
 
         # Get users with specific role
-        users = await self.get_users_by_role(role)
+        users = await self.get_users_by_role(role_name)
+        
+        # Get role object
+        @database_sync_to_async
+        def get_role_obj(name):
+            try:
+                return Role.objects.get(name=name)
+            except Role.DoesNotExist:
+                return None
+        
+        role_obj = await get_role_obj(role_name)
 
         # Create notifications for users with role
         for user in users:
             NotificationService.create_notification(
                 user=user,
-                title=f"Message for {role.title()}s",
+                title=f"Message for {role_name.title()}s",
                 message=message,
-                notification_type=notification_type
+                notification_type=notification_type,
+                role=role_obj
             )
 
         await self.send(text_data=json.dumps({

@@ -145,11 +145,15 @@ def notify_drivers_task(ride_id, driver_ids):
                     fail_silently=False,
                 )
                 # Create notification object
-                Notification.objects.create(
+                from users.services import NotificationService
+                from users.models import Role
+                driver_role, _ = Role.objects.get_or_create(name=Role.DRIVER)
+                NotificationService.create_notification(
                     user=driver,
                     title="New Ride Request",
                     message=f"You have a new ride request (Ride Customer: {ride.customer}).", # noqa
-                    notification_type="info",
+                    notification_type="ride_status",
+                    role=driver_role
                 )
                 # You can add push notification logic here if available
             except Exception as notify_exc:
@@ -185,11 +189,12 @@ def notify_user_of_ride_status_task(self, user_id, ride_id, new_status):
             fail_silently=False,
         )
         # Create notification object
-        Notification.objects.create(
+        from users.services import NotificationService
+        NotificationService.create_notification(
             user=user,
             title="Ride Status Update",
             message=f"Your ride status has been updated to '{status_display}'.", # noqa
-            notification_type="info",
+            notification_type="ride_status",
         )
         # You can add push notification logic here if available
         logger.info(f"Notified user {user.id} of ride {ride.id} status update to {new_status}") # noqa

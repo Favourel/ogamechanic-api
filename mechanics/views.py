@@ -926,7 +926,7 @@ class MechanicResponseView(APIView):
                     f"request. We are still searching for available "
                     f"mechanics."
                 ),
-                notification_type='info',
+                notification_type='repair_status',
                 related_object=repair_request,
                 related_object_type='RepairRequest'
             )

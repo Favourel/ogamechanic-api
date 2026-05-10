@@ -4381,9 +4381,9 @@ class NotificationListView(APIView):
                 required=False,
             ),
             openapi.Parameter(
-                "type",
+                "category",
                 openapi.IN_QUERY,
-                description="Filter by notification type",  # noqa
+                description="Filter by category (admin_chat, general, user_chat)",  # noqa
                 type=openapi.TYPE_STRING,
                 required=False,
             ),
@@ -4411,10 +4411,17 @@ class NotificationListView(APIView):
 
         # Filter by active role if user has one
         if active_role:
-            notifications = notifications.filter(
-                models.Q(role=active_role)
-                | models.Q(role__isnull=True)  # Include role-agnostic notifs
-            )
+            # Base filter: notifications for this user and (this role or no role)
+            role_filter = models.Q(role=active_role) | models.Q(role__isnull=True)
+            notifications = notifications.filter(role_filter)
+
+            # Defensive fix for legacy untagged notifications:
+            # If active_role is primary_user, exclude notifications that look like they belong to other roles
+            if active_role.name == 'primary_user':
+                notifications = notifications.exclude(
+                    models.Q(role__isnull=True) & 
+                    (models.Q(title__icontains='Repair') | models.Q(title__icontains='Ride'))
+                )
             logger.info(
                 f"Filtered notifications by role: {active_role_name}. "
                 f"Count: {notifications.count()}"
@@ -4427,12 +4434,29 @@ class NotificationListView(APIView):
 
         notifications = notifications.order_by("-created_at")
 
+        # Filter by category if provided
+        category = request.query_params.get("category")
+        if category:
+            if category == "admin_chat":
+                notifications = notifications.filter(notification_type="support_chat")
+            elif category == "user_chat":
+                # Assuming 'chat' or 'user_chat' is used for peer-to-peer chats
+                notifications = notifications.filter(
+                    models.Q(notification_type="chat") | 
+                    models.Q(notification_type="user_chat")
+                )
+            elif category == "general":
+                # General notifications are those that are NOT chat-related
+                notifications = notifications.exclude(
+                    notification_type__in=["support_chat", "chat", "user_chat"]
+                )
+
         is_read = request.query_params.get("is_read")
         if is_read is not None:
             is_read = is_read.lower() == "true"
             notifications = notifications.filter(is_read=is_read)
-        notification_type = request.query_params.get("type")
 
+        notification_type = request.query_params.get("type")
         if notification_type:
             notifications = notifications.filter(notification_type=notification_type)
         paginator = self.pagination_class()
@@ -6505,11 +6529,14 @@ class PaystackWebhookView(APIView):
 
             # Send notification
             from users.services import NotificationService
+            from users.models import Role
+            merchant_role, _ = Role.objects.get_or_create(name=Role.MERCHANT)
             NotificationService.create_notification(
                 user=merchant_profile.user,
                 title="Subscription Successful",
                 message="Your monthly merchant subscription has been activated. You now have unlimited product uploads for the next 30 days!",
-                notification_type="success",
+                notification_type="order_status",
+                role=merchant_role
             )
         except MerchantProfile.DoesNotExist:
             logger.error(f"MerchantProfile not found for user_id={user_id} during subscription processing")
