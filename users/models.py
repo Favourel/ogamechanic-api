@@ -555,6 +555,13 @@ class MechanicProfile(models.Model):
         help_text="Back of Government Identity Card"
     )
 
+    # Subscription fields
+    is_subscribed = models.BooleanField(default=False)
+    subscription_expires_at = models.DateTimeField(null=True, blank=True)
+    subscription_payment_reference = models.CharField(
+        max_length=100, blank=True, null=True
+    )
+
     is_approved = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     disapproved = models.BooleanField(default=False)
@@ -1514,6 +1521,13 @@ class VehicleRentalProfile(models.Model):
         upload_to='vehicle_rental/nin_documents/',
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
         blank=True, null=True
+    )
+
+    # Subscription fields
+    is_subscribed = models.BooleanField(default=False)
+    subscription_expires_at = models.DateTimeField(null=True, blank=True)
+    subscription_payment_reference = models.CharField(
+        max_length=100, blank=True, null=True
     )
     
     is_approved = models.BooleanField(default=False)

@@ -192,8 +192,8 @@ MERCHANT_KYC_REQUIRED_FIELDS = [
 VEHICLE_RENTAL_KYC_REQUIRED_FIELDS = [
     "location",
     "company_name",
-    "cac_number",
-    "cac_document",
+    # "cac_number",
+    # "cac_document",
     "selfie",
     "nin_number",
     "nin_document",
@@ -6596,7 +6596,7 @@ class PaystackWebhookView(APIView):
         return Response({"status": "success"})
 
     def _handle_subscription_payment(self, data):
-        """Handle merchant subscription payment webhook."""
+        """Handle subscription payment webhook for various roles."""
         reference = data.get("reference")
         metadata = data.get("metadata", {})
         user_id = metadata.get("user_id")
@@ -6606,41 +6606,63 @@ class PaystackWebhookView(APIView):
             return
 
         try:
-            from users.models import MerchantProfile, Transaction
+            from users.models import User, MerchantProfile, MechanicProfile, VehicleRentalProfile, Transaction, Role
             from django.utils import timezone
             from datetime import timedelta
-
-            merchant_profile = MerchantProfile.objects.get(user_id=user_id)
-            
-            # Update subscription status
-            merchant_profile.is_subscribed = True
-            # Set expiry to 30 days from now (Monthly)
-            merchant_profile.subscription_expires_at = timezone.now() + timedelta(days=30)
-            merchant_profile.subscription_payment_reference = reference
-            merchant_profile.save()
-
-            # Update transaction status in ledger
-            if transaction_id:
-                try:
-                    transaction = Transaction.objects.get(id=transaction_id)
-                    transaction.status = 'completed'
-                    transaction.save()
-                except Transaction.DoesNotExist:
-                    logger.warning(f"Transaction {transaction_id} not found during subscription success")
-
-            # Send notification
             from users.services import NotificationService
-            from users.models import Role
-            merchant_role, _ = Role.objects.get_or_create(name=Role.MERCHANT)
-            NotificationService.create_notification(
-                user=merchant_profile.user,
-                title="Subscription Successful",
-                message="Your monthly merchant subscription has been activated. You now have unlimited product uploads for the next 30 days!",
-                notification_type="order_status",
-                role=merchant_role
-            )
-        except MerchantProfile.DoesNotExist:
-            logger.error(f"MerchantProfile not found for user_id={user_id} during subscription processing")
+
+            user = User.objects.get(id=user_id)
+            profile = None
+            role_name = ""
+            benefit_msg = ""
+            
+            # Identify which profile to update based on active role or existing profiles
+            # In a multi-role system, we check the profile corresponding to the payment context if possible, 
+            # or use the user's active role.
+            if hasattr(user, 'merchant_profile'):
+                profile = user.merchant_profile
+                role_name = Role.MERCHANT
+                benefit_msg = "You now have unlimited product uploads for the next 30 days!"
+            elif hasattr(user, 'mechanic_profile'):
+                profile = user.mechanic_profile
+                role_name = Role.MECHANIC
+                benefit_msg = "Your professional mechanic profile is now active for the next 30 days!"
+            elif hasattr(user, 'vehicle_rental_profile'):
+                profile = user.vehicle_rental_profile
+                role_name = Role.VEHICLE_RENTAL
+                benefit_msg = "Your vehicle rental profile is now active for the next 30 days!"
+
+            if profile:
+                # Update subscription status
+                profile.is_subscribed = True
+                # Set expiry to 30 days from now (Monthly)
+                profile.subscription_expires_at = timezone.now() + timedelta(days=30)
+                profile.subscription_payment_reference = reference
+                profile.save()
+
+                # Update transaction status in ledger
+                if transaction_id:
+                    try:
+                        transaction = Transaction.objects.get(id=transaction_id)
+                        transaction.status = 'completed'
+                        transaction.save()
+                    except Transaction.DoesNotExist:
+                        logger.warning(f"Transaction {transaction_id} not found during subscription success")
+
+                # Send notification
+                role_obj, _ = Role.objects.get_or_create(name=role_name)
+                NotificationService.create_notification(
+                    user=user,
+                    title="Subscription Successful",
+                    message=f"Your monthly subscription has been activated. {benefit_msg}",
+                    notification_type="success",
+                    role=role_obj
+                )
+            else:
+                logger.error(f"No suitable profile found for user_id={user_id} during subscription processing")
+
+        except User.DoesNotExist:
+            logger.error(f"User not found for user_id={user_id} during subscription processing")
         except Exception as e:
             logger.error(f"Error processing subscription payment for reference {reference}: {e}")
 
