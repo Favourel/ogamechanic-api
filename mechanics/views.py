@@ -1546,9 +1546,9 @@ class MechanicVehicleExpertiseListView(APIView):
         )
 
     @swagger_auto_schema(
-        operation_summary="Create Vehicle Expertise",
         operation_description=(
-            "Create a new vehicle expertise record for the authenticated mechanic. "
+            "Create one or more vehicle expertise records for the authenticated mechanic. "
+            "Accepts a single object or a list of objects for bulk creation. "
             "One expertise per vehicle make."
         ),
         request_body=MechanicVehicleExpertiseCreateSerializer,
@@ -1569,26 +1569,68 @@ class MechanicVehicleExpertiseListView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = MechanicVehicleExpertiseCreateSerializer(data=data)
+        # Support bulk creation
+        is_many = isinstance(data, list)
+        serializer = MechanicVehicleExpertiseCreateSerializer(
+            data=data, many=is_many
+        )
+        
         if serializer.is_valid():
-            vehicle_make_id = serializer.validated_data.get("vehicle_make_id")
-            if MechanicVehicleExpertise.objects.filter(
-                mechanic=mechanic_profile, vehicle_make_id=vehicle_make_id
-            ).exists():
-                return Response(
-                    api_response(
-                        message="Vehicle expertise already exists for this make.",
-                        status=False,
-                    ),
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            # If bulk, check for duplicates in the input and against database
+            if is_many:
+                expertises_data = serializer.validated_data
+                make_ids = [item["vehicle_make_id"] for item in expertises_data]
+                
+                # Check for duplicates within the submitted list
+                if len(make_ids) != len(set(make_ids)):
+                    return Response(
+                        api_response(
+                            message="Duplicate vehicle makes found in the submitted list.",
+                            status=False,
+                        ),
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                
+                # Check against database for existing records
+                existing_makes = MechanicVehicleExpertise.objects.filter(
+                    mechanic=mechanic_profile,
+                    vehicle_make_id__in=make_ids
+                ).values_list('vehicle_make__name', flat=True)
+                
+                if existing_makes:
+                    return Response(
+                        api_response(
+                            message=f"Vehicle expertise already exists for: {', '.join(existing_makes)}",
+                            status=False,
+                        ),
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                
+                # Save all
+                expertise_objects = serializer.save(mechanic=mechanic_profile)
+                response_data = MechanicVehicleExpertiseSerializer(expertise_objects, many=True).data
+            else:
+                # Single object logic
+                vehicle_make_id = serializer.validated_data.get("vehicle_make_id")
+                if MechanicVehicleExpertise.objects.filter(
+                    mechanic=mechanic_profile, vehicle_make_id=vehicle_make_id
+                ).exists():
+                    return Response(
+                        api_response(
+                            message="Vehicle expertise already exists for this make.",
+                            status=False,
+                        ),
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
-            expertise = serializer.save(mechanic=mechanic_profile)
+                expertise = serializer.save(mechanic=mechanic_profile)
+                response_data = MechanicVehicleExpertiseSerializer(expertise).data
+
             return Response(
                 api_response(
                     message="Vehicle expertise created successfully.",
                     status=True,
-                    data=MechanicVehicleExpertiseSerializer(expertise).data,
+                    data=response_data,
                 ),
                 status=status.HTTP_201_CREATED,
             )

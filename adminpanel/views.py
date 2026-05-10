@@ -1527,7 +1527,10 @@ class AdminMechanicExpertiseView(APIView):
         )
 
     @swagger_auto_schema(
-        operation_description="Create a new vehicle expertise record for a mechanic (admin only)",
+        operation_description=(
+            "Create one or more vehicle expertise records for a mechanic (admin only). "
+            "Accepts a single object or a list of objects for bulk creation."
+        ),
         request_body=AdminMechanicVehicleExpertiseCreateSerializer,
         responses={201: AdminMechanicVehicleExpertiseSerializer(), 400: "Bad Request"},
     )
@@ -1536,31 +1539,73 @@ class AdminMechanicExpertiseView(APIView):
         if not status_:
             return Response(api_response(message=data, status=False), status=400)
 
-        serializer = AdminMechanicVehicleExpertiseCreateSerializer(data=data)
+        # Support bulk creation
+        is_many = isinstance(data, list)
+        serializer = AdminMechanicVehicleExpertiseCreateSerializer(
+            data=data, many=is_many
+        )
+        
         if serializer.is_valid():
-            mechanic = serializer.validated_data.get("mechanic")
-            vehicle_make_id = serializer.validated_data.get("vehicle_make_id")
+            if is_many:
+                expertises_data = serializer.validated_data
+                # Check for duplicates within the submitted list (per mechanic/make pair)
+                seen_pairs = set()
+                for item in expertises_data:
+                    pair = (item["mechanic"].id, item["vehicle_make"].id)
+                    if pair in seen_pairs:
+                        return Response(
+                            api_response(
+                                message="Duplicate mechanic/vehicle make pairs found in the submitted list.",
+                                status=False,
+                            ),
+                            status=400,
+                        )
+                    seen_pairs.add(pair)
+                
+                # Check against database for existing records
+                for item in expertises_data:
+                    if MechanicVehicleExpertise.objects.filter(
+                        mechanic=item["mechanic"], 
+                        vehicle_make=item["vehicle_make"]
+                    ).exists():
+                        return Response(
+                            api_response(
+                                message=f"Expertise already exists for mechanic {item['mechanic'].user.email} and make {item['vehicle_make'].name}.",
+                                status=False,
+                            ),
+                            status=400,
+                        )
+                
+                expertise_objects = serializer.save()
+                response_data = AdminMechanicVehicleExpertiseSerializer(expertise_objects, many=True).data
+            else:
+                # Single object logic
+                mechanic = serializer.validated_data.get("mechanic")
+                vehicle_make = serializer.validated_data.get("vehicle_make")
 
-            if MechanicVehicleExpertise.objects.filter(
-                mechanic=mechanic, vehicle_make_id=vehicle_make_id
-            ).exists():
-                return Response(
-                    api_response(
-                        message="Expertise already exists for this mechanic and vehicle make.",
-                        status=False,
-                    ),
-                    status=400,
-                )
+                if MechanicVehicleExpertise.objects.filter(
+                    mechanic=mechanic, vehicle_make=vehicle_make
+                ).exists():
+                    return Response(
+                        api_response(
+                            message="Expertise already exists for this mechanic and vehicle make.",
+                            status=False,
+                        ),
+                        status=400,
+                    )
 
-            expertise = serializer.save()
+                expertise = serializer.save()
+                response_data = AdminMechanicVehicleExpertiseSerializer(expertise).data
+
             return Response(
                 api_response(
                     message="Mechanic expertise created successfully.",
                     status=True,
-                    data=AdminMechanicVehicleExpertiseSerializer(expertise).data,
+                    data=response_data,
                 ),
                 status=201,
             )
+            
         return Response(
             api_response(
                 message="Invalid data",

@@ -6360,13 +6360,49 @@ class MerchantSubscriptionInitView(APIView):
 
     @swagger_auto_schema(
         operation_summary="Initialize Merchant Subscription Payment",
-        operation_description="Initialize Paystack payment for merchant subscription (₦15,000 monthly). "
-                              "Returns a payment URL and a transaction reference.",
+        operation_description=(
+            "Initializes a Paystack payment session for a merchant's monthly subscription fee (₦15,000). "
+            "Returns a Paystack authorization URL and a transaction reference. "
+            "After successful completion of payment on the Paystack page, the merchant's profile "
+            "will be updated automatically via webhooks."
+        ),
         responses={
-            200: MerchantSubscriptionInitResponseSerializer,
-            400: "Bad Request - Initialization failed",
-            403: "Forbidden - User is not a merchant",
+            200: openapi.Response(
+                description="Subscription payment initialized successfully",
+                schema=MerchantSubscriptionInitResponseSerializer
+            ),
+            400: openapi.Response(
+                description="Bad Request - Initialization failed",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, example="Failed to initialize subscription payment"),
+                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),
+                    }
+                )
+            ),
+            403: openapi.Response(
+                description="Forbidden - User is not a merchant",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, example="Only merchants can subscribe."),
+                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),
+                    }
+                )
+            ),
+            500: openapi.Response(
+                description="Internal Server Error",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, example="Payment initialization error: ..."),
+                        'status': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),
+                    }
+                )
+            ),
         },
+        tags=["Subscription"]
     )
     def post(self, request):
         """Initialize merchant subscription payment."""
