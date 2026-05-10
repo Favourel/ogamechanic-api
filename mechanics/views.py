@@ -1579,36 +1579,44 @@ class MechanicVehicleExpertiseListView(APIView):
             # If bulk, check for duplicates in the input and against database
             if is_many:
                 expertises_data = serializer.validated_data
-                make_ids = [item["vehicle_make"].id for item in expertises_data]
                 
-                # Check for duplicates within the submitted list
-                if len(make_ids) != len(set(make_ids)):
+                # Filter out items that already exist in the database
+                new_expertises_data = []
+                already_existing_makes = []
+                
+                for item in expertises_data:
+                    vehicle_make = item["vehicle_make"]
+                    if MechanicVehicleExpertise.objects.filter(
+                        mechanic=mechanic_profile, vehicle_make=vehicle_make
+                    ).exists():
+                        already_existing_makes.append(vehicle_make.name)
+                    else:
+                        new_expertises_data.append(item)
+                
+                if not new_expertises_data:
                     return Response(
                         api_response(
-                            message="Duplicate vehicle makes found in the submitted list.",
+                            message=f"Vehicle expertise already exists for: {', '.join(already_existing_makes)}",
                             status=False,
                         ),
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 
-                # Check against database for existing records
-                existing_makes = MechanicVehicleExpertise.objects.filter(
-                    mechanic=mechanic_profile,
-                    vehicle_make_id__in=make_ids
-                ).values_list('vehicle_make__name', flat=True)
-                
-                if existing_makes:
-                    return Response(
-                        api_response(
-                            message=f"Vehicle expertise already exists for: {', '.join(existing_makes)}",
-                            status=False,
-                        ),
-                        status=status.HTTP_400_BAD_REQUEST,
+                # Save only the new ones
+                expertise_objects = []
+                for item in new_expertises_data:
+                    # We create them manually since serializer.save() with many=True 
+                    # doesn't easily support filtering out some items after validation
+                    obj = MechanicVehicleExpertise.objects.create(
+                        mechanic=mechanic_profile,
+                        **item
                     )
+                    expertise_objects.append(obj)
                 
-                # Save all
-                expertise_objects = serializer.save(mechanic=mechanic_profile)
                 response_data = MechanicVehicleExpertiseSerializer(expertise_objects, many=True).data
+                message = "Vehicle expertise created successfully."
+                if already_existing_makes:
+                    message += f" (Skipped existing: {', '.join(already_existing_makes)})"
             else:
                 # Single object logic
                 vehicle_make = serializer.validated_data.get("vehicle_make")
@@ -1625,10 +1633,11 @@ class MechanicVehicleExpertiseListView(APIView):
 
                 expertise = serializer.save(mechanic=mechanic_profile)
                 response_data = MechanicVehicleExpertiseSerializer(expertise).data
+                message = "Vehicle expertise created successfully."
 
             return Response(
                 api_response(
-                    message="Vehicle expertise created successfully.",
+                    message=message,
                     status=True,
                     data=response_data,
                 ),
