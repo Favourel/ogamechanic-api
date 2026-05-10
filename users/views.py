@@ -6376,7 +6376,21 @@ class MerchantSubscriptionInitView(APIView):
                     description="Type of request (e.g., 'inbound')",
                     example="inbound"
                 ),
-                'data': MerchantSubscriptionInitSerializer()
+                'data': openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'callback_url': openapi.Schema(
+                            type=openapi.TYPE_STRING, 
+                            format=openapi.FORMAT_URI,
+                            description="Optional custom callback URL after successful payment."
+                        ),
+                        'plan': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            default="monthly",
+                            description="Subscription plan (currently only 'monthly' is supported)."
+                        ),
+                    }
+                )
             }
         ),
         responses={
