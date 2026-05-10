@@ -298,6 +298,7 @@ class Notification(models.Model):
         ('order_status', _('Order Status Update')),
         ('ride_status', _('Ride Status Update')),
         ('repair_status', _('Repair Status Update')),
+        ('repair_update', _('Repair Update')),
         ('rental_status', _('Rental Status Update')),
     ]
 

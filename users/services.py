@@ -726,9 +726,9 @@ class MechanicNotificationService:
             user=repair.customer,
             title=f"Repair {repair.status.title()}",
             message=message,
-            notification_type='repair_status',
+            notification_type='repair_update',
             related_object=repair,
-            related_object_type='RepairRequest'
+            related_object_type='Repair'
         )
 
 

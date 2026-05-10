@@ -1579,7 +1579,7 @@ class MechanicVehicleExpertiseListView(APIView):
             # If bulk, check for duplicates in the input and against database
             if is_many:
                 expertises_data = serializer.validated_data
-                make_ids = [item["vehicle_make_id"] for item in expertises_data]
+                make_ids = [item["vehicle_make"].id for item in expertises_data]
                 
                 # Check for duplicates within the submitted list
                 if len(make_ids) != len(set(make_ids)):
@@ -1611,9 +1611,9 @@ class MechanicVehicleExpertiseListView(APIView):
                 response_data = MechanicVehicleExpertiseSerializer(expertise_objects, many=True).data
             else:
                 # Single object logic
-                vehicle_make_id = serializer.validated_data.get("vehicle_make_id")
+                vehicle_make = serializer.validated_data.get("vehicle_make")
                 if MechanicVehicleExpertise.objects.filter(
-                    mechanic=mechanic_profile, vehicle_make_id=vehicle_make_id
+                    mechanic=mechanic_profile, vehicle_make=vehicle_make
                 ).exists():
                     return Response(
                         api_response(
