@@ -4404,7 +4404,7 @@ class NotificationListView(APIView):
 
         logger.info(
             f"Fetching notifications for user {request.user.id} "
-            f"with active_role: {active_role_name}"
+            f"with active_role: {active_role_name} -- {active_role}"
         )
 
         notifications = Notification.objects.filter(user=request.user)
