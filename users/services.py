@@ -555,7 +555,9 @@ class OrderNotificationService:
             user=order.customer,
             title=f"Order {order.status.title()}",
             message=message,
-            notification_type='order_status'
+            notification_type='order_status',
+            related_object=order,
+            related_object_type='Order'
         )
 
     @staticmethod
@@ -582,7 +584,9 @@ class RideNotificationService:
             title="New Ride Request",
             message=f"You have a new ride request from {ride.customer.email}.",
             notification_type='ride_status',
-            role=driver_role
+            role=driver_role,
+            related_object=ride,
+            related_object_type='Ride'
         )
 
     @staticmethod
@@ -601,7 +605,9 @@ class RideNotificationService:
             user=ride.customer,
             title=f"Ride {ride.status.title()}",
             message=message,
-            notification_type='ride_status'
+            notification_type='ride_status',
+            related_object=ride,
+            related_object_type='Ride'
         )
 
     @staticmethod
@@ -611,7 +617,9 @@ class RideNotificationService:
             user=ride.customer,
             title="Driver Location Updated",
             message="Your driver's location has been updated.",
-            notification_type='ride_status'
+            notification_type='ride_status',
+            related_object=ride,
+            related_object_type='Ride'
         )
 
 
@@ -644,7 +652,9 @@ class RentalNotificationService:
             user=rental.customer,
             title=f"Rental {rental.status.title()}",
             message=message,
-            notification_type='rental_status'
+            notification_type='rental_status',
+            related_object=rental,
+            related_object_type='Rental'
         )
 
 

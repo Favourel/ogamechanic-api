@@ -431,7 +431,9 @@ class TransactionService:
                 user=wallet.user,
                 title="Wallet Top-up Successful",
                 message=f"Your wallet has been credited with {amount} NGN",
-                notification_type='success'
+                notification_type='success',
+                related_object=txn,
+                related_object_type='Transaction'
             )
 
             return txn
@@ -470,7 +472,9 @@ class TransactionService:
                 user=wallet.user,
                 title="Withdrawal Successful",
                 message=f"Withdrawal of {amount} NGN to {bank_account.get_display_name()} has been processed", # noqa
-                notification_type='success'
+                notification_type='success',
+                related_object=txn,
+                related_object_type='Transaction'
             )
 
             return txn
@@ -587,7 +591,9 @@ class WebhookService:
                     user=txn.wallet.user,
                     title="Withdrawal Failed",
                     message=f"Your withdrawal of {txn.amount} NGN has failed. The amount has been refunded to your wallet.", # noqa
-                    notification_type='error'
+                    notification_type='error',
+                    related_object=txn,
+                    related_object_type='Transaction'
                 )
 
                 return True

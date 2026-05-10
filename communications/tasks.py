@@ -61,6 +61,8 @@ def send_support_push_notification(
                 title=title,
                 message=body,
                 notification_type="support_chat",
+                related_object=conversation,
+                related_object_type="SupportConversation"
             )
             logger.info(
                 f"Push notification sent to {recipient.email} "
