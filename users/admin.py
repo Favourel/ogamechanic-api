@@ -116,7 +116,7 @@ class UserAdmin(BaseUserAdmin):
 class NotificationAdmin(admin.ModelAdmin):
     list_display = ("user", "message", "is_read", "created_at")
     list_filter = ("is_read", "created_at")
-    search_fields = ("user__email", "message")
+    search_fields = ("user__email", "message", "title", "role__name", "message")
     autocomplete_fields = ("user",)
     list_per_page = 25  # Enable pagination, 25 per page by default
     list_max_show_all = 200  # Optional: limit max "Show all" to 200
