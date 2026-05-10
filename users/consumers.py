@@ -118,7 +118,13 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             # Defensive fix for legacy untagged notifications
             if active_role.name == 'primary_user':
                 queryset = queryset.exclude(
-                    Q(role__isnull=True) & (Q(title__icontains='Repair') | Q(title__icontains='Ride'))
+                    Q(role__isnull=True) & 
+                    (
+                        Q(title__icontains='Repair') | 
+                        Q(message__icontains='Repair') |
+                        Q(title__icontains='Ride') |
+                        Q(message__icontains='Ride')
+                    )
                 )
 
         if category:
@@ -170,7 +176,13 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             # Defensive fix for legacy untagged notifications
             if active_role.name == 'primary_user':
                 queryset = queryset.exclude(
-                    Q(role__isnull=True) & (Q(title__icontains='Repair') | Q(title__icontains='Ride'))
+                    Q(role__isnull=True) & 
+                    (
+                        Q(title__icontains='Repair') | 
+                        Q(message__icontains='Repair') |
+                        Q(title__icontains='Ride') |
+                        Q(message__icontains='Ride')
+                    )
                 )
             
         updated_count = queryset.update(is_read=True, read_at=timezone.now())
@@ -196,7 +208,13 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             # Defensive fix for legacy untagged notifications
             if active_role.name == 'primary_user':
                 notifications = notifications.exclude(
-                    Q(role__isnull=True) & (Q(title__icontains='Repair') | Q(title__icontains='Ride'))
+                    Q(role__isnull=True) & 
+                    (
+                        Q(title__icontains='Repair') | 
+                        Q(message__icontains='Repair') |
+                        Q(title__icontains='Ride') |
+                        Q(message__icontains='Ride')
+                    )
                 )
 
         if category:

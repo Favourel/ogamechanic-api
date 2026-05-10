@@ -4387,6 +4387,20 @@ class NotificationListView(APIView):
                 type=openapi.TYPE_STRING,
                 required=False,
             ),
+            openapi.Parameter(
+                "limit",
+                openapi.IN_QUERY,
+                description="Number of results to return per page",
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
+            openapi.Parameter(
+                "offset",
+                openapi.IN_QUERY,
+                description="The initial index from which to return the results",
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
         ],
         responses={200: NotificationSerializer(many=True)},
     )
@@ -4420,7 +4434,12 @@ class NotificationListView(APIView):
             if active_role.name == 'primary_user':
                 notifications = notifications.exclude(
                     models.Q(role__isnull=True) & 
-                    (models.Q(title__icontains='Repair') | models.Q(title__icontains='Ride'))
+                    (
+                        models.Q(title__icontains='Repair') | 
+                        models.Q(message__icontains='Repair') |
+                        models.Q(title__icontains='Ride') |
+                        models.Q(message__icontains='Ride')
+                    )
                 )
             logger.info(
                 f"Filtered notifications by role: {active_role_name}. "
