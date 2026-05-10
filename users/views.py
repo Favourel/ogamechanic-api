@@ -6429,7 +6429,7 @@ class MerchantSubscriptionInitView(APIView):
                 )
             ),
         },
-        tags=["Subscription"]
+        # tags=["Subscription"]
     )
     def post(self, request):
         """Initialize merchant subscription payment."""
