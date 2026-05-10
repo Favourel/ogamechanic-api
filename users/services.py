@@ -70,13 +70,23 @@ class NotificationService:
         if role is None and hasattr(user, 'active_role'):
             role = user.active_role
 
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        related_id = getattr(related_object, 'id', related_object) if related_object else None
+        
+        logger.info(
+            f"Creating notification for user {user.id}. "
+            f"Type: {notification_type}, Related ID: {related_id}, Type: {related_object_type}"
+        )
+
         notification = Notification.objects.create(
             user=user,
             role=role,
             title=title,
             message=message,
             notification_type=notification_type,
-            related_object_id=getattr(related_object, 'id', related_object) if related_object else None,
+            related_object_id=related_id,
             related_object_type=related_object_type
         )
 
