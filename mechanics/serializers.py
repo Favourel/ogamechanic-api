@@ -147,24 +147,24 @@ class RepairRequestSerializer(serializers.ModelSerializer):
         if user_vehicle:
             # If user_vehicle is provided, populate missing fields
             if not validated_data.get('vehicle_make'):
-                validated_data['vehicle_make'] = user_vehicle.make
+                validated_data['vehicle_make'] = user_vehicle.make or ""
             if not validated_data.get('vehicle_model'):
-                validated_data['vehicle_model'] = user_vehicle.model
+                validated_data['vehicle_model'] = user_vehicle.model or ""
             if not validated_data.get('vehicle_year'):
                 validated_data['vehicle_year'] = user_vehicle.year
             if not validated_data.get('vehicle_vin'):
                 validated_data['vehicle_vin'] = user_vehicle.vin
             if not validated_data.get('vehicle_registration'):
-                validated_data['vehicle_registration'] = user_vehicle.license_plate
+                validated_data['vehicle_registration'] = user_vehicle.license_plate or ""
         elif not any([validated_data.get('vehicle_make'), validated_data.get('vehicle_model'), validated_data.get('vehicle_vin')]):
             # If no vehicle info provided, try to fetch the last repair request by this user
             last_request = RepairRequest.objects.filter(customer=customer).order_by('-requested_at').first()
             if last_request:
-                validated_data['vehicle_make'] = last_request.vehicle_make
-                validated_data['vehicle_model'] = last_request.vehicle_model
+                validated_data['vehicle_make'] = last_request.vehicle_make or ""
+                validated_data['vehicle_model'] = last_request.vehicle_model or ""
                 validated_data['vehicle_year'] = last_request.vehicle_year
                 validated_data['vehicle_vin'] = last_request.vehicle_vin
-                validated_data['vehicle_registration'] = last_request.vehicle_registration
+                validated_data['vehicle_registration'] = last_request.vehicle_registration or ""
                 if not validated_data.get('user_vehicle'):
                     validated_data['user_vehicle'] = last_request.user_vehicle
 
