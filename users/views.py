@@ -4463,10 +4463,16 @@ class NotificationDetailView(APIView):
                 api_response(message=data, status=False),
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
+        active_role = getattr(request.user, "active_role", None)
         try:
-            notification = Notification.objects.get(
-                id=notification_id, user=request.user
-            )
+            # Filter by authenticated user and their active role
+            queryset = Notification.objects.filter(user=request.user)
+            if active_role:
+                queryset = queryset.filter(
+                    models.Q(role=active_role) | models.Q(role__isnull=True)
+                )
+
+            notification = queryset.get(id=notification_id)
             serializer = NotificationSerializer(notification)
             return Response(
                 api_response(
@@ -4492,10 +4498,16 @@ class NotificationDetailView(APIView):
                 api_response(message=data, status=False),
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
+        active_role = getattr(request.user, "active_role", None)
         try:
-            notification = Notification.objects.get(
-                id=notification_id, user=request.user
-            )
+            # Filter by authenticated user and their active role
+            queryset = Notification.objects.filter(user=request.user)
+            if active_role:
+                queryset = queryset.filter(
+                    models.Q(role=active_role) | models.Q(role__isnull=True)
+                )
+
+            notification = queryset.get(id=notification_id)
             notification.mark_as_read()
             serializer = NotificationSerializer(notification)
             return Response(
@@ -4526,9 +4538,14 @@ class NotificationMarkAllReadView(APIView):
                 api_response(message=data, status=False),
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
-        updated_count = Notification.objects.filter(
-            user=request.user, is_read=False
-        ).update(is_read=True, read_at=timezone.now())
+        active_role = getattr(request.user, "active_role", None)
+        queryset = Notification.objects.filter(user=request.user, is_read=False)
+        if active_role:
+            queryset = queryset.filter(
+                models.Q(role=active_role) | models.Q(role__isnull=True)
+            )
+
+        updated_count = queryset.update(is_read=True, read_at=timezone.now())
         return Response(
             api_response(
                 message=f"Marked {updated_count} notifications as read",

@@ -178,7 +178,7 @@ class NotificationService:
                         "notification_type": notification.notification_type,
                         "related_object_id": str(notification.related_object_id) if notification.related_object_id else None,
                         "related_object_type": notification.related_object_type,
-                        "created_at": notification.created_at.isoformat(),
+                        "created_at": notification.created_at.isoformat() if notification.created_at else None,
                         "is_read": notification.is_read
                     }
                 }

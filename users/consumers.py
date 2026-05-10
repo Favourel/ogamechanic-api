@@ -59,10 +59,12 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
             if message_type == 'mark_read':
                 notification_id = data.get('notification_id')
-                await self.mark_notification_read(notification_id)
+                if await self.mark_notification_read(notification_id):
+                    await self.send_notification_count_update()
 
             elif message_type == 'mark_all_read':
-                await self.mark_all_notifications_read()
+                if await self.mark_all_notifications_read():
+                    await self.send_notification_count_update()
 
             elif message_type == 'get_notifications':
                 page = data.get('page', 1)
@@ -86,6 +88,8 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             'type': 'notification.new',
             'notification': event['message']
         }))
+        # Update unread count for all user's connected tabs
+        await self.send_notification_count_update()
 
     async def notification_count_update(self, event):
         """Send notification count update to WebSocket"""
@@ -96,20 +100,35 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def get_unread_notifications_count(self):
-        """Get count of unread notifications for user"""
-        return Notification.objects.filter(
+        """Get count of unread notifications for user and active role"""
+        from django.db.models import Q
+        active_role = getattr(self.user, 'active_role', None)
+        
+        queryset = Notification.objects.filter(
             user=self.user,
             is_read=False
-        ).count()
+        )
+        
+        if active_role:
+            queryset = queryset.filter(
+                Q(role=active_role) | Q(role__isnull=True)
+            )
+            
+        return queryset.count()
 
     @database_sync_to_async
     def mark_notification_read(self, notification_id):
-        """Mark a specific notification as read"""
+        """Mark a specific notification as read if it belongs to user and active role"""
+        from django.db.models import Q
+        active_role = getattr(self.user, 'active_role', None)
         try:
-            notification = Notification.objects.get(
-                id=notification_id,
-                user=self.user
-            )
+            queryset = Notification.objects.filter(user=self.user)
+            if active_role:
+                queryset = queryset.filter(
+                    Q(role=active_role) | Q(role__isnull=True)
+                )
+            
+            notification = queryset.get(id=notification_id)
             notification.mark_as_read()
             return True
         except Notification.DoesNotExist:
@@ -117,22 +136,43 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def mark_all_notifications_read(self):
-        """Mark all user notifications as read"""
+        """Mark all user notifications as read for current active role"""
         from django.utils import timezone
-        updated_count = Notification.objects.filter(
+        from django.db.models import Q
+        
+        active_role = getattr(self.user, 'active_role', None)
+        
+        queryset = Notification.objects.filter(
             user=self.user,
             is_read=False
-        ).update(is_read=True, read_at=timezone.now())
+        )
+        
+        if active_role:
+            queryset = queryset.filter(
+                Q(role=active_role) | Q(role__isnull=True)
+            )
+            
+        updated_count = queryset.update(is_read=True, read_at=timezone.now())
         return updated_count
 
     @database_sync_to_async
     def get_notifications_page(self, page, limit):
-        """Get paginated notifications for user"""
+        """Get paginated notifications for user and active role"""
         from django.core.paginator import Paginator
-
+        from django.db.models import Q
+        
+        active_role = getattr(self.user, 'active_role', None)
+        
         notifications = Notification.objects.filter(
             user=self.user
-        ).order_by('-created_at')
+        )
+        
+        if active_role:
+            notifications = notifications.filter(
+                Q(role=active_role) | Q(role__isnull=True)
+            )
+            
+        notifications = notifications.order_by('-created_at')
 
         paginator = Paginator(notifications, limit)
         page_obj = paginator.get_page(page)
@@ -145,7 +185,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                     'message': notification.message,
                     'notification_type': notification.notification_type,
                     'is_read': notification.is_read,
-                    'created_at': notification.created_at.isoformat(),
+                    'created_at': notification.created_at.isoformat() if notification.created_at else None,
                     'read_at': notification.read_at.isoformat() if notification.read_at else None
                 }
                 for notification in page_obj
