@@ -76,7 +76,8 @@ schema_info = openapi.Info(
 schema_view = get_schema_view(
     schema_info,
     public=True,
-    permission_classes=(AllowAny,) if settings.DEBUG else (DocsAccessPermission,), # noqa
+    permission_classes=(AllowAny,),
+    # permission_classes=(AllowAny,) if settings.DEBUG else (DocsAccessPermission,), # noqa
     url=API_URL,
 )
 
