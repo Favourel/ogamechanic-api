@@ -7789,6 +7789,8 @@ class DetailPendingKYCView(APIView):
                 user_profiles.append(("driver", user.driver_profile, DRIVER_KYC_REQUIRED_FIELDS))
             if hasattr(user, 'rider_profile'):
                 user_profiles.append(("rider", user.rider_profile, RIDER_KYC_REQUIRED_FIELDS))
+            if hasattr(user, 'vehicle_rental_profile'):
+                user_profiles.append(("vehicle_rental", user.vehicle_rental_profile, VEHICLE_RENTAL_KYC_REQUIRED_FIELDS))
             
             # Filter by role if specified
             role_filter = request.query_params.get("role", "").strip()
@@ -7920,6 +7922,16 @@ class DetailPendingKYCView(APIView):
                     "role": "rider",
                     "user": profile.user,
                     "kyc_fields": RIDER_KYC_REQUIRED_FIELDS,
+                })
+
+        if not role_filter or role_filter == "vehicle_rental":
+            rental_profiles = VehicleRentalProfile.objects.filter(is_approved=False).select_related("user")
+            for profile in rental_profiles:
+                pending_profiles.append({
+                    "profile": profile,
+                    "role": "vehicle_rental",
+                    "user": profile.user,
+                    "kyc_fields": VEHICLE_RENTAL_KYC_REQUIRED_FIELDS,
                 })
 
         complete_pending_profiles = pending_profiles  # Initialize with all pending profiles
