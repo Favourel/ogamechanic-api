@@ -1546,3 +1546,28 @@ class VehicleRentalProfile(models.Model):
 
     def __str__(self):
         return f"VehicleRentalProfile: {self.user.email}"
+
+
+class PasswordResetToken(models.Model):
+    """
+    Model to store 6-digit alphanumeric password reset codes.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_tokens')
+    token = models.CharField(max_length=6, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_used = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['token', 'is_used']),
+        ]
+
+    def is_valid(self):
+        # Token is valid for 1 hour
+        from django.utils import timezone
+        from datetime import timedelta
+        return not self.is_used and self.created_at >= timezone.now() - timedelta(hours=1)
+
+    def __str__(self):
+        return f"ResetToken for {self.user.email}: {self.token}"

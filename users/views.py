@@ -4194,12 +4194,24 @@ class PasswordResetConfirmView(APIView):
             validate_password(password)
 
             # Verify token and get user
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-            user = User.objects.get(id=payload["user_id"])
+            from users.models import PasswordResetToken
+            reset_token = PasswordResetToken.objects.filter(token=token, is_used=False).first()
+            
+            if not reset_token or not reset_token.is_valid():
+                return Response(
+                    api_response(message="Invalid or expired token", status=False),
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+            
+            user = reset_token.user
 
             # Update password
             user.set_password(password)
             user.save()
+            
+            # Mark token as used
+            reset_token.is_used = True
+            reset_token.save()
 
             return Response(
                 api_response(message="Password reset successful", status=True)
@@ -4213,7 +4225,7 @@ class PasswordResetConfirmView(APIView):
                 ),
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
-        except (jwt.InvalidTokenError, User.DoesNotExist):
+        except User.DoesNotExist:
             return Response(
                 api_response(message="Invalid or expired token", status=False),
                 status=http_status.HTTP_400_BAD_REQUEST,

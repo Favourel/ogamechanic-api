@@ -289,22 +289,20 @@ class PasswordResetSerializer(serializers.Serializer):
         return value
 
     def save(self):
-        import uuid
+        import secrets
+        import string
+        from users.models import PasswordResetToken
 
         email = self.validated_data["email"]
         user = User.objects.get(email=email)
 
-        # Ensure any UUIDs in the payload are converted to str
-        payload = {
-            "user_email": user.email,
-            "user_id": (
-                str(user.id) if isinstance(user.id, uuid.UUID) else user.id
-            ),  # noqa
-            "exp": datetime.utcnow()
-            + timedelta(hours=settings.PASSWORD_RESET_TIMEOUT // 3600),
-        }
+        # Generate a 6-digit alphanumeric token
+        alphabet = string.ascii_uppercase + string.digits
+        token = ''.join(secrets.choice(alphabet) for i in range(6))
 
-        token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+        # Save the token to the database
+        PasswordResetToken.objects.create(user=user, token=token)
+
         # Send password reset email asynchronously
         send_password_reset_email.delay(email, token)
 
