@@ -1895,6 +1895,12 @@ class UserActivationView(APIView):
                 except RiderProfile.DoesNotExist:
                     pass
 
+            if user.roles.filter(name="vehicle_rental").exists():
+                try:
+                    user_profiles.append(("vehicle_rental", user.vehicle_rental_profile))
+                except VehicleRentalProfile.DoesNotExist:
+                    pass
+
             if action == "activate":
                 user.is_active = True
                 user.save()
