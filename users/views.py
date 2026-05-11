@@ -8301,49 +8301,6 @@ class PrimaryUserProfileView(APIView):
                 user.profile_picture = profile_picture
                 updated_fields.append("profile_picture")
 
-            # Update car details
-            if "car_make" in data:
-                user.car_make = (data.get("car_make") or "").strip() or None
-                updated_fields.append("car_make")
-
-            if "car_model" in data:
-                user.car_model = (data.get("car_model") or "").strip() or None
-                updated_fields.append("car_model")
-
-            if "car_year" in data:
-                car_year = data.get("car_year")
-                if car_year in [None, ""]:
-                    user.car_year = None
-                    updated_fields.append("car_year")
-                else:
-                    try:
-                        user.car_year = int(car_year)
-                        updated_fields.append("car_year")
-                    except Exception:
-                        return Response(
-                            api_response(
-                                message="Invalid car_year",
-                                status=False,
-                                errors={"car_year": ["Must be an integer"]},
-                            ),
-                            status=http_status.HTTP_400_BAD_REQUEST,
-                        )
-
-            if "license_plate" in data:
-                user.license_plate = (
-                    (data.get("license_plate") or "").strip() or None
-                )
-                updated_fields.append("license_plate")
-
-            # Check if any fields were updated
-            if not updated_fields:
-                return Response(
-                    api_response(
-                        message="No valid fields provided for update", status=False
-                    ),
-                    status=http_status.HTTP_400_BAD_REQUEST,
-                )
-
             # Save user
             user.save()
 
@@ -8352,7 +8309,7 @@ class PrimaryUserProfileView(APIView):
                 UserActivityLog.objects.create(
                     user=user,
                     action="profile_updated",
-                    details=f"Updated fields: {', '.join(updated_fields)}",
+                    description=f"Updated fields: {', '.join(updated_fields)}",
                 )
             except Exception as e:
                 logger.error(f"Failed to log profile update: {e}")
@@ -8365,10 +8322,6 @@ class PrimaryUserProfileView(APIView):
                 "phone_number": user.phone_number or "",
                 "date_of_birth": user.date_of_birth,
                 "gender": user.gender,
-                "car_make": user.car_make,
-                "car_model": user.car_model,
-                "car_year": user.car_year,
-                "license_plate": user.license_plate,
             }
 
             return Response(

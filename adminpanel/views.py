@@ -7668,8 +7668,9 @@ class PendingKYCView(APIView):
                 serializer = DriverProfileSerializer(profile, context={'request': request})
             elif role == "rider":
                 serializer = RiderProfileSerializer(profile, context={'request': request})
+            elif role == "vehicle_rental":
+                serializer = VehicleRentalProfileSerializer(profile, context={'request': request})
             profile_data = serializer.data
-
             pending_kyc_data.append({
                 "user_id": str(user.id),
                 "role": role,
@@ -7818,6 +7819,8 @@ class DetailPendingKYCView(APIView):
                     serializer = DriverProfileSerializer(profile, context={'request': request})
                 elif role == "rider":
                     serializer = RiderProfileSerializer(profile, context={'request': request}) 
+                elif role == "vehicle_rental":
+                    serializer = VehicleRentalProfileSerializer(profile, context={'request': request})
                 
                 profile_data = serializer.data
                 
@@ -7974,10 +7977,10 @@ class DetailPendingKYCView(APIView):
                 serializer = MerchantProfileSerializer(profile, context={'request': request})
             elif role == "mechanic":
                 serializer = MechanicProfileSerializer(profile, context={'request': request})
-            elif role == "driver":
-                serializer = DriverProfileSerializer(profile, context={'request': request})
             elif role == "rider":
                 serializer = RiderProfileSerializer(profile, context={'request': request})
+            elif role == "vehicle_rental":
+                serializer = VehicleRentalProfileSerializer(profile, context={'request': request})
             profile_data = serializer.data
 
             pending_kyc_data.append({
