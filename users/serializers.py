@@ -772,6 +772,8 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
 
 class VehicleRentalProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
+    has_reached_product_limit = serializers.SerializerMethodField()
+    active_product_count = serializers.SerializerMethodField()
 
     class Meta:
         model = VehicleRentalProfile
@@ -793,6 +795,8 @@ class VehicleRentalProfileSerializer(serializers.ModelSerializer):
             "is_subscribed",
             "subscription_expires_at",
             "subscription_payment_reference",
+            "has_reached_product_limit",
+            "active_product_count",
             "created_at",
             "updated_at",
         ]
@@ -803,6 +807,8 @@ class VehicleRentalProfileSerializer(serializers.ModelSerializer):
             "is_subscribed",
             "subscription_expires_at",
             "subscription_payment_reference",
+            "has_reached_product_limit",
+            "active_product_count",
             "created_at",
             "updated_at",
         ]
@@ -810,6 +816,31 @@ class VehicleRentalProfileSerializer(serializers.ModelSerializer):
     def get_user(self, obj):
         from users.serializers import UserSerializer
         return UserSerializer(obj.user).data
+
+    def _get_active_product_count(self, obj):
+        if not hasattr(self, '_active_count'):
+            from products.models import Product
+            self._active_count = Product.objects.filter(merchant=obj.user, is_active=True).count()
+        return self._active_count
+
+    def get_active_product_count(self, obj):
+        return self._get_active_product_count(obj)
+
+    def get_has_reached_product_limit(self, obj):
+        """Returns True if a non-subscribed rental operator has 2 or more active products."""
+        # 1. Check subscription status
+        from django.utils import timezone
+        is_subscribed = obj.is_subscribed
+        if is_subscribed and obj.subscription_expires_at:
+            if obj.subscription_expires_at < timezone.now():
+                is_subscribed = False
+
+        if is_subscribed:
+            return False
+
+        # 2. Check active products against limit
+        active_count = self._get_active_product_count(obj)
+        return active_count >= 2
 
     def _get_absolute_url(self, url, request=None):
         if not url:
@@ -834,6 +865,11 @@ class VehicleRentalProfileSerializer(serializers.ModelSerializer):
             else:
                 data[field_name] = None
         return data
+
+    def create(self, validated_data):
+        user = self.context['request'].user
+        validated_data['user'] = user
+        return VehicleRentalProfile.objects.create(**validated_data)
 
 
 class DriverProfileSerializer(serializers.ModelSerializer):

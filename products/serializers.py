@@ -447,42 +447,57 @@ class ProductCreateSerializer(serializers.ModelSerializer):
                             })
 
         # Subscription and Product Limit Validation
-        # Only enforce for merchants
         request = self.context.get('request')
         if not request:
             return attrs
 
         user = request.user
         active_role = getattr(user, 'active_role', None)
-        if active_role and active_role.name == 'merchant':
+        active_role_name = getattr(active_role, 'name', None) if active_role else None
+        
+        if active_role_name in ['merchant', 'vehicle_rental']:
             is_active = attrs.get('is_active', True)
             
             # Only check limit if product is being set to active
             if is_active:
-                # Check if merchant has a subscription
-                from users.models import MerchantProfile
-                try:
-                    merchant_profile = MerchantProfile.objects.get(user=user)
-                    is_subscribed = merchant_profile.is_subscribed
-                    # Also check expiry if subscribed
-                    if is_subscribed and merchant_profile.subscription_expires_at:
-                        from django.utils import timezone
-                        if merchant_profile.subscription_expires_at < timezone.now():
-                            is_subscribed = False
-                except MerchantProfile.DoesNotExist:
-                    is_subscribed = False
+                is_subscribed = False
+                
+                if active_role_name == 'merchant':
+                    from users.models import MerchantProfile
+                    try:
+                        profile = MerchantProfile.objects.get(user=user)
+                        is_subscribed = profile.is_subscribed
+                        if is_subscribed and profile.subscription_expires_at:
+                            from django.utils import timezone
+                            if profile.subscription_expires_at < timezone.now():
+                                is_subscribed = False
+                    except MerchantProfile.DoesNotExist:
+                        is_subscribed = False
+                
+                elif active_role_name == 'vehicle_rental':
+                    from users.models import VehicleRentalProfile
+                    try:
+                        profile = VehicleRentalProfile.objects.get(user=user)
+                        is_subscribed = profile.is_subscribed
+                        if is_subscribed and profile.subscription_expires_at:
+                            from django.utils import timezone
+                            if profile.subscription_expires_at < timezone.now():
+                                is_subscribed = False
+                    except VehicleRentalProfile.DoesNotExist:
+                        is_subscribed = False
                 
                 if not is_subscribed:
-                    # Count current active products for this merchant
+                    # Count current active products for this user
                     active_count = Product.objects.filter(
                         merchant=user, 
                         is_active=True
                     ).exclude(id=self.instance.id if self.instance else None).count()
                     
                     if active_count >= 2:
+                        role_label = "merchants" if active_role_name == "merchant" else "vehicle rental operators"
                         raise serializers.ValidationError({
                             "is_active": (
-                                "You have reached the limit of 2 active products for non-subscribed merchants. "
+                                f"You have reached the limit of 2 active products for non-subscribed {role_label}. "
                                 "Please subscribe for unlimited uploads or deactivate an existing product."
                             )
                         })
