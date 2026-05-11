@@ -608,6 +608,34 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
         required=False
     )
 
+    def to_internal_value(self, data):
+        # Handle cases where 'specializations' is sent instead of 'specialization_ids'
+        # and handle JSON strings (common in multipart/form-data)
+        if 'specializations' in data and 'specialization_ids' not in data:
+            data = data.copy()
+            val = data.get('specializations')
+            if isinstance(val, str):
+                import json
+                try:
+                    data['specialization_ids'] = json.loads(val)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            else:
+                data['specialization_ids'] = val
+        
+        # Also handle specialization_ids if sent as a JSON string
+        elif 'specialization_ids' in data:
+            val = data.get('specialization_ids')
+            if isinstance(val, str):
+                import json
+                try:
+                    data = data.copy()
+                    data['specialization_ids'] = json.loads(val)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+                    
+        return super().to_internal_value(data)
+
     class Meta:
         model = MechanicProfile
         fields = [

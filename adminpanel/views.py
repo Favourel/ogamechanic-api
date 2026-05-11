@@ -50,6 +50,7 @@ from users.views import (
     MECHANIC_KYC_REQUIRED_FIELDS,
     DRIVER_KYC_REQUIRED_FIELDS,
     RIDER_KYC_REQUIRED_FIELDS,
+    VEHICLE_RENTAL_KYC_REQUIRED_FIELDS,
 )
 from mechanics.models import MechanicVehicleExpertise
 from mechanics.serializers import (
@@ -7596,6 +7597,16 @@ class PendingKYCView(APIView):
                     "role": "rider",
                     "user": profile.user,
                     "kyc_fields": RIDER_KYC_REQUIRED_FIELDS,
+                })
+
+        if not role_filter or role_filter == "vehicle_rental":
+            rental_profiles = VehicleRentalProfile.objects.filter(is_approved=False).select_related("user")
+            for profile in rental_profiles:
+                pending_profiles.append({
+                    "profile": profile,
+                    "role": "vehicle_rental",
+                    "user": profile.user,
+                    "kyc_fields": VEHICLE_RENTAL_KYC_REQUIRED_FIELDS,
                 })
 
         complete_pending_profiles = pending_profiles  # Initialize with all pending profiles

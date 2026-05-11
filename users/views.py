@@ -6446,11 +6446,12 @@ class MerchantSubscriptionInitView(APIView):
                 status=400
             )
 
-        # Ensure user is a merchant
+        # Ensure user has a valid role for subscription
         active_role = getattr(request.user, 'active_role', None)
-        if not active_role or active_role.name != 'merchant':
+        allowed_roles = ['merchant', 'mechanic', 'vehicle_rental']
+        if not active_role or active_role.name not in allowed_roles:
             return Response(
-                api_response(message="Only merchants can subscribe.", status=False),
+                api_response(message="Your current role does not support subscriptions.", status=False),
                 status=403
             )
 
