@@ -537,6 +537,16 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             return self._get_absolute_url(obj.cac_document.url, request)
         return None
 
+    def to_internal_value(self, data):
+        # Handle file fields sent as strings (URLs) - happens on frontend updates
+        file_fields = ['cac_document', 'selfie', 'nin_document']
+        for field in file_fields:
+            if field in data and isinstance(data.get(field), str):
+                if not isinstance(data, dict):
+                    data = data.copy()
+                data.pop(field)
+        return super().to_internal_value(data)
+
     def get_selfie(self, obj):
         request = self.context.get('request', None)
         if obj.selfie and hasattr(obj.selfie, 'url'):
@@ -631,6 +641,16 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
                     data['specialization_ids'] = json.loads(val)
                 except (json.JSONDecodeError, ValueError):
                     pass
+                    
+        # Handle file fields sent as strings (URLs) - happens on frontend updates
+        file_fields = ['cac_document', 'selfie', 'government_id_front', 'government_id_back', 'nin_document', 'certificate_of_learning']
+        for field in file_fields:
+            if field in data and isinstance(data.get(field), str):
+                # If it's a string, it's likely the URL from the previous response
+                # We copy data to avoid mutating the original dict if it's QueryDict
+                if not isinstance(data, dict):
+                    data = data.copy()
+                data.pop(field)
                     
         return super().to_internal_value(data)
 
@@ -813,6 +833,16 @@ class VehicleRentalProfileSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+    def to_internal_value(self, data):
+        # Handle file fields sent as strings (URLs) - happens on frontend updates
+        file_fields = ['cac_document', 'selfie', 'nin_document']
+        for field in file_fields:
+            if field in data and isinstance(data.get(field), str):
+                if not isinstance(data, dict):
+                    data = data.copy()
+                data.pop(field)
+        return super().to_internal_value(data)
+
     def get_user(self, obj):
         from users.serializers import UserSerializer
         return UserSerializer(obj.user).data
@@ -968,6 +998,29 @@ class DriverProfileSerializer(serializers.ModelSerializer):
         if hasattr(settings, "SITE_DOMAIN"):
             return f"{settings.SITE_DOMAIN}{url}"
         return url
+
+    def to_internal_value(self, data):
+        # Handle file fields sent as strings (URLs) - happens on frontend updates
+        file_fields = [
+            'license_front_image',
+            'license_back_image',
+            'vehicle_photo_front',
+            'vehicle_photo_back',
+            'vehicle_photo_right',
+            'vehicle_photo_left',
+            'government_id_front',
+            'government_id_back',
+            'driver_license',
+            'insurance_document',
+            'selfie',
+            'nin_document'
+        ]
+        for field in file_fields:
+            if field in data and isinstance(data.get(field), str):
+                if not isinstance(data, dict):
+                    data = data.copy()
+                data.pop(field)
+        return super().to_internal_value(data)
 
     def get_license_front_image(self, obj):
         request = self.context.get('request', None)

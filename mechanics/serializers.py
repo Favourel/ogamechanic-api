@@ -110,8 +110,28 @@ class RepairRequestSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        # Ensure either service_categories or service_type (String) is provided
-        if not attrs.get('service_categories') and not attrs.get('service_type'):
+        # If it's a partial update (PATCH), and these fields are not in attrs, they are not being changed.
+        # We only need to validate if at least one of them is present in attrs OR if it's a creation.
+        
+        is_update = self.instance is not None
+        
+        # In case of update, if neither field is being updated, we assume the existing state is valid.
+        if is_update and 'service_categories' not in attrs and 'service_type' not in attrs:
+            return attrs
+            
+        # For creation or if at least one is being updated
+        service_categories = attrs.get('service_categories')
+        service_type = attrs.get('service_type')
+        
+        # If it's an update, we might be clearing one field while the other still has a value
+        if is_update:
+            if 'service_categories' not in attrs:
+                # We need to check the actual relationship for service categories
+                service_categories = self.instance.service_categories.exists()
+            if 'service_type' not in attrs:
+                service_type = self.instance.service_type
+
+        if not service_categories and not service_type:
             raise serializers.ValidationError(
                 "Either 'service_categories' (IDs) or 'service_type' (name) must be provided."
             )

@@ -22,20 +22,15 @@ def send_password_reset_email(self, email, reset_token):
     logger = logging.getLogger(__name__)
     subject = 'Password Reset Request'
 
-    frontend_url = getattr(settings, 'FRONTEND_URL', None)
-    if not frontend_url:
-        logger.error("FRONTEND_URL is not set in settings.")
-        return
-
-    reset_url = f"{frontend_url}/reset-password?token={reset_token}"
+    subject = 'Password Reset Request'
 
     try:
         html_message = render_to_string(
             'emails/password_reset.html',
             {
-                'reset_url': reset_url,
+                'reset_code': reset_token,
                 'expiry_hours': getattr(settings, 'PASSWORD_RESET_TIMEOUT', 3600) // 3600,  # noqa
-                'now': timezone.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'now': timezone.now(),
             }
         )
         plain_message = strip_tags(html_message)
