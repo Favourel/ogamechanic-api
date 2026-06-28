@@ -1532,6 +1532,8 @@ class VehicleRentalProfile(models.Model):
     
     is_approved = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    disapproved = models.BooleanField(default=False)
+    disapproval_reason = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
