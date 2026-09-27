@@ -2,9 +2,11 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from celery.schedules import crontab
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 LOG_DIR = os.path.join(BASE_DIR, 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -376,8 +378,24 @@ REST_AUTH = {
     'TOKEN_MODEL': None,
 }
 
+# Google Authentication Configuration
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '113954419006-ngbls808fq260861rc0inh74hu9v8g0l.apps.googleusercontent.com')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
+
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
+        'APP': {
+            'client_id': GOOGLE_CLIENT_ID,
+            'secret': GOOGLE_CLIENT_SECRET,
+            'key': '',
+        },
+        'APPS': [
+            {
+                'client_id': GOOGLE_CLIENT_ID,
+                'secret': GOOGLE_CLIENT_SECRET,
+                'key': '',
+            }
+        ],
         'SCOPE': [
             'profile',
             'email',
@@ -390,3 +408,9 @@ SOCIALACCOUNT_PROVIDERS = {
 }
 # Expo Push Notification Configuration
 EXPO_ACCESS_TOKEN = os.getenv('EXPO_ACCESS_TOKEN', '')
+
+# Didit Identity Verification Configuration
+DIDIT_API_KEY = os.getenv('DIDIT_API_KEY', '')
+DIDIT_API_URL = os.getenv('DIDIT_API_URL', 'https://verification.didit.me')
+DIDIT_MOCK_SUCCESS = os.getenv('DIDIT_MOCK_SUCCESS', 'False').lower() in ('true', '1', 't')
+

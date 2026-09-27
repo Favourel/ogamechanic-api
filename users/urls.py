@@ -42,6 +42,7 @@ urlpatterns = [
     # ),
     path('login/', views.LoginView.as_view(), name='login'),
     path('google/', views.GoogleLogin.as_view(), name='google_login'),
+    path('auth/google/', views.GoogleLogin.as_view(), name='google_auth'),
     path(
         'token/refresh/',
         views.TokenRefreshView.as_view(),
@@ -100,6 +101,18 @@ urlpatterns = [
         'verify-email/',
         views.EmailVerificationAPIView.as_view(),
         name='verify_email'
+    ),
+
+    # NIN Identity Verification (Didit)
+    path(
+        'nin/verify/',
+        views.NINVerificationView.as_view(),
+        name='nin_verify'
+    ),
+    path(
+        'nin/status/',
+        views.NINStatusView.as_view(),
+        name='nin_status'
     ),
 
     # Profile Management endpoints

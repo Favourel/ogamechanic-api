@@ -183,6 +183,15 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.email
 
+    @property
+    def is_nin_verified(self):
+        """Check if any of user's profiles have verified NIN or user has verified NIN record."""
+        for rel in ['mechanic_profile', 'merchant_profile', 'driver_profile', 'rider_profile', 'vehicle_rental_profile']:
+            prof = getattr(self, rel, None)
+            if prof and getattr(prof, 'nin_is_verified', False):
+                return True
+        return self.nin_verifications.filter(status='verified').exists()
+
 
 class AreaOfSpecialization(models.Model):
     """
@@ -396,6 +405,66 @@ class UserEmailVerification(models.Model):
         ]
 
 
+class NINVerification(models.Model):
+    """
+    Model to track National Identification Number (NIN) verification
+    attempts and results via Didit API.
+    """
+    STATUS_PENDING = 'pending'
+    STATUS_VERIFIED = 'verified'
+    STATUS_FAILED = 'failed'
+    STATUS_PARTIAL_MATCH = 'partial_match'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, _('Pending')),
+        (STATUS_VERIFIED, _('Verified')),
+        (STATUS_FAILED, _('Failed')),
+        (STATUS_PARTIAL_MATCH, _('Partial Match')),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        'User', on_delete=models.CASCADE, related_name='nin_verifications'
+    )
+    nin_number = models.CharField(max_length=20)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING
+    )
+    request_id = models.CharField(max_length=100, blank=True, null=True)
+    first_name = models.CharField(max_length=100, blank=True)
+    last_name = models.CharField(max_length=100, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    role = models.CharField(
+        max_length=50, blank=True, null=True,
+        help_text="Role context (mechanic, merchant, driver, rider, vehicle_rental)"
+    )
+    response_data = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True, null=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _('NIN verification')
+        verbose_name_plural = _('NIN verifications')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['nin_number']),
+            models.Index(fields=['request_id']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f"NIN {self.masked_nin} - {self.user.email} ({self.status})"
+
+    @property
+    def masked_nin(self):
+        if self.nin_number and len(self.nin_number) >= 4:
+            return f"*******{self.nin_number[-4:]}"
+        return "*******"
+
+
 class Device(models.Model):
     user = models.ForeignKey(
         'User', on_delete=models.CASCADE,
@@ -444,6 +513,8 @@ class MerchantProfile(models.Model):
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
         blank=True, null=True
     )
+    nin_is_verified = models.BooleanField(default=False)
+    nin_verified_at = models.DateTimeField(null=True, blank=True)
 
     # Subscription fields
     is_subscribed = models.BooleanField(default=False)
@@ -522,6 +593,8 @@ class MechanicProfile(models.Model):
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
         blank=True, null=True
     )
+    nin_is_verified = models.BooleanField(default=False)
+    nin_verified_at = models.DateTimeField(null=True, blank=True)
     certificate_of_learning = models.FileField(
         upload_to='mechanic/certificates/',
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
@@ -659,6 +732,8 @@ class DriverProfile(models.Model):
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
         blank=True, null=True
     )
+    nin_is_verified = models.BooleanField(default=False)
+    nin_verified_at = models.DateTimeField(null=True, blank=True)
 
     # License Information
     license_number = models.CharField(max_length=50, blank=True, null=True)
@@ -871,6 +946,8 @@ class RiderProfile(models.Model):
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
         blank=True, null=True
     )
+    nin_is_verified = models.BooleanField(default=False)
+    nin_verified_at = models.DateTimeField(null=True, blank=True)
 
     GOVT_ID_TYPE_CHOICES = [
         ("NIN", "NIN"),
@@ -1522,6 +1599,8 @@ class VehicleRentalProfile(models.Model):
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
         blank=True, null=True
     )
+    nin_is_verified = models.BooleanField(default=False)
+    nin_verified_at = models.DateTimeField(null=True, blank=True)
 
     # Subscription fields
     is_subscribed = models.BooleanField(default=False)

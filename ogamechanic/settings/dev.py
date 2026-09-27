@@ -12,6 +12,7 @@ X_API_KEY = os.environ.get('X_API_KEY') # noqa
 
 # WhiteNoise configuration
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+WHITENOISE_MANIFEST_STRICT = False
 
 # Database (Development)
 # Note: For full spatial support, use PostgreSQL with PostGIS in production
@@ -169,6 +170,11 @@ PAYSTACK_SECRET_KEY = os.getenv('PAYSTACK_SECRET_KEY', '') # noqa
 PAYSTACK_PUBLIC_KEY = os.getenv('PAYSTACK_PUBLIC_KEY', '') # noqa
 PAYSTACK_API_URL = 'https://api.paystack.co'
 PAYSTACK_CALLBACK_URL = os.getenv('PAYSTACK_CALLBACK_URL', '') # noqa
+
+# Didit Identity Verification
+DIDIT_API_KEY = os.getenv('DIDIT_API_KEY', '') # noqa
+DIDIT_API_URL = os.getenv('DIDIT_API_URL', 'https://verification.didit.me') # noqa
+DIDIT_MOCK_SUCCESS = os.getenv('DIDIT_MOCK_SUCCESS', 'False').lower() in ('true', '1', 't') # noqa
 
 LOGGING = {
     "version": 1,

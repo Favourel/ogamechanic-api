@@ -15,6 +15,7 @@ from .models import (
     DriverReview,
     ContactMessage,
     EmailSubscription,
+    NINVerification,
 )
 from ogamechanic.modules.utils import api_response
 from ogamechanic.modules.exceptions import InvalidRequestException
@@ -139,6 +140,8 @@ class RiderProfileSerializer(serializers.ModelSerializer):
             "disapproval_reason",
             "nin_number",
             "nin_document",
+            "nin_is_verified",
+            "nin_verified_at",
             "created_at",
             "updated_at",
         ]
@@ -147,6 +150,8 @@ class RiderProfileSerializer(serializers.ModelSerializer):
             "user",
             "is_approved",
             "approved_at",
+            "nin_is_verified",
+            "nin_verified_at",
             "created_at",
             "updated_at",
         ]
@@ -247,6 +252,12 @@ class RiderProfileSerializer(serializers.ModelSerializer):
             else:
                 data[field_name] = None
         return data
+
+    def update(self, instance, validated_data):
+        if 'nin_number' in validated_data and validated_data['nin_number'] != instance.nin_number:
+            validated_data['nin_is_verified'] = False
+            validated_data['nin_verified_at'] = None
+        return super().update(instance, validated_data)
 
 
 class PasswordResetSerializer(serializers.Serializer):
@@ -480,6 +491,8 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             "active_product_count",
             "nin_number",
             "nin_document",
+            "nin_is_verified",
+            "nin_verified_at",
             "created_at",
             "updated_at",
         ]
@@ -489,6 +502,8 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             "subscription_payment_reference",
             "has_reached_product_limit",
             "active_product_count",
+            "nin_is_verified",
+            "nin_verified_at",
             "created_at", "updated_at"
         ]
 
@@ -571,6 +586,12 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             else:
                 data[field_name] = None
         return data
+
+    def update(self, instance, validated_data):
+        if 'nin_number' in validated_data and validated_data['nin_number'] != instance.nin_number:
+            validated_data['nin_is_verified'] = False
+            validated_data['nin_verified_at'] = None
+        return super().update(instance, validated_data)
 
 
 class MerchantSubscriptionInitSerializer(serializers.Serializer):
@@ -675,6 +696,8 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             "selfie",
             "nin_number",
             "nin_document",
+            "nin_is_verified",
+            "nin_verified_at",
             "certificate_of_learning",
             "govt_id_type",
             "government_id_front",
@@ -699,6 +722,8 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             "is_subscribed",
             "subscription_expires_at",
             "subscription_payment_reference",
+            "nin_is_verified",
+            "nin_verified_at",
             "created_at",
             "updated_at",
             "rating",
@@ -795,6 +820,12 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
                 data[field_name] = None
         return data
 
+    def update(self, instance, validated_data):
+        if 'nin_number' in validated_data and validated_data['nin_number'] != instance.nin_number:
+            validated_data['nin_is_verified'] = False
+            validated_data['nin_verified_at'] = None
+        return super().update(instance, validated_data)
+
 
 class VehicleRentalProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
@@ -816,6 +847,8 @@ class VehicleRentalProfileSerializer(serializers.ModelSerializer):
             "selfie",
             "nin_number",
             "nin_document",
+            "nin_is_verified",
+            "nin_verified_at",
             "is_approved",
             "is_active",
             "disapproved",
@@ -837,6 +870,8 @@ class VehicleRentalProfileSerializer(serializers.ModelSerializer):
             "subscription_payment_reference",
             "has_reached_product_limit",
             "active_product_count",
+            "nin_is_verified",
+            "nin_verified_at",
             "created_at",
             "updated_at",
         ]
@@ -909,6 +944,12 @@ class VehicleRentalProfileSerializer(serializers.ModelSerializer):
         validated_data['user'] = user
         return VehicleRentalProfile.objects.create(**validated_data)
 
+    def update(self, instance, validated_data):
+        if 'nin_number' in validated_data and validated_data['nin_number'] != instance.nin_number:
+            validated_data['nin_is_verified'] = False
+            validated_data['nin_verified_at'] = None
+        return super().update(instance, validated_data)
+
 
 class DriverProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
@@ -954,6 +995,8 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "driver_license",
             "nin_number",
             "nin_document",
+            "nin_is_verified",
+            "nin_verified_at",
             "rating",
             "is_approved",
             "approved_at",
@@ -966,6 +1009,8 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "user",
             "is_approved",
             "approved_at",
+            "nin_is_verified",
+            "nin_verified_at",
             "created_at",
             "updated_at",
         ]
@@ -1115,6 +1160,12 @@ class DriverProfileSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         validated_data['user'] = user
         return DriverProfile.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        if 'nin_number' in validated_data and validated_data['nin_number'] != instance.nin_number:
+            validated_data['nin_is_verified'] = False
+            validated_data['nin_verified_at'] = None
+        return super().update(instance, validated_data)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -2257,3 +2308,146 @@ class UserVehicleSwaggerSerializer(UserVehicleSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+
+
+class NINVerificationRequestSerializer(serializers.Serializer):
+    """
+    Serializer for NIN verification request.
+    """
+    nin_number = serializers.CharField(
+        max_length=20,
+        required=True,
+        help_text="11-digit National Identification Number"
+    )
+    first_name = serializers.CharField(
+        max_length=100,
+        required=False,
+        allow_blank=True,
+        help_text="First name as registered on NIN. Defaults to user's first name."
+    )
+    last_name = serializers.CharField(
+        max_length=100,
+        required=False,
+        allow_blank=True,
+        help_text="Last name as registered on NIN. Defaults to user's last name."
+    )
+    date_of_birth = serializers.DateField(
+        required=False,
+        allow_null=True,
+        help_text="Date of birth in YYYY-MM-DD format. Defaults to user's date of birth."
+    )
+    role = serializers.CharField(
+        max_length=50,
+        required=False,
+        allow_blank=True,
+        help_text="Role context (mechanic, merchant, driver, rider, vehicle_rental). Defaults to active role."
+    )
+
+    def validate_nin_number(self, value):
+        from users.didit_service import validate_nin_format
+        is_valid, result = validate_nin_format(value)
+        if not is_valid:
+            raise serializers.ValidationError(result)
+        return result
+
+
+class NINVerificationRecordSerializer(serializers.ModelSerializer):
+    """
+    Serializer for NIN verification audit history.
+    """
+    masked_nin = serializers.ReadOnlyField()
+
+    class Meta:
+        model = NINVerification
+        fields = [
+            "id",
+            "masked_nin",
+            "status",
+            "request_id",
+            "first_name",
+            "last_name",
+            "date_of_birth",
+            "role",
+            "error_message",
+            "verified_at",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class NINStatusResponseSerializer(serializers.Serializer):
+    """
+    Serializer for NIN verification status response.
+    """
+    is_nin_verified = serializers.BooleanField()
+    verified_nin = serializers.CharField(allow_null=True)
+    verified_at = serializers.DateTimeField(allow_null=True)
+    active_role = serializers.CharField(allow_null=True)
+    profiles = serializers.DictField()
+    recent_verifications = NINVerificationRecordSerializer(many=True)
+
+
+class GoogleAuthSerializer(serializers.Serializer):
+    """
+    Serializer for Google authentication (login and sign up).
+    Accepts an ID token (JWT from Google Sign-In SDK), OAuth2 access token,
+    Google One Tap credential, or authorization code.
+    """
+    id_token = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Google ID Token (JWT) from Google Sign-In SDK / Identity Services",
+    )
+    credential = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Alias for Google ID Token (used by Google One Tap Web)",
+    )
+    access_token = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Google OAuth2 Access Token",
+    )
+    code = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Google OAuth2 Authorization Code",
+    )
+    role = serializers.ChoiceField(
+        choices=[
+            ("primary_user", "Primary User"),
+            ("driver", "Driver"),
+            ("rider", "Rider"),
+            ("mechanic", "Mechanic"),
+            ("merchant", "Merchant"),
+            ("vehicle_rental", "Vehicle Rental"),
+        ],
+        required=False,
+        default="primary_user",
+        help_text="Target role if signing up a new account (default: primary_user)",
+    )
+    phone_number = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=20,
+        help_text="Optional phone number for new signups",
+    )
+    redirect_uri = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Redirect URI required when exchanging authorization code",
+    )
+
+    def validate(self, attrs):
+        token = (
+            attrs.get("id_token")
+            or attrs.get("credential")
+            or attrs.get("access_token")
+            or attrs.get("code")
+        )
+        if not token or not token.strip():
+            raise serializers.ValidationError(
+                "One of 'id_token', 'credential', 'access_token', or 'code' is required for Google authentication."
+            )
+        return attrs
+

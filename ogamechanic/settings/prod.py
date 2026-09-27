@@ -175,6 +175,11 @@ PAYSTACK_PUBLIC_KEY = os.getenv('PAYSTACK_PUBLIC_KEY', '') # noqa
 PAYSTACK_API_URL = 'https://api.paystack.co'
 PAYSTACK_CALLBACK_URL = os.getenv('PAYSTACK_CALLBACK_URL', '') # noqa
 
+# Didit Identity Verification
+DIDIT_API_KEY = os.getenv('DIDIT_API_KEY', '') # noqa
+DIDIT_API_URL = os.getenv('DIDIT_API_URL', 'https://verification.didit.me') # noqa
+DIDIT_MOCK_SUCCESS = os.getenv('DIDIT_MOCK_SUCCESS', 'False').lower() in ('true', '1', 't') # noqa
+
 # =============================================================================
 # RENDER.COM SPECIFIC CONFIGURATIONS
 # =============================================================================

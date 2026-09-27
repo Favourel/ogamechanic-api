@@ -52,8 +52,17 @@ services:
         sync: false
       - key: PAYSTACK_CALLBACK_URL
         value: "https://ogamechanic-web.onrender.com/api/payments/callback/"
+      - key: DIDIT_API_KEY
+        sync: false
+      - key: DIDIT_API_URL
+        value: "https://verification.didit.me"
+      - key: GOOGLE_CLIENT_ID
+        value: "113954419006-ngbls808fq260861rc0inh74hu9v8g0l.apps.googleusercontent.com"
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
       - key: GOOGLE_MAPS_API_KEY
         sync: false
+
       - key: FIREBASE_CREDENTIALS_PATH
         value: "/opt/render/project/src/ogamechanic-bbbb2-firebase-adminsdk-fbsvc-b5ecd1c17d.json"
       - key: BASE_FARE
@@ -139,6 +148,16 @@ services:
           type: web
           name: ogamechanic-web
           envVarKey: PAYSTACK_PUBLIC_KEY
+      - key: DIDIT_API_KEY
+        fromService:
+          type: web
+          name: ogamechanic-web
+          envVarKey: DIDIT_API_KEY
+      - key: DIDIT_API_URL
+        fromService:
+          type: web
+          name: ogamechanic-web
+          envVarKey: DIDIT_API_URL
       - key: GOOGLE_MAPS_API_KEY
         fromService:
           type: web

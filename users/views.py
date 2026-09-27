@@ -10,6 +10,7 @@ from rest_framework import status as http_status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework import viewsets, mixins
@@ -49,7 +50,13 @@ from .serializers import (
     MerchantSubscriptionInitResponseSerializer,
     VehicleRentalProfileSerializer,
     StepFourVehicleRentalDetailsSerializer,
+    NINVerificationRequestSerializer,
+    NINVerificationRecordSerializer,
+    NINStatusResponseSerializer,
+    GoogleAuthSerializer,
 )
+from users.didit_service import DiditVerificationService
+from users.services import NotificationService
 from django.core.files.storage import default_storage
 from ogamechanic.modules.utils import (
     api_response,
@@ -87,6 +94,7 @@ from .models import (
     VehicleRentalProfile,
     UserVehicle,
     UserVehicleImage,
+    NINVerification,
 )
 from .serializers import (
     WalletSerializer,
@@ -148,6 +156,7 @@ def _compute_kyc(profile, required_fields):
         "is_complete": len(missing) == 0,
         "missing_fields": missing,
         "missing_count": len(missing),
+        "nin_is_verified": getattr(profile, "nin_is_verified", False),
     }
 
 
@@ -158,6 +167,7 @@ def _compute_kyc_from_dict(profile_dict, required_fields):
             "is_complete": False,
             "missing_fields": list(required_fields),
             "missing_count": len(required_fields),
+            "nin_is_verified": False,
         }
 
     missing = []
@@ -174,6 +184,7 @@ def _compute_kyc_from_dict(profile_dict, required_fields):
         "is_complete": len(missing) == 0,
         "missing_fields": missing,
         "missing_count": len(missing),
+        "nin_is_verified": profile_dict.get("nin_is_verified", False),
     }
 
 
@@ -726,25 +737,211 @@ class UserRegistrationView(APIView):
             )
 
 
-class GoogleLogin(SocialLoginView):
+class GoogleLogin(APIView):
     """
-    Google Login / Signup endpoint.
-    
-    This endpoint allows users to log in or sign up using their Google account.
-    The client should provide the 'access_token' or 'code' received from Google.
+    Google Authentication (Sign Up & Login) endpoint.
+
+    Allows mobile and web clients to sign up or log in using Google.
+    Accepts:
+      - `id_token` (recommended for Google Sign-In SDK / Identity Services)
+      - `credential` (used by Google One Tap)
+      - `access_token` (Google OAuth2 access token)
+      - `code` (Google OAuth2 authorization code)
+      - `role` (optional, for new signups: 'primary_user', 'driver', 'rider', 'mechanic', 'merchant', 'vehicle_rental')
+      - `phone_number` (optional, for new signups)
+
+    Returns JWT access & refresh tokens, user profile data, and whether the account was newly created.
     """
-    adapter_class = GoogleOAuth2Adapter
-    callback_url = "https://ogamechanic.twopikin.com/api/users/google/callback/"  # Example callback
-    client_class = OAuth2Client
+
     permission_classes = [AllowAny]
+    throttle_classes = []
 
     @swagger_auto_schema(
-        operation_summary="Google Social Login",
-        operation_description="Authenticate using Google Social Account",
-        responses={200: "JWT tokens returned"}
+        operation_summary="Google Sign Up & Login",
+        operation_description=(
+            "Authenticate or register a user using Google OAuth/Identity Services.\n\n"
+            "Clients should send the `id_token` (or `credential` from Google One Tap, or `access_token`).\n"
+            "For new users, `role` can be provided (defaults to `primary_user`)."
+        ),
+        request_body=GoogleAuthSerializer,
+        responses={
+            200: openapi.Response(
+                description="Google login successful (existing user)",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "status": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                        "data": openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                "access": openapi.Schema(type=openapi.TYPE_STRING),
+                                "refresh": openapi.Schema(type=openapi.TYPE_STRING),
+                                "is_new_user": openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN
+                                ),
+                                "user": openapi.Schema(
+                                    type=openapi.TYPE_OBJECT
+                                ),
+                            },
+                        ),
+                    },
+                ),
+            ),
+            201: openapi.Response(
+                description="Google sign up successful (new user created)",
+            ),
+            400: "Invalid Google token, missing fields, or invalid role",
+            403: "User account is disabled",
+        },
     )
     def post(self, request, *args, **kwargs):
-        return super().post(request, *args, **kwargs)
+        # Extract payload: handle both direct JSON and wrapped {"data": {...}}
+        raw_data = request.data
+        if (
+            isinstance(raw_data, dict)
+            and "data" in raw_data
+            and isinstance(raw_data["data"], dict)
+        ):
+            payload = raw_data["data"]
+        else:
+            payload = raw_data
+
+        serializer = GoogleAuthSerializer(data=payload)
+        if not serializer.is_valid():
+            return Response(
+                api_response(
+                    message="Validation error",
+                    status=False,
+                    errors=serializer.errors,
+                ),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        validated_data = serializer.validated_data
+        id_token_str = (
+            validated_data.get("id_token")
+            or validated_data.get("credential")
+        )
+        access_token_str = validated_data.get("access_token")
+        code = validated_data.get("code")
+        redirect_uri = validated_data.get("redirect_uri")
+        role_name = validated_data.get("role", "primary_user")
+        phone_number = validated_data.get("phone_number")
+
+        from users.google_auth_service import (
+            verify_google_token,
+            exchange_code_for_tokens,
+            authenticate_or_register_google_user,
+        )
+
+        # Exchange authorization code if provided
+        if not id_token_str and not access_token_str and code:
+            try:
+                tokens = exchange_code_for_tokens(
+                    code, redirect_uri=redirect_uri
+                )
+                id_token_str = tokens.get("id_token")
+                access_token_str = tokens.get("access_token")
+            except Exception as e:
+                return Response(
+                    api_response(
+                        message=f"Failed to exchange Google authorization code: {str(e)}",
+                        status=False,
+                        errors={"code": [str(e)]},
+                    ),
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+
+        token_to_verify = id_token_str or access_token_str
+
+        # Verify token with Google
+        try:
+            google_info = verify_google_token(token_to_verify)
+        except Exception as e:
+            return Response(
+                api_response(
+                    message=f"Invalid Google token: {str(e)}",
+                    status=False,
+                    errors={"token": [str(e)]},
+                ),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Authenticate or register user
+        try:
+            user, is_new_user = authenticate_or_register_google_user(
+                google_info=google_info,
+                role_name=role_name,
+                phone_number=phone_number,
+            )
+        except PermissionDenied as e:
+            return Response(
+                api_response(message=str(e), status=False),
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+        except Exception as e:
+            return Response(
+                api_response(
+                    message=f"Google authentication failed: {str(e)}",
+                    status=False,
+                    errors={"error": [str(e)]},
+                ),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        access_jwt = str(refresh.access_token)
+        refresh_jwt = str(refresh)
+
+        # Log user activity
+        try:
+            UserActivityLog.objects.create(
+                user=user,
+                action="google_signup" if is_new_user else "google_login",
+                description=(
+                    f"User {'signed up' if is_new_user else 'logged in'} via Google "
+                    f"(email: {user.email}, role: {user.active_role.name if user.active_role else 'none'})"
+                ),
+                ip_address=request.META.get("REMOTE_ADDR"),
+                object_type="User",
+                object_id=str(user.id),
+                severity="low",
+            )
+        except Exception as log_err:
+            logger.warning(
+                f"Failed to log user activity for Google auth: {log_err}"
+            )
+
+        # Return standardized response
+        response_data = {
+            "access": access_jwt,
+            "refresh": refresh_jwt,
+            "user": UserSerializer(user).data,
+            "is_new_user": is_new_user,
+        }
+
+        success_message = (
+            "Google sign up successful"
+            if is_new_user
+            else "Google login successful"
+        )
+        status_code = (
+            http_status.HTTP_201_CREATED
+            if is_new_user
+            else http_status.HTTP_200_OK
+        )
+
+        return Response(
+            api_response(
+                message=success_message,
+                status=True,
+                data=response_data,
+            ),
+            status=status_code,
+        )
+
 
 
 class VerifyEmailCodeView(APIView):
@@ -5739,6 +5936,308 @@ class BankNameEnquiryView(APIView):
                 ),
                 status=500,
             )
+
+
+class NINVerificationView(APIView):
+    """
+    Verify a user's National Identification Number (NIN) against the
+    National Identity Management Commission (NIMC) database via Didit.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="Verify National Identification Number (NIN)",
+        operation_description=(
+            "Verify an 11-digit Nigerian National Identification Number (NIN) via Didit's "
+            "authoritative NIMC lookup service. Upon successful verification, the user's active "
+            "or specified profile (mechanic, merchant, driver, rider, vehicle_rental) will have "
+            "its NIN recorded and marked as verified."
+        ),
+        request_body=NINVerificationRequestSerializer,
+        responses={
+            200: openapi.Response(
+                description="NIN successfully verified",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "status": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                        "data": openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                "verification_id": openapi.Schema(type=openapi.TYPE_STRING),
+                                "status": openapi.Schema(type=openapi.TYPE_STRING),
+                                "nin_masked": openapi.Schema(type=openapi.TYPE_STRING),
+                                "updated_profiles": openapi.Schema(
+                                    type=openapi.TYPE_ARRAY,
+                                    items=openapi.Schema(type=openapi.TYPE_STRING),
+                                ),
+                                "verified_at": openapi.Schema(type=openapi.TYPE_STRING),
+                            },
+                        ),
+                    },
+                ),
+            ),
+            400: "Bad Request / Verification Failure",
+            500: "Internal Server Error",
+        },
+    )
+    def post(self, request):
+        if isinstance(request.data, dict) and "requestType" in request.data:
+            status_, data = incoming_request_checks(request)
+            if not status_:
+                return Response(
+                    api_response(message=data, status=False),
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            data = request.data
+
+        serializer = NINVerificationRequestSerializer(data=data)
+        if not serializer.is_valid():
+            return Response(
+                api_response(
+                    message="Invalid input data.",
+                    status=False,
+                    errors=serializer.errors,
+                ),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = request.user
+        validated_data = serializer.validated_data
+        nin_number = validated_data["nin_number"]
+
+        first_name = (validated_data.get("first_name") or user.first_name or "").strip()
+        last_name = (validated_data.get("last_name") or user.last_name or "").strip()
+        date_of_birth = validated_data.get("date_of_birth") or user.date_of_birth
+
+        if not first_name or not last_name:
+            return Response(
+                api_response(
+                    message="First name and last name are required for NIN verification. Please provide them or update your profile.",
+                    status=False,
+                ),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Target role
+        requested_role = validated_data.get("role")
+        if requested_role:
+            target_role = requested_role.lower().strip()
+        elif user.active_role:
+            target_role = user.active_role.name.lower()
+        else:
+            target_role = None
+
+        # Call Didit Verification Service
+        result = DiditVerificationService.verify_nin(
+            nin=nin_number,
+            first_name=first_name,
+            last_name=last_name,
+            date_of_birth=date_of_birth,
+            vendor_data=str(user.id),
+        )
+
+        is_success = result.get("success", False)
+        status_code = result.get("status", "FAILED")
+        request_id = result.get("request_id")
+        response_data = result.get("data", {})
+        message = result.get("message", "NIN verification completed.")
+
+        # Persist audit record in NINVerification
+        verification_record = NINVerification.objects.create(
+            user=user,
+            nin_number=nin_number,
+            status=NINVerification.STATUS_VERIFIED if is_success else NINVerification.STATUS_FAILED,
+            request_id=request_id,
+            first_name=first_name,
+            last_name=last_name,
+            date_of_birth=date_of_birth,
+            role=target_role,
+            response_data=response_data if isinstance(response_data, dict) else {},
+            error_message=message if not is_success else None,
+            verified_at=timezone.now() if is_success else None,
+        )
+
+        if not is_success:
+            return Response(
+                api_response(
+                    message=message,
+                    status=False,
+                    data={
+                        "verification_id": str(verification_record.id),
+                        "status": status_code,
+                        "request_id": request_id,
+                    },
+                ),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Update profiles on success
+        now = timezone.now()
+        updated_profiles = []
+
+        profile_map = {
+            "mechanic": "mechanic_profile",
+            "merchant": "merchant_profile",
+            "driver": "driver_profile",
+            "rider": "rider_profile",
+            "vehicle_rental": "vehicle_rental_profile",
+        }
+
+        if target_role and target_role in profile_map:
+            profile_attr = profile_map[target_role]
+            profile_instance = getattr(user, profile_attr, None)
+            if profile_instance:
+                profile_instance.nin_number = nin_number
+                profile_instance.nin_is_verified = True
+                profile_instance.nin_verified_at = now
+                profile_instance.save(update_fields=["nin_number", "nin_is_verified", "nin_verified_at"])
+                updated_profiles.append(target_role)
+        else:
+            for role_name, profile_attr in profile_map.items():
+                profile_instance = getattr(user, profile_attr, None)
+                if profile_instance:
+                    profile_instance.nin_number = nin_number
+                    profile_instance.nin_is_verified = True
+                    profile_instance.nin_verified_at = now
+                    profile_instance.save(update_fields=["nin_number", "nin_is_verified", "nin_verified_at"])
+                    updated_profiles.append(role_name)
+
+        # Update user names if previously blank
+        user_updates = []
+        if not user.first_name and first_name:
+            user.first_name = first_name
+            user_updates.append("first_name")
+        if not user.last_name and last_name:
+            user.last_name = last_name
+            user_updates.append("last_name")
+        if user_updates:
+            user.save(update_fields=user_updates)
+
+        # Send in-app notification
+        try:
+            NotificationService.create_notification(
+                user=user,
+                title="NIN Verified",
+                message="Your National Identification Number (NIN) has been successfully verified.",
+                notification_type="success",
+            )
+        except Exception as e:
+            logging.getLogger(__name__).warning("Could not send notification for NIN verification: %s", e)
+
+        return Response(
+            api_response(
+                message=message,
+                status=True,
+                data={
+                    "verification_id": str(verification_record.id),
+                    "status": "verified",
+                    "nin_masked": verification_record.masked_nin,
+                    "updated_profiles": updated_profiles,
+                    "verified_at": now.isoformat(),
+                },
+            ),
+            status=http_status.HTTP_200_OK,
+        )
+
+
+class NINStatusView(APIView):
+    """
+    Get the authenticated user's current NIN verification status across all profiles.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="Get NIN Verification Status",
+        operation_description="Returns the authenticated user's NIN verification status, masked NIN, and recent verification history.",
+        responses={
+            200: openapi.Response(
+                description="NIN Verification Status",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "status": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                        "data": openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                "is_nin_verified": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                "verified_nin": openapi.Schema(type=openapi.TYPE_STRING),
+                                "verified_at": openapi.Schema(type=openapi.TYPE_STRING),
+                                "active_role": openapi.Schema(type=openapi.TYPE_STRING),
+                                "profiles": openapi.Schema(type=openapi.TYPE_OBJECT),
+                                "recent_verifications": openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
+                            },
+                        ),
+                    },
+                ),
+            ),
+        },
+    )
+    def get(self, request):
+        user = request.user
+        recent_verifications = NINVerification.objects.filter(user=user).order_by("-created_at")[:5]
+
+        latest_verified = (
+            NINVerification.objects.filter(user=user, status=NINVerification.STATUS_VERIFIED)
+            .order_by("-verified_at")
+            .first()
+        )
+
+        profile_map = {
+            "mechanic": "mechanic_profile",
+            "merchant": "merchant_profile",
+            "driver": "driver_profile",
+            "rider": "rider_profile",
+            "vehicle_rental": "vehicle_rental_profile",
+        }
+
+        profiles_status = {}
+        for role_name, attr_name in profile_map.items():
+            profile = getattr(user, attr_name, None)
+            if profile:
+                masked = None
+                if profile.nin_number and len(profile.nin_number) >= 4:
+                    masked = f"*******{profile.nin_number[-4:]}"
+                elif profile.nin_number:
+                    masked = "*******"
+
+                profiles_status[role_name] = {
+                    "has_profile": True,
+                    "nin_number": masked,
+                    "nin_is_verified": getattr(profile, "nin_is_verified", False),
+                    "nin_verified_at": (
+                        profile.nin_verified_at.isoformat()
+                        if getattr(profile, "nin_verified_at", None)
+                        else None
+                    ),
+                }
+
+        record_serializer = NINVerificationRecordSerializer(recent_verifications, many=True)
+
+        return Response(
+            api_response(
+                message="NIN status retrieved successfully.",
+                status=True,
+                data={
+                    "is_nin_verified": user.is_nin_verified,
+                    "verified_nin": latest_verified.masked_nin if latest_verified else None,
+                    "verified_at": (
+                        latest_verified.verified_at.isoformat()
+                        if latest_verified and latest_verified.verified_at
+                        else None
+                    ),
+                    "active_role": user.active_role.name if user.active_role else None,
+                    "profiles": profiles_status,
+                    "recent_verifications": record_serializer.data,
+                },
+            ),
+            status=http_status.HTTP_200_OK,
+        )
 
 
 class BankAccountDetailView(APIView):

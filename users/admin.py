@@ -16,6 +16,26 @@ class UserEmailVerificationAdmin(admin.ModelAdmin):
     list_max_show_all = 200  # Optional: limit max "Show all" to 200
 
 
+@admin.register(models.NINVerification)
+class NINVerificationAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "masked_nin",
+        "status",
+        "role",
+        "first_name",
+        "last_name",
+        "verified_at",
+        "created_at",
+    )
+    search_fields = ("user__email", "nin_number", "request_id", "first_name", "last_name")
+    list_filter = ("status", "role", "created_at", "verified_at")
+    readonly_fields = ("created_at", "updated_at", "response_data")
+    autocomplete_fields = ("user",)
+    list_per_page = 25
+    list_max_show_all = 200
+
+
 @admin.register(models.Role)
 class RoleAdmin(admin.ModelAdmin):
     list_display = ("name", "description", "created_at", "updated_at")
