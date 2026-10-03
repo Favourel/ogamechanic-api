@@ -9,13 +9,21 @@ from django.db.models import Avg
 
 class CategorySerializer(serializers.ModelSerializer):
     sub_categories = serializers.SerializerMethodField(read_only=True)
+    parent_category_name = serializers.CharField(
+        source='parent_category.name', read_only=True, default=None
+    )
+    products_count = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Category
         fields = [
-            'id', 'name', 'sub_categories', 'description',
+            'id', 'name', 'parent_category', 'parent_category_name',
+            'sub_categories', 'description', 'products_count',
             'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'parent_category': {'required': False, 'allow_null': True}
+        }
 
     def get_sub_categories(self, obj):
         if obj.parent_category is None:
@@ -23,6 +31,11 @@ class CategorySerializer(serializers.ModelSerializer):
                 obj.models.all(), many=True
             ).data
         return []
+
+    def get_products_count(self, obj):
+        if hasattr(obj, 'product_count'):
+            return obj.product_count
+        return obj.products.count()
 
 
 class ProductVehicleCompatibilitySerializer(serializers.Serializer):

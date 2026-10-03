@@ -7,6 +7,7 @@ from .views import (
     # Management
     EcommerceManagementView,
     AccountManagementView,
+    AccountDetailManagementView,
     MechanicManagementView,
     PendingVerificationsView,
     UserActivationView,
@@ -14,6 +15,7 @@ from .views import (
     DetailPendingKYCView,
     # AdminAnalyticsView,
     AdminCategoryCreateView,
+    AdminCategoryDetailView,
     AdminNotificationView,
     RoleNotificationView,
     AreaOfSpecializationManagementView,
@@ -84,6 +86,11 @@ urlpatterns = [
         name='account-management'
     ),
     path(
+        'management/accounts/<uuid:user_id>/',
+        AccountDetailManagementView.as_view(),
+        name='account-detail-management'
+    ),
+    path(
         'management/kyc/pending/',
         PendingKYCView.as_view(),
         name='pending-kyc'
@@ -120,9 +127,29 @@ urlpatterns = [
         name='user-activation',
     ),
     path(
+        'categories/',
+        AdminCategoryCreateView.as_view(),
+        name='admin-category-list',
+    ),
+    path(
         'categories/create/',
         AdminCategoryCreateView.as_view(),
         name='admin-category-create',
+    ),
+    path(
+        'categories/<int:pk>/',
+        AdminCategoryDetailView.as_view(),
+        name='admin-category-detail',
+    ),
+    path(
+        'categories/<int:pk>/update/',
+        AdminCategoryDetailView.as_view(),
+        name='admin-category-update',
+    ),
+    path(
+        'categories/<int:pk>/delete/',
+        AdminCategoryDetailView.as_view(),
+        name='admin-category-delete',
     ),
     path(
         'mechanics/specializations/',

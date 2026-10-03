@@ -687,6 +687,13 @@ class AccountManagementView(APIView):
                 description="Filter by approval status (true/false)",
                 type=openapi.TYPE_STRING,
             ),
+            openapi.Parameter(
+                "user_id",
+                openapi.IN_QUERY,
+                description="User ID to get detailed account & all performed actions data",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
         ],
         responses={200: openapi.Response("Account data")},
     )
@@ -698,6 +705,10 @@ class AccountManagementView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
 
+        user_id = request.query_params.get("user_id") or request.query_params.get("id")
+        if user_id:
+            return AccountDetailManagementView().get(request, user_id=user_id)
+
         data_type = request.query_params.get("type")
         limit = int(request.query_params.get("limit", 50))
         offset = int(request.query_params.get("offset", 0))
@@ -707,7 +718,7 @@ class AccountManagementView(APIView):
         if not data_type:
             return Response(
                 api_response(
-                    message="Query parameter 'type' is required (mechanic, driver, merchant, bank, wallet, transaction, primary_user, vehicle_rental)",  # noqa
+                    message="Query parameter 'type' is required (mechanic, driver, merchant, bank, wallet, transaction, primary_user, vehicle_rental) or provide 'user_id' for account details",  # noqa
                     status=False,
                 ),
                 status=http_status.HTTP_400_BAD_REQUEST,
@@ -1081,6 +1092,1162 @@ class AccountManagementView(APIView):
         )
 
 
+class AccountDetailManagementView(APIView):
+    """
+    Detailed Account & Performed Actions endpoint for profiles in AccountManagementView.
+    Accessible via:
+    - GET /api/v1/admin/management/accounts/<uuid:user_id>/
+    - GET /api/v1/admin/management/accounts/?user_id=<uuid>
+    """
+    permission_classes = [IsAdminUser]
+
+    @swagger_auto_schema(
+        operation_summary="Get Account Detail & Performed Actions",
+        operation_description=(
+            "Retrieve detailed profile information, KPIs, and all actions performed by a user "
+            "(mechanic requests attempted with all statuses, products purchased with full item details, "
+            "courier deliveries, rides, rentals, transactions, and activity logs)."
+        ),
+        manual_parameters=[
+            openapi.Parameter(
+                "user_id",
+                openapi.IN_PATH,
+                description="UUID of the user/account to retrieve",
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+            openapi.Parameter(
+                "section",
+                openapi.IN_QUERY,
+                description="Section of actions to return (all, mechanic_requests, products, couriers, rides, rentals, transactions, activity_logs)",
+                type=openapi.TYPE_STRING,
+                enum=["all", "mechanic_requests", "products", "couriers", "rides", "rentals", "transactions", "activity_logs"],
+                default="all",
+            ),
+            openapi.Parameter(
+                "status",
+                openapi.IN_QUERY,
+                description="Filter actions by status (e.g. completed, pending, cancelled, paid)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "from",
+                openapi.IN_QUERY,
+                description="Filter actions from date (YYYY-MM-DD or ISO timestamp)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "to",
+                openapi.IN_QUERY,
+                description="Filter actions to date (YYYY-MM-DD or ISO timestamp)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "search",
+                openapi.IN_QUERY,
+                description="Search query across action records",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "limit",
+                openapi.IN_QUERY,
+                description="Number of items to return",
+                type=openapi.TYPE_INTEGER,
+                default=50,
+            ),
+            openapi.Parameter(
+                "offset",
+                openapi.IN_QUERY,
+                description="Offset for pagination",
+                type=openapi.TYPE_INTEGER,
+                default=0,
+            ),
+        ],
+        responses={200: openapi.Response("Account detail and performed actions")},
+    )
+    def get(self, request, user_id=None):
+        status_, data = get_incoming_request_checks(request)
+        if not status_:
+            return Response(
+                api_response(message=data, status=False),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not user_id:
+            user_id = request.query_params.get("user_id") or request.query_params.get("id")
+
+        if not user_id:
+            return Response(
+                api_response(
+                    message="Query parameter 'user_id' or path parameter 'user_id' is required",
+                    status=False,
+                ),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = (
+                User.objects.prefetch_related("roles", "vehicles", "bank_accounts")
+                .get(id=user_id)
+            )
+        except (User.DoesNotExist, ValueError):
+            return Response(
+                api_response(message="User not found", status=False),
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+
+        section = request.query_params.get("section", "all").lower()
+        status_filter = request.query_params.get("status")
+        search = request.query_params.get("search", "")
+        limit = int(request.query_params.get("limit", 50))
+        offset = int(request.query_params.get("offset", 0))
+        start_dt, end_dt = self._parse_date_range(request)
+
+        if section in ["mechanic_requests", "repairs"]:
+            return self._get_mechanic_requests_section(
+                user, request, status_filter, search, start_dt, end_dt, limit, offset
+            )
+        elif section in ["products", "orders"]:
+            return self._get_products_section(
+                user, request, status_filter, search, start_dt, end_dt, limit, offset
+            )
+        elif section in ["couriers", "deliveries"]:
+            return self._get_couriers_section(
+                user, request, status_filter, search, start_dt, end_dt, limit, offset
+            )
+        elif section in ["rides"]:
+            return self._get_rides_section(
+                user, request, status_filter, search, start_dt, end_dt, limit, offset
+            )
+        elif section in ["rentals"]:
+            return self._get_rentals_section(
+                user, request, status_filter, search, start_dt, end_dt, limit, offset
+            )
+        elif section in ["transactions", "wallet"]:
+            return self._get_transactions_section(
+                user, request, search, start_dt, end_dt, limit, offset
+            )
+        elif section in ["activity_logs"]:
+            return self._get_activity_logs_section(
+                user, request, search, start_dt, end_dt, limit, offset
+            )
+        else:
+            return self._get_all_section(
+                user, request, start_dt, end_dt, limit, offset
+            )
+
+    def _parse_date_range(self, request):
+        from django.utils.dateparse import parse_datetime, parse_date
+
+        from_param = request.query_params.get("from")
+        to_param = request.query_params.get("to")
+
+        start_dt = None
+        end_dt = None
+
+        if from_param:
+            start_dt = parse_datetime(from_param)
+            if start_dt is None:
+                start_date = parse_date(from_param)
+                if start_date is not None:
+                    start_dt = timezone.make_aware(
+                        timezone.datetime.combine(
+                            start_date, timezone.datetime.min.time()
+                        )
+                    )
+
+        if to_param:
+            end_dt = parse_datetime(to_param)
+            if end_dt is None:
+                end_date = parse_date(to_param)
+                if end_date is not None:
+                    end_dt = timezone.make_aware(
+                        timezone.datetime.combine(
+                            end_date, timezone.datetime.max.time()
+                        )
+                    )
+
+        return start_dt, end_dt
+
+    def _serialize_user(self, user, request):
+        profile_picture_url = None
+        if getattr(user, "profile_picture", None):
+            try:
+                profile_picture_url = request.build_absolute_uri(user.profile_picture.url)
+            except Exception:
+                profile_picture_url = str(user.profile_picture.url)
+
+        roles_list = [r.name for r in user.roles.all()]
+
+        return {
+            "id": str(user.id),
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "full_name": f"{user.first_name} {user.last_name}".strip() or user.email,
+            "phone_number": getattr(user, "phone_number", None),
+            "gender": getattr(user, "gender", None),
+            "profile_picture": profile_picture_url,
+            "is_active": user.is_active,
+            "is_verified": user.is_verified,
+            "roles": roles_list,
+            "active_role": user.active_role.name if user.active_role else None,
+            "date_joined": user.date_joined.isoformat() if user.date_joined else None,
+            "last_login": user.last_login.isoformat() if user.last_login else None,
+        }
+
+    def _serialize_registered_vehicles(self, user):
+        vehicles = []
+        try:
+            for v in user.vehicles.all():
+                vehicles.append({
+                    "id": str(v.id),
+                    "make": v.make,
+                    "model": v.model,
+                    "year": v.year,
+                    "license_plate": v.license_plate,
+                    "vin": v.vin,
+                    "created_at": v.created_at.isoformat() if v.created_at else None,
+                })
+        except Exception:
+            pass
+        return vehicles
+
+    def _serialize_role_profiles(self, user):
+        data = {}
+
+        mechanic = getattr(user, "mechanic_profile", None)
+        if mechanic:
+            specs = []
+            if hasattr(mechanic, "specializations"):
+                specs = [s.name for s in mechanic.specializations.all()]
+            elif hasattr(mechanic, "specialization"):
+                specs = [s.name for s in mechanic.specialization.all()]
+
+            data["mechanic_profile"] = {
+                "id": str(mechanic.id),
+                "business_name": getattr(mechanic, "business_name", None),
+                "workshop_address": getattr(mechanic, "workshop_address", getattr(mechanic, "location", None)),
+                "location": getattr(mechanic, "location", None),
+                "is_approved": getattr(mechanic, "is_approved", False),
+                "is_available": getattr(mechanic, "is_available", True),
+                "years_of_experience": getattr(mechanic, "years_of_experience", None),
+                "average_rating": float(getattr(mechanic, "average_rating", 0) or 0),
+                "total_reviews": getattr(mechanic, "total_reviews", 0),
+                "specializations": specs,
+            }
+
+        driver = getattr(user, "driver_profile", None)
+        if driver:
+            data["driver_profile"] = {
+                "id": str(driver.id),
+                "license_number": driver.license_number,
+                "vehicle_make": getattr(driver, "vehicle_make", None),
+                "vehicle_model": getattr(driver, "vehicle_model", None),
+                "vehicle_year": getattr(driver, "vehicle_year", None),
+                "license_plate": getattr(driver, "license_plate", None),
+                "is_approved": driver.is_approved,
+                "is_available": driver.is_available,
+                "average_rating": float(driver.average_rating or 0),
+                "total_trips": getattr(driver, "total_trips", 0),
+            }
+
+        merchant = getattr(user, "merchant_profile", None)
+        if merchant:
+            data["merchant_profile"] = {
+                "id": str(merchant.id),
+                "business_name": merchant.business_name,
+                "business_address": getattr(merchant, "business_address", None),
+                "is_approved": getattr(merchant, "is_approved", True),
+            }
+
+        rental = getattr(user, "vehicle_rental_profile", None)
+        if rental:
+            data["vehicle_rental_profile"] = {
+                "id": str(rental.id),
+                "company_name": rental.company_name,
+                "company_address": rental.company_address,
+                "is_approved": rental.is_approved,
+            }
+
+        return data
+
+    def _serialize_financials(self, user):
+        wallet = getattr(user, "wallet", None)
+        wallet_info = None
+        if wallet:
+            wallet_info = {
+                "id": str(wallet.id),
+                "balance": float(wallet.balance),
+                "currency": wallet.currency,
+                "is_active": wallet.is_active,
+            }
+
+        bank_accounts = []
+        try:
+            for b in user.bank_accounts.all():
+                bank_accounts.append({
+                    "id": str(b.id),
+                    "bank_name": b.bank_name,
+                    "account_number": b.account_number,
+                    "account_name": b.account_name,
+                    "bank_code": b.bank_code,
+                    "is_verified": b.is_verified,
+                })
+        except Exception:
+            pass
+
+        return {
+            "wallet": wallet_info,
+            "bank_accounts": bank_accounts,
+        }
+
+    def _compute_mechanic_requests_summary(self, user, start_dt, end_dt):
+        try:
+            from mechanics.models import RepairRequest
+
+            repairs = RepairRequest.objects.filter(customer=user)
+            if start_dt:
+                repairs = repairs.filter(requested_at__gte=start_dt)
+            if end_dt:
+                repairs = repairs.filter(requested_at__lte=end_dt)
+
+            total_spend_val = (
+                repairs.filter(status="completed")
+                .aggregate(total=Sum("actual_cost"))
+                .get("total")
+                or 0
+            )
+
+            last_req = repairs.order_by("-requested_at").values_list("requested_at", flat=True).first()
+
+            return {
+                "total_attempted": repairs.count(),
+                "completed": repairs.filter(status="completed").count(),
+                "in_progress": repairs.filter(status="in_progress").count(),
+                "accepted": repairs.filter(status="accepted").count(),
+                "pending": repairs.filter(status="pending").count(),
+                "in_transit": repairs.filter(status="in_transit").count(),
+                "arrived": repairs.filter(status="arrived").count(),
+                "verify_completed": repairs.filter(status="verify_completed").count(),
+                "cancelled": repairs.filter(status="cancelled").count(),
+                "rejected": repairs.filter(status="rejected").count(),
+                "total_spent": float(total_spend_val),
+                "last_requested_at": last_req.isoformat() if last_req else None,
+            }
+        except Exception:
+            return None
+
+    def _compute_product_orders_summary(self, user, start_dt, end_dt):
+        try:
+            orders = Order.objects.filter(customer=user)
+            if start_dt:
+                orders = orders.filter(created_at__gte=start_dt)
+            if end_dt:
+                orders = orders.filter(created_at__lte=end_dt)
+
+            total_spend_val = (
+                orders.filter(status__in=["paid", "shipped", "completed"])
+                .aggregate(total=Sum("total_amount"))
+                .get("total")
+                or 0
+            )
+
+            items_count = (
+                OrderItem.objects.filter(order__customer=user)
+                .aggregate(total=Sum("quantity"))
+                .get("total")
+                or 0
+            )
+
+            last_ord = orders.order_by("-created_at").values_list("created_at", flat=True).first()
+
+            return {
+                "total_orders": orders.count(),
+                "total_items_purchased": int(items_count),
+                "completed": orders.filter(status="completed").count(),
+                "paid": orders.filter(status="paid").count(),
+                "shipped": orders.filter(status="shipped").count(),
+                "pending": orders.filter(status="pending").count(),
+                "cancelled": orders.filter(status="cancelled").count(),
+                "total_spent": float(total_spend_val),
+                "last_order_at": last_ord.isoformat() if last_ord else None,
+            }
+        except Exception:
+            return None
+
+    def _compute_courier_deliveries_summary(self, user, start_dt, end_dt):
+        try:
+            from couriers.models import DeliveryRequest
+
+            deliveries = DeliveryRequest.objects.filter(customer=user)
+            if start_dt:
+                deliveries = deliveries.filter(requested_at__gte=start_dt)
+            if end_dt:
+                deliveries = deliveries.filter(requested_at__lte=end_dt)
+
+            total_spend_val = (
+                deliveries.filter(payment_status="paid")
+                .aggregate(total=Sum("total_fare"))
+                .get("total")
+                or 0
+            )
+
+            last_del = deliveries.order_by("-requested_at").values_list("requested_at", flat=True).first()
+
+            return {
+                "total_attempted": deliveries.count(),
+                "delivered": deliveries.filter(status="delivered").count(),
+                "active": deliveries.filter(status__in=["pending", "assigned", "picked_up", "in_transit"]).count(),
+                "cancelled": deliveries.filter(status="cancelled").count(),
+                "failed": deliveries.filter(status="failed").count(),
+                "total_spent": float(total_spend_val),
+                "last_requested_at": last_del.isoformat() if last_del else None,
+            }
+        except Exception:
+            return None
+
+    def _compute_rides_summary(self, user, start_dt, end_dt):
+        try:
+            from rides.models import Ride
+
+            rides = Ride.objects.filter(customer=user)
+            if start_dt:
+                rides = rides.filter(requested_at__gte=start_dt)
+            if end_dt:
+                rides = rides.filter(requested_at__lte=end_dt)
+
+            total_spend_val = (
+                rides.filter(status="completed")
+                .aggregate(total=Sum("fare"))
+                .get("total")
+                or 0
+            )
+
+            last_ride = rides.order_by("-requested_at").values_list("requested_at", flat=True).first()
+
+            return {
+                "total_attempted": rides.count(),
+                "completed": rides.filter(status="completed").count(),
+                "active": rides.filter(status__in=["requested", "accepted", "in_progress"]).count(),
+                "cancelled": rides.filter(status="cancelled").count(),
+                "total_spent": float(total_spend_val),
+                "last_requested_at": last_ride.isoformat() if last_ride else None,
+            }
+        except Exception:
+            return None
+
+    def _compute_rentals_summary(self, user, start_dt, end_dt):
+        try:
+            from rentals.models import RentalBooking
+
+            rentals = RentalBooking.objects.filter(customer=user)
+            if start_dt:
+                rentals = rentals.filter(booked_at__gte=start_dt)
+            if end_dt:
+                rentals = rentals.filter(booked_at__lte=end_dt)
+
+            total_spend_val = (
+                rentals.filter(status__in=["confirmed", "active", "completed"])
+                .aggregate(total=Sum("total_amount"))
+                .get("total")
+                or 0
+            )
+
+            last_rental = rentals.order_by("-booked_at").values_list("booked_at", flat=True).first()
+
+            return {
+                "total_bookings": rentals.count(),
+                "completed": rentals.filter(status="completed").count(),
+                "active": rentals.filter(status__in=["confirmed", "active"]).count(),
+                "cancelled": rentals.filter(status="cancelled").count(),
+                "total_spent": float(total_spend_val),
+                "last_booked_at": last_rental.isoformat() if last_rental else None,
+            }
+        except Exception:
+            return None
+
+    def _compute_activity_logs_summary(self, user, start_dt, end_dt):
+        try:
+            from users.models import UserActivityLog
+
+            logs = UserActivityLog.objects.filter(user=user)
+            if start_dt:
+                logs = logs.filter(timestamp__gte=start_dt)
+            if end_dt:
+                logs = logs.filter(timestamp__lte=end_dt)
+
+            last_log = logs.order_by("-timestamp").values_list("timestamp", flat=True).first()
+
+            return {
+                "total_logs": logs.count(),
+                "last_activity_at": last_log.isoformat() if last_log else None,
+            }
+        except Exception:
+            return None
+
+    def _serialize_repair_request(self, r, request=None):
+        categories_data = []
+        try:
+            for sc in r.service_categories.all():
+                categories_data.append({"id": sc.id, "name": getattr(sc, "name", str(sc))})
+        except Exception:
+            pass
+
+        mechanic_data = None
+        if r.mechanic:
+            mech_profile = getattr(r.mechanic, "mechanic_profile", None)
+            mechanic_data = {
+                "id": str(r.mechanic.id),
+                "name": f"{r.mechanic.first_name} {r.mechanic.last_name}".strip() or r.mechanic.email,
+                "email": r.mechanic.email,
+                "phone_number": getattr(r.mechanic, "phone_number", None),
+                "business_name": getattr(mech_profile, "business_name", None),
+                "workshop_address": getattr(mech_profile, "workshop_address", None),
+            }
+
+        review_data = None
+        try:
+            from users.models import MechanicReview
+            if r.mechanic and hasattr(r.mechanic, "mechanic_profile"):
+                rev = MechanicReview.objects.filter(
+                    mechanic=r.mechanic.mechanic_profile, user=r.customer
+                ).first()
+                if rev:
+                    review_data = {
+                        "id": str(rev.id),
+                        "rating": rev.rating,
+                        "comment": rev.comment,
+                        "created_at": rev.created_at.isoformat() if rev.created_at else None,
+                    }
+        except Exception:
+            pass
+
+        return {
+            "id": str(r.id),
+            "status": r.status,
+            "status_display": r.get_status_display() if hasattr(r, "get_status_display") else r.status,
+            "priority": getattr(r, "priority", "medium"),
+            "service_type": r.service_type,
+            "service_categories": categories_data,
+            "vehicle": {
+                "make": r.vehicle_make,
+                "model": r.vehicle_model,
+                "year": r.vehicle_year,
+                "vin": getattr(r, "vehicle_vin", None),
+                "registration": getattr(r, "vehicle_registration", ""),
+            },
+            "problem_description": getattr(r, "problem_description", ""),
+            "notes": getattr(r, "notes", ""),
+            "service_address": getattr(r, "service_address", ""),
+            "service_latitude": float(r.service_latitude) if getattr(r, "service_latitude", None) else None,
+            "service_longitude": float(r.service_longitude) if getattr(r, "service_longitude", None) else None,
+            "schedule": {
+                "is_scheduled": getattr(r, "schedule", False),
+                "preferred_date": r.preferred_date.isoformat() if getattr(r, "preferred_date", None) else None,
+                "preferred_time_slot": getattr(r, "preferred_time_slot", None),
+            },
+            "costs": {
+                "estimated_cost": float(r.estimated_cost) if r.estimated_cost else None,
+                "actual_cost": float(r.actual_cost) if r.actual_cost else None,
+            },
+            "timeline": {
+                "requested_at": r.requested_at.isoformat() if r.requested_at else None,
+                "accepted_at": r.accepted_at.isoformat() if r.accepted_at else None,
+                "in_transit_at": r.in_transit_at.isoformat() if getattr(r, "in_transit_at", None) else None,
+                "arrived_at": r.arrived_at.isoformat() if getattr(r, "arrived_at", None) else None,
+                "started_at": r.started_at.isoformat() if getattr(r, "started_at", None) else None,
+                "in_progress_at": r.in_progress_at.isoformat() if getattr(r, "in_progress_at", None) else None,
+                "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                "verify_completed_at": r.verify_completed_at.isoformat() if getattr(r, "verify_completed_at", None) else None,
+                "cancelled_at": r.cancelled_at.isoformat() if getattr(r, "cancelled_at", None) else None,
+                "rejected_at": r.rejected_at.isoformat() if getattr(r, "rejected_at", None) else None,
+            },
+            "cancellation_reason": getattr(r, "cancellation_reason", ""),
+            "mechanic": mechanic_data,
+            "review": review_data,
+        }
+
+    def _serialize_order(self, order, request=None):
+        items_data = []
+        for item in order.items.all():
+            prod = item.product
+            image_url = None
+            if prod and prod.images.exists():
+                first_img = prod.images.first()
+                if first_img and first_img.image:
+                    try:
+                        image_url = request.build_absolute_uri(first_img.image.url) if request else str(first_img.image.url)
+                    except Exception:
+                        image_url = str(first_img.image.url)
+
+            merchant_data = None
+            if prod and prod.merchant:
+                merch_prof = getattr(prod.merchant, "merchant_profile", None)
+                merchant_data = {
+                    "id": str(prod.merchant.id),
+                    "name": f"{prod.merchant.first_name} {prod.merchant.last_name}".strip() or prod.merchant.email,
+                    "business_name": getattr(merch_prof, "business_name", None),
+                    "email": prod.merchant.email,
+                }
+
+            items_data.append({
+                "id": item.id,
+                "quantity": item.quantity,
+                "unit_price": float(item.price) if item.price else 0,
+                "subtotal": float(item.price * item.quantity) if item.price else 0,
+                "product": {
+                    "id": str(prod.id) if prod else None,
+                    "name": prod.name if prod else None,
+                    "description": getattr(prod, "description", "") if prod else "",
+                    "category": prod.category.name if prod and prod.category else None,
+                    "price": float(prod.price) if prod and hasattr(prod, "price") and prod.price else None,
+                    "condition": getattr(prod, "condition", None) if prod else None,
+                    "body_type": getattr(prod, "body_type", None) if prod else None,
+                    "mileage": getattr(prod, "mileage", None) if prod else None,
+                    "vin": getattr(prod, "vin", None) if prod else None,
+                    "year": getattr(prod, "year", None) if prod else None,
+                    "make": prod.make.name if prod and hasattr(prod, "make") and prod.make else None,
+                    "model": prod.model.name if prod and hasattr(prod, "model") and prod.model else None,
+                    "image": image_url,
+                    "merchant": merchant_data,
+                } if prod else None,
+            })
+
+        return {
+            "id": str(order.id),
+            "status": order.status,
+            "status_display": order.get_status_display() if hasattr(order, "get_status_display") else order.status,
+            "payment_status": order.payment_status,
+            "payment_method": order.payment_method,
+            "payment_reference": order.payment_reference,
+            "total_amount": float(order.total_amount) if order.total_amount else 0,
+            "items_count": len(items_data),
+            "items": items_data,
+            "timeline": {
+                "created_at": order.created_at.isoformat() if order.created_at else None,
+                "paid_at": order.paid_at.isoformat() if order.paid_at else None,
+                "shipped_at": order.shipped_at.isoformat() if order.shipped_at else None,
+                "completed_at": order.completed_at.isoformat() if order.completed_at else None,
+                "cancelled_at": order.cancelled_at.isoformat() if order.cancelled_at else None,
+                "updated_at": order.updated_at.isoformat() if order.updated_at else None,
+            },
+        }
+
+    def _serialize_delivery(self, d, request=None):
+        driver_data = None
+        if d.driver:
+            driver_data = {
+                "id": str(d.driver.id),
+                "name": f"{d.driver.first_name} {d.driver.last_name}".strip() or d.driver.email,
+                "email": d.driver.email,
+                "phone_number": getattr(d.driver, "phone_number", None),
+            }
+
+        return {
+            "id": str(d.id),
+            "status": d.status,
+            "payment_status": getattr(d, "payment_status", None),
+            "payment_method": getattr(d, "payment_method", None),
+            "total_fare": float(d.total_fare) if d.total_fare else 0,
+            "pickup_address": d.pickup_address,
+            "delivery_address": d.delivery_address,
+            "pickup_contact_name": getattr(d, "pickup_contact_name", ""),
+            "timeline": {
+                "requested_at": d.requested_at.isoformat() if d.requested_at else None,
+                "assigned_at": d.assigned_at.isoformat() if getattr(d, "assigned_at", None) else None,
+                "delivered_at": d.delivered_at.isoformat() if getattr(d, "delivered_at", None) else None,
+            },
+            "driver": driver_data,
+        }
+
+    def _serialize_ride(self, r, request=None):
+        driver_data = None
+        if r.driver:
+            driver_data = {
+                "id": str(r.driver.id),
+                "name": f"{r.driver.first_name} {r.driver.last_name}".strip() or r.driver.email,
+                "email": r.driver.email,
+                "phone_number": getattr(r.driver, "phone_number", None),
+            }
+
+        return {
+            "id": str(r.id),
+            "status": r.status,
+            "fare": float(r.fare) if r.fare else 0,
+            "pickup_address": r.pickup_address,
+            "dropoff_address": r.dropoff_address,
+            "timeline": {
+                "requested_at": r.requested_at.isoformat() if r.requested_at else None,
+                "accepted_at": r.accepted_at.isoformat() if getattr(r, "accepted_at", None) else None,
+                "started_at": r.started_at.isoformat() if getattr(r, "started_at", None) else None,
+                "completed_at": r.completed_at.isoformat() if getattr(r, "completed_at", None) else None,
+            },
+            "driver": driver_data,
+        }
+
+    def _serialize_rental(self, rb, request=None):
+        product_info = None
+        if rb.product:
+            product_info = {
+                "id": str(rb.product.id),
+                "name": rb.product.name,
+            }
+
+        return {
+            "id": str(rb.id),
+            "status": rb.status,
+            "booking_reference": rb.booking_reference,
+            "start_date": rb.start_date.isoformat() if rb.start_date else None,
+            "end_date": rb.end_date.isoformat() if rb.end_date else None,
+            "daily_rate": float(rb.daily_rate) if rb.daily_rate else None,
+            "total_amount": float(rb.total_amount) if rb.total_amount else None,
+            "booked_at": rb.booked_at.isoformat() if rb.booked_at else None,
+            "product": product_info,
+        }
+
+    def _serialize_transaction(self, t):
+        return {
+            "id": str(t.id),
+            "amount": float(t.amount),
+            "transaction_type": t.transaction_type,
+            "reference": t.reference,
+            "description": t.description,
+            "status": t.status,
+            "fee": float(t.fee) if getattr(t, "fee", None) else 0.0,
+            "metadata": getattr(t, "metadata", None),
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+        }
+
+    def _serialize_activity_log(self, log):
+        return {
+            "id": str(log.id),
+            "action": log.action,
+            "category": log.category,
+            "severity": log.severity,
+            "success": getattr(log, "success", True),
+            "description": log.description,
+            "object_type": log.object_type,
+            "object_id": log.object_id,
+            "request_method": log.request_method,
+            "request_path": log.request_path,
+            "response_status": log.response_status,
+            "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+        }
+
+    def _get_all_section(self, user, request, start_dt, end_dt, limit, offset):
+        from mechanics.models import RepairRequest
+        from couriers.models import DeliveryRequest
+        from rides.models import Ride
+        from rentals.models import RentalBooking
+        from users.models import UserActivityLog
+
+        mechanic_summary = self._compute_mechanic_requests_summary(user, start_dt, end_dt)
+        product_summary = self._compute_product_orders_summary(user, start_dt, end_dt)
+        courier_summary = self._compute_courier_deliveries_summary(user, start_dt, end_dt)
+        rides_summary = self._compute_rides_summary(user, start_dt, end_dt)
+        rentals_summary = self._compute_rentals_summary(user, start_dt, end_dt)
+        activity_summary = self._compute_activity_logs_summary(user, start_dt, end_dt)
+
+        total_platform_spend = 0.0
+        if mechanic_summary:
+            total_platform_spend += mechanic_summary.get("total_spent", 0.0)
+        if product_summary:
+            total_platform_spend += product_summary.get("total_spent", 0.0)
+        if courier_summary:
+            total_platform_spend += courier_summary.get("total_spent", 0.0)
+        if rides_summary:
+            total_platform_spend += rides_summary.get("total_spent", 0.0)
+        if rentals_summary:
+            total_platform_spend += rentals_summary.get("total_spent", 0.0)
+
+        # Recent mechanic requests
+        recent_repairs = []
+        try:
+            repairs_qs = RepairRequest.objects.filter(customer=user).select_related(
+                "mechanic", "customer", "mechanic__mechanic_profile"
+            ).prefetch_related("service_categories").order_by("-requested_at")[:10]
+            recent_repairs = [self._serialize_repair_request(r, request) for r in repairs_qs]
+        except Exception:
+            pass
+
+        # Recent product orders
+        recent_orders = []
+        try:
+            orders_qs = Order.objects.filter(customer=user).prefetch_related(
+                "items__product__category",
+                "items__product__make",
+                "items__product__model",
+                "items__product__merchant__merchant_profile",
+                "items__product__images",
+            ).order_by("-created_at")[:10]
+            recent_orders = [self._serialize_order(o, request) for o in orders_qs]
+        except Exception:
+            pass
+
+        # Recent courier deliveries
+        recent_deliveries = []
+        try:
+            deliveries_qs = DeliveryRequest.objects.filter(customer=user).select_related("driver").order_by("-requested_at")[:5]
+            recent_deliveries = [self._serialize_delivery(d, request) for d in deliveries_qs]
+        except Exception:
+            pass
+
+        # Recent rides
+        recent_rides = []
+        try:
+            rides_qs = Ride.objects.filter(customer=user).select_related("driver").order_by("-requested_at")[:5]
+            recent_rides = [self._serialize_ride(r, request) for r in rides_qs]
+        except Exception:
+            pass
+
+        # Recent rentals
+        recent_rentals = []
+        try:
+            rentals_qs = RentalBooking.objects.filter(customer=user).select_related("product").order_by("-booked_at")[:5]
+            recent_rentals = [self._serialize_rental(rb, request) for rb in rentals_qs]
+        except Exception:
+            pass
+
+        # Recent transactions
+        recent_transactions = []
+        try:
+            transactions_qs = Transaction.objects.filter(wallet__user=user).order_by("-created_at")[:10]
+            recent_transactions = [self._serialize_transaction(t) for t in transactions_qs]
+        except Exception:
+            pass
+
+        # Recent activity logs
+        recent_logs = []
+        try:
+            logs_qs = UserActivityLog.objects.filter(user=user).order_by("-timestamp")[:10]
+            recent_logs = [self._serialize_activity_log(log) for log in logs_qs]
+        except Exception:
+            pass
+
+        financials = self._serialize_financials(user)
+        financials["total_platform_spend"] = total_platform_spend
+
+        return Response(
+            api_response(
+                message="Account details and performed actions retrieved successfully",
+                status=True,
+                data={
+                    "user": self._serialize_user(user, request),
+                    "registered_vehicles": self._serialize_registered_vehicles(user),
+                    "role_profiles": self._serialize_role_profiles(user),
+                    "financials": financials,
+                    "action_summaries": {
+                        "mechanic_requests": mechanic_summary,
+                        "product_orders": product_summary,
+                        "courier_deliveries": courier_summary,
+                        "rides": rides_summary,
+                        "rentals": rentals_summary,
+                        "activity_logs": activity_summary,
+                    },
+                    "recent_actions": {
+                        "mechanic_requests": recent_repairs,
+                        "product_orders": recent_orders,
+                        "courier_deliveries": recent_deliveries,
+                        "rides": recent_rides,
+                        "rentals": recent_rentals,
+                        "transactions": recent_transactions,
+                        "activity_logs": recent_logs,
+                    },
+                },
+            ),
+            status=http_status.HTTP_200_OK,
+        )
+
+    def _get_mechanic_requests_section(
+        self, user, request, status_filter, search, start_dt, end_dt, limit, offset
+    ):
+        from mechanics.models import RepairRequest
+
+        queryset = RepairRequest.objects.filter(customer=user)
+        if start_dt:
+            queryset = queryset.filter(requested_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(requested_at__lte=end_dt)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if search:
+            queryset = queryset.filter(
+                Q(vehicle_make__icontains=search)
+                | Q(vehicle_model__icontains=search)
+                | Q(service_type__icontains=search)
+                | Q(problem_description__icontains=search)
+                | Q(service_address__icontains=search)
+            )
+
+        total_count = queryset.count()
+        repairs = (
+            queryset.select_related("mechanic", "customer", "mechanic__mechanic_profile")
+            .prefetch_related("service_categories")
+            .order_by("-requested_at")[offset: offset + limit]
+        )
+
+        items = [self._serialize_repair_request(r, request) for r in repairs]
+        summary = self._compute_mechanic_requests_summary(user, start_dt, end_dt)
+
+        return Response(
+            api_response(
+                message="Mechanic requests retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "summary": summary,
+                    "repairs": items,
+                },
+            ),
+            status=http_status.HTTP_200_OK,
+        )
+
+    def _get_products_section(
+        self, user, request, status_filter, search, start_dt, end_dt, limit, offset
+    ):
+        queryset = Order.objects.filter(customer=user)
+        if start_dt:
+            queryset = queryset.filter(created_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(created_at__lte=end_dt)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if search:
+            queryset = queryset.filter(
+                Q(payment_reference__icontains=search)
+                | Q(items__product__name__icontains=search)
+            )
+
+        total_count = queryset.distinct().count()
+        orders = (
+            queryset.distinct()
+            .prefetch_related(
+                "items__product__category",
+                "items__product__make",
+                "items__product__model",
+                "items__product__merchant__merchant_profile",
+                "items__product__images",
+            )
+            .order_by("-created_at")[offset: offset + limit]
+        )
+
+        items = [self._serialize_order(o, request) for o in orders]
+        summary = self._compute_product_orders_summary(user, start_dt, end_dt)
+
+        return Response(
+            api_response(
+                message="Product orders retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "summary": summary,
+                    "orders": items,
+                },
+            ),
+            status=http_status.HTTP_200_OK,
+        )
+
+    def _get_couriers_section(
+        self, user, request, status_filter, search, start_dt, end_dt, limit, offset
+    ):
+        from couriers.models import DeliveryRequest
+
+        queryset = DeliveryRequest.objects.filter(customer=user)
+        if start_dt:
+            queryset = queryset.filter(requested_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(requested_at__lte=end_dt)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if search:
+            queryset = queryset.filter(
+                Q(pickup_address__icontains=search)
+                | Q(delivery_address__icontains=search)
+                | Q(pickup_contact_name__icontains=search)
+            )
+
+        total_count = queryset.count()
+        deliveries = queryset.select_related("driver").order_by("-requested_at")[offset: offset + limit]
+        items = [self._serialize_delivery(d, request) for d in deliveries]
+        summary = self._compute_courier_deliveries_summary(user, start_dt, end_dt)
+
+        return Response(
+            api_response(
+                message="Courier deliveries retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "summary": summary,
+                    "deliveries": items,
+                },
+            ),
+            status=http_status.HTTP_200_OK,
+        )
+
+    def _get_rides_section(
+        self, user, request, status_filter, search, start_dt, end_dt, limit, offset
+    ):
+        from rides.models import Ride
+
+        queryset = Ride.objects.filter(customer=user)
+        if start_dt:
+            queryset = queryset.filter(requested_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(requested_at__lte=end_dt)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if search:
+            queryset = queryset.filter(
+                Q(pickup_address__icontains=search)
+                | Q(dropoff_address__icontains=search)
+            )
+
+        total_count = queryset.count()
+        rides = queryset.select_related("driver").order_by("-requested_at")[offset: offset + limit]
+        items = [self._serialize_ride(r, request) for r in rides]
+        summary = self._compute_rides_summary(user, start_dt, end_dt)
+
+        return Response(
+            api_response(
+                message="Rides retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "summary": summary,
+                    "rides": items,
+                },
+            ),
+            status=http_status.HTTP_200_OK,
+        )
+
+    def _get_rentals_section(
+        self, user, request, status_filter, search, start_dt, end_dt, limit, offset
+    ):
+        from rentals.models import RentalBooking
+
+        queryset = RentalBooking.objects.filter(customer=user)
+        if start_dt:
+            queryset = queryset.filter(booked_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(booked_at__lte=end_dt)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if search:
+            queryset = queryset.filter(
+                Q(booking_reference__icontains=search)
+                | Q(product__name__icontains=search)
+            )
+
+        total_count = queryset.count()
+        rentals = queryset.select_related("product").order_by("-booked_at")[offset: offset + limit]
+        items = [self._serialize_rental(rb, request) for rb in rentals]
+        summary = self._compute_rentals_summary(user, start_dt, end_dt)
+
+        return Response(
+            api_response(
+                message="Rentals retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "summary": summary,
+                    "rentals": items,
+                },
+            ),
+            status=http_status.HTTP_200_OK,
+        )
+
+    def _get_transactions_section(
+        self, user, request, search, start_dt, end_dt, limit, offset
+    ):
+        queryset = Transaction.objects.filter(wallet__user=user)
+        if start_dt:
+            queryset = queryset.filter(created_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(created_at__lte=end_dt)
+        if search:
+            queryset = queryset.filter(
+                Q(reference__icontains=search)
+                | Q(description__icontains=search)
+                | Q(transaction_type__icontains=search)
+            )
+
+        total_count = queryset.count()
+        transactions = queryset.order_by("-created_at")[offset: offset + limit]
+        items = [self._serialize_transaction(t) for t in transactions]
+
+        wallet = getattr(user, "wallet", None)
+        wallet_info = None
+        if wallet:
+            wallet_info = {
+                "id": str(wallet.id),
+                "balance": float(wallet.balance),
+                "currency": wallet.currency,
+                "is_active": wallet.is_active,
+            }
+
+        return Response(
+            api_response(
+                message="Transactions retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "wallet": wallet_info,
+                    "transactions": items,
+                },
+            ),
+            status=http_status.HTTP_200_OK,
+        )
+
+    def _get_activity_logs_section(
+        self, user, request, search, start_dt, end_dt, limit, offset
+    ):
+        from users.models import UserActivityLog
+
+        queryset = UserActivityLog.objects.filter(user=user)
+        if start_dt:
+            queryset = queryset.filter(timestamp__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(timestamp__lte=end_dt)
+        if search:
+            queryset = queryset.filter(
+                Q(action__icontains=search)
+                | Q(description__icontains=search)
+                | Q(category__icontains=search)
+            )
+
+        total_count = queryset.count()
+        logs = queryset.order_by("-timestamp")[offset: offset + limit]
+        items = [self._serialize_activity_log(log) for log in logs]
+
+        return Response(
+            api_response(
+                message="Activity logs retrieved successfully",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "activity_logs": items,
+                },
+            ),
+            status=http_status.HTTP_200_OK,
+        )
+
+
 class MechanicManagementView(APIView):
     """
     Unified mechanic management endpoint
@@ -1324,6 +2491,65 @@ class AdminCategoryCreateView(APIView):
     permission_classes = [IsAdminUser]
 
     @swagger_auto_schema(
+        operation_summary="List categories",
+        operation_description="List all categories with optional search and pagination (admin only)",
+        manual_parameters=[
+            openapi.Parameter(
+                "search",
+                openapi.IN_QUERY,
+                description="Search by category name or description",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "limit",
+                openapi.IN_QUERY,
+                description="Number of items to return",
+                type=openapi.TYPE_INTEGER,
+                default=50,
+            ),
+            openapi.Parameter(
+                "offset",
+                openapi.IN_QUERY,
+                description="Offset for pagination",
+                type=openapi.TYPE_INTEGER,
+                default=0,
+            ),
+        ],
+        responses={200: CategorySerializer(many=True)},
+    )
+    def get(self, request):
+        from products.models import Category
+
+        search = request.query_params.get("search", "")
+        limit = int(request.query_params.get("limit", 50))
+        offset = int(request.query_params.get("offset", 0))
+
+        queryset = Category.objects.all().order_by("name")
+        if search:
+            queryset = queryset.filter(
+                Q(name__icontains=search) | Q(description__icontains=search)
+            )
+
+        total_count = queryset.count()
+        categories = queryset[offset: offset + limit]
+        serializer = CategorySerializer(categories, many=True)
+
+        return Response(
+            api_response(
+                message="Categories retrieved successfully.",
+                status=True,
+                data={
+                    "total_count": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "categories": serializer.data,
+                },
+            ),
+            status=200,
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Create category",
         operation_description="Create a new category (admin only)",
         request_body=CategorySerializer,
         responses={201: CategorySerializer(), 400: "Bad Request",
@@ -1361,6 +2587,161 @@ class AdminCategoryCreateView(APIView):
             ),
             status=400,
         )
+
+
+class AdminCategoryDetailView(APIView):
+    """
+    Retrieve, update or delete a category (admin only).
+    """
+    permission_classes = [IsAdminUser]
+
+    def _get_category(self, pk):
+        from products.models import Category
+        try:
+            return Category.objects.get(pk=pk), None
+        except Category.DoesNotExist:
+            return None, Response(
+                api_response(message="Category not found.", status=False),
+                status=404,
+            )
+
+    @swagger_auto_schema(
+        operation_summary="Get Category Details",
+        operation_description="Retrieve details of a single category (admin only)",
+        responses={200: CategorySerializer(), 404: "Not Found"},
+    )
+    def get(self, request, pk):
+        status_, data = get_incoming_request_checks(request)
+        if not status_:
+            return Response(api_response(message=data, status=False), status=400)
+
+        category, err = self._get_category(pk)
+        if err:
+            return err
+
+        serializer = CategorySerializer(category)
+        return Response(
+            api_response(
+                message="Category retrieved successfully.",
+                status=True,
+                data=serializer.data,
+            ),
+            status=200,
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Update Category (Full)",
+        operation_description="Update a category (admin only)",
+        request_body=CategorySerializer,
+        responses={200: CategorySerializer(), 400: "Bad Request", 404: "Not Found"},
+    )
+    def put(self, request, pk):
+        category, err = self._get_category(pk)
+        if err:
+            return err
+
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(api_response(message=data, status=False), status=400)
+
+        serializer = CategorySerializer(category, data=data)
+        if serializer.is_valid():
+            category = serializer.save()
+            return Response(
+                api_response(
+                    message="Category updated successfully.",
+                    status=True,
+                    data=CategorySerializer(category).data,
+                ),
+                status=200,
+            )
+        return Response(
+            api_response(
+                message=(
+                    ", ".join(
+                        [
+                            f"{field}: {', '.join(errors)}"
+                            for field, errors in serializer.errors.items()
+                        ]
+                    )
+                    if serializer.errors
+                    else "Invalid data"
+                ),
+                status=False,
+                errors=serializer.errors,
+            ),
+            status=400,
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Update Category (Partial)",
+        operation_description="Partially update a category (admin only)",
+        request_body=CategorySerializer,
+        responses={200: CategorySerializer(), 400: "Bad Request", 404: "Not Found"},
+    )
+    def patch(self, request, pk):
+        category, err = self._get_category(pk)
+        if err:
+            return err
+
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(api_response(message=data, status=False), status=400)
+
+        serializer = CategorySerializer(category, data=data, partial=True)
+        if serializer.is_valid():
+            category = serializer.save()
+            return Response(
+                api_response(
+                    message="Category updated successfully.",
+                    status=True,
+                    data=CategorySerializer(category).data,
+                ),
+                status=200,
+            )
+        return Response(
+            api_response(
+                message=(
+                    ", ".join(
+                        [
+                            f"{field}: {', '.join(errors)}"
+                            for field, errors in serializer.errors.items()
+                        ]
+                    )
+                    if serializer.errors
+                    else "Invalid data"
+                ),
+                status=False,
+                errors=serializer.errors,
+            ),
+            status=400,
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Delete Category",
+        operation_description="Delete a category (admin only)",
+        responses={200: "Category deleted successfully", 400: "Bad Request", 404: "Not Found"},
+    )
+    def delete(self, request, pk):
+        category, err = self._get_category(pk)
+        if err:
+            return err
+
+        from django.db.models import ProtectedError
+        try:
+            category.delete()
+            return Response(
+                api_response(message="Category deleted successfully.", status=True),
+                status=200,
+            )
+        except ProtectedError:
+            return Response(
+                api_response(
+                    message="Cannot delete category because it has products associated with it. Please reassign or delete the products first.",
+                    status=False,
+                ),
+                status=400,
+            )
 
 
 class AreaOfSpecializationManagementView(APIView):
@@ -5927,9 +7308,7 @@ class PrimaryUserMechanicTabView(PrimaryUserProfileTabBaseView):
         start_dt, end_dt = self._parse_date_range(request)
         limit, offset = self._pagination(request)
 
-        queryset = RepairRequest.objects.filter(customer=user).select_related(
-            "mechanic", "customer"
-        )
+        queryset = RepairRequest.objects.filter(customer=user)
         if start_dt:
             queryset = queryset.filter(requested_at__gte=start_dt)
         if end_dt:
@@ -5939,33 +7318,129 @@ class PrimaryUserMechanicTabView(PrimaryUserProfileTabBaseView):
         if status_filter:
             queryset = queryset.filter(status=status_filter)
 
+        search = request.query_params.get("search", "")
+        if search:
+            queryset = queryset.filter(
+                Q(vehicle_make__icontains=search)
+                | Q(vehicle_model__icontains=search)
+                | Q(service_type__icontains=search)
+                | Q(problem_description__icontains=search)
+                | Q(service_address__icontains=search)
+            )
+
         total_count = queryset.count()
-        repairs = queryset.order_by("-requested_at")[offset: offset + limit]
+        repairs = (
+            queryset.select_related("mechanic", "customer", "mechanic__mechanic_profile")
+            .prefetch_related("service_categories")
+            .order_by("-requested_at")[offset: offset + limit]
+        )
 
         items = []
         for r in repairs:
+            categories_data = []
+            try:
+                for sc in r.service_categories.all():
+                    categories_data.append({"id": sc.id, "name": getattr(sc, "name", str(sc))})
+            except Exception:
+                pass
+
+            mechanic_data = None
+            if r.mechanic:
+                mech_profile = getattr(r.mechanic, "mechanic_profile", None)
+                mechanic_data = {
+                    "id": str(r.mechanic.id),
+                    "name": f"{r.mechanic.first_name} {r.mechanic.last_name}".strip() or r.mechanic.email,
+                    "email": r.mechanic.email,
+                    "phone_number": getattr(r.mechanic, "phone_number", None),
+                    "business_name": getattr(mech_profile, "business_name", None),
+                    "workshop_address": getattr(mech_profile, "workshop_address", None),
+                }
+
+            review_data = None
+            try:
+                from users.models import MechanicReview
+                if r.mechanic and hasattr(r.mechanic, "mechanic_profile"):
+                    rev = MechanicReview.objects.filter(
+                        mechanic=r.mechanic.mechanic_profile, user=r.customer
+                    ).first()
+                    if rev:
+                        review_data = {
+                            "id": str(rev.id),
+                            "rating": rev.rating,
+                            "comment": rev.comment,
+                            "created_at": rev.created_at.isoformat() if rev.created_at else None,
+                        }
+            except Exception:
+                pass
+
             items.append(
                 {
                     "id": str(r.id),
                     "status": r.status,
+                    "status_display": r.get_status_display() if hasattr(r, "get_status_display") else r.status,
+                    "priority": getattr(r, "priority", "medium"),
                     "service_type": r.service_type,
-                    "vehicle_make": r.vehicle_make,
-                    "vehicle_model": r.vehicle_model,
-                    "vehicle_year": r.vehicle_year,
-                    "estimated_cost": (
-                        float(r.estimated_cost) if r.estimated_cost else None
-                    ),
-                    "actual_cost": float(r.actual_cost) if r.actual_cost else None,
-                    "requested_at": (
-                        r.requested_at.isoformat() if r.requested_at else None
-                    ),
-                    "accepted_at": r.accepted_at.isoformat() if r.accepted_at else None,
-                    "completed_at": (
-                        r.completed_at.isoformat() if r.completed_at else None
-                    ),
-                    "mechanic": self._serialize_user_brief(r.mechanic),
+                    "service_categories": categories_data,
+                    "vehicle": {
+                        "make": r.vehicle_make,
+                        "model": r.vehicle_model,
+                        "year": r.vehicle_year,
+                        "vin": getattr(r, "vehicle_vin", None),
+                        "registration": getattr(r, "vehicle_registration", ""),
+                    },
+                    "problem_description": getattr(r, "problem_description", ""),
+                    "notes": getattr(r, "notes", ""),
+                    "service_address": getattr(r, "service_address", ""),
+                    "service_latitude": float(r.service_latitude) if getattr(r, "service_latitude", None) else None,
+                    "service_longitude": float(r.service_longitude) if getattr(r, "service_longitude", None) else None,
+                    "schedule": {
+                        "is_scheduled": getattr(r, "schedule", False),
+                        "preferred_date": r.preferred_date.isoformat() if getattr(r, "preferred_date", None) else None,
+                        "preferred_time_slot": getattr(r, "preferred_time_slot", None),
+                    },
+                    "costs": {
+                        "estimated_cost": float(r.estimated_cost) if r.estimated_cost else None,
+                        "actual_cost": float(r.actual_cost) if r.actual_cost else None,
+                    },
+                    "timeline": {
+                        "requested_at": r.requested_at.isoformat() if r.requested_at else None,
+                        "accepted_at": r.accepted_at.isoformat() if r.accepted_at else None,
+                        "in_transit_at": r.in_transit_at.isoformat() if getattr(r, "in_transit_at", None) else None,
+                        "arrived_at": r.arrived_at.isoformat() if getattr(r, "arrived_at", None) else None,
+                        "started_at": r.started_at.isoformat() if getattr(r, "started_at", None) else None,
+                        "in_progress_at": r.in_progress_at.isoformat() if getattr(r, "in_progress_at", None) else None,
+                        "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                        "verify_completed_at": r.verify_completed_at.isoformat() if getattr(r, "verify_completed_at", None) else None,
+                        "cancelled_at": r.cancelled_at.isoformat() if getattr(r, "cancelled_at", None) else None,
+                        "rejected_at": r.rejected_at.isoformat() if getattr(r, "rejected_at", None) else None,
+                    },
+                    "cancellation_reason": getattr(r, "cancellation_reason", ""),
+                    "mechanic": mechanic_data,
+                    "review": review_data,
                 }
             )
+
+        all_user_repairs = RepairRequest.objects.filter(customer=user)
+        if start_dt:
+            all_user_repairs = all_user_repairs.filter(requested_at__gte=start_dt)
+        if end_dt:
+            all_user_repairs = all_user_repairs.filter(requested_at__lte=end_dt)
+
+        summary = {
+            "total_attempted": all_user_repairs.count(),
+            "completed": all_user_repairs.filter(status="completed").count(),
+            "in_progress": all_user_repairs.filter(status="in_progress").count(),
+            "accepted": all_user_repairs.filter(status="accepted").count(),
+            "pending": all_user_repairs.filter(status="pending").count(),
+            "in_transit": all_user_repairs.filter(status="in_transit").count(),
+            "arrived": all_user_repairs.filter(status="arrived").count(),
+            "verify_completed": all_user_repairs.filter(status="verify_completed").count(),
+            "cancelled": all_user_repairs.filter(status="cancelled").count(),
+            "rejected": all_user_repairs.filter(status="rejected").count(),
+            "total_spent": float(
+                all_user_repairs.filter(status="completed").aggregate(total=Sum("actual_cost")).get("total") or 0
+            ),
+        }
 
         return Response(
             api_response(
@@ -5975,6 +7450,7 @@ class PrimaryUserMechanicTabView(PrimaryUserProfileTabBaseView):
                     "total_count": total_count,
                     "limit": limit,
                     "offset": offset,
+                    "summary": summary,
                     "repairs": items,
                 },
             )
@@ -6211,20 +7687,125 @@ class PrimaryUserProductsTabView(PrimaryUserProfileTabBaseView):
         if status_filter:
             queryset = queryset.filter(status=status_filter)
 
-        total_count = queryset.count()
-        orders = queryset.order_by("-created_at")[offset: offset + limit]
+        search = request.query_params.get("search", "")
+        if search:
+            queryset = queryset.filter(
+                Q(payment_reference__icontains=search)
+                | Q(items__product__name__icontains=search)
+            )
+
+        total_count = queryset.distinct().count()
+        orders = (
+            queryset.distinct()
+            .prefetch_related(
+                "items__product__category",
+                "items__product__make",
+                "items__product__model",
+                "items__product__merchant__merchant_profile",
+                "items__product__images",
+            )
+            .order_by("-created_at")[offset: offset + limit]
+        )
 
         items = []
         for o in orders:
+            order_items = []
+            for item in o.items.all():
+                prod = item.product
+                image_url = None
+                if prod and prod.images.exists():
+                    first_img = prod.images.first()
+                    if first_img and first_img.image:
+                        try:
+                            image_url = request.build_absolute_uri(first_img.image.url)
+                        except Exception:
+                            image_url = str(first_img.image.url)
+
+                merchant_data = None
+                if prod and prod.merchant:
+                    merch_prof = getattr(prod.merchant, "merchant_profile", None)
+                    merchant_data = {
+                        "id": str(prod.merchant.id),
+                        "name": f"{prod.merchant.first_name} {prod.merchant.last_name}".strip() or prod.merchant.email,
+                        "business_name": getattr(merch_prof, "business_name", None),
+                        "email": prod.merchant.email,
+                    }
+
+                order_items.append({
+                    "id": item.id,
+                    "quantity": item.quantity,
+                    "unit_price": float(item.price) if item.price else 0,
+                    "subtotal": float(item.price * item.quantity) if item.price else 0,
+                    "product": {
+                        "id": str(prod.id) if prod else None,
+                        "name": prod.name if prod else None,
+                        "description": getattr(prod, "description", "") if prod else "",
+                        "category": prod.category.name if prod and prod.category else None,
+                        "price": float(prod.price) if prod and hasattr(prod, "price") and prod.price else None,
+                        "condition": getattr(prod, "condition", None) if prod else None,
+                        "body_type": getattr(prod, "body_type", None) if prod else None,
+                        "mileage": getattr(prod, "mileage", None) if prod else None,
+                        "vin": getattr(prod, "vin", None) if prod else None,
+                        "year": getattr(prod, "year", None) if prod else None,
+                        "make": prod.make.name if prod and hasattr(prod, "make") and prod.make else None,
+                        "model": prod.model.name if prod and hasattr(prod, "model") and prod.model else None,
+                        "image": image_url,
+                        "merchant": merchant_data,
+                    } if prod else None,
+                })
+
             items.append(
                 {
                     "id": str(o.id),
                     "status": o.status,
+                    "status_display": o.get_status_display() if hasattr(o, "get_status_display") else o.status,
+                    "payment_status": o.payment_status,
+                    "payment_method": o.payment_method,
+                    "payment_reference": o.payment_reference,
                     "total_amount": float(o.total_amount) if o.total_amount else 0,
-                    "created_at": o.created_at.isoformat() if o.created_at else None,
-                    "updated_at": o.updated_at.isoformat() if o.updated_at else None,
+                    "items_count": len(order_items),
+                    "items": order_items,
+                    "timeline": {
+                        "created_at": o.created_at.isoformat() if o.created_at else None,
+                        "paid_at": o.paid_at.isoformat() if o.paid_at else None,
+                        "shipped_at": o.shipped_at.isoformat() if o.shipped_at else None,
+                        "completed_at": o.completed_at.isoformat() if o.completed_at else None,
+                        "cancelled_at": o.cancelled_at.isoformat() if o.cancelled_at else None,
+                        "updated_at": o.updated_at.isoformat() if o.updated_at else None,
+                    },
                 }
             )
+
+        all_user_orders = Order.objects.filter(customer=user)
+        if start_dt:
+            all_user_orders = all_user_orders.filter(created_at__gte=start_dt)
+        if end_dt:
+            all_user_orders = all_user_orders.filter(created_at__lte=end_dt)
+
+        total_spend_val = (
+            all_user_orders.filter(status__in=["paid", "shipped", "completed"])
+            .aggregate(total=Sum("total_amount"))
+            .get("total")
+            or 0
+        )
+
+        items_count_val = (
+            OrderItem.objects.filter(order__customer=user)
+            .aggregate(total=Sum("quantity"))
+            .get("total")
+            or 0
+        )
+
+        summary = {
+            "total_orders": all_user_orders.count(),
+            "total_items_purchased": int(items_count_val),
+            "completed": all_user_orders.filter(status="completed").count(),
+            "paid": all_user_orders.filter(status="paid").count(),
+            "shipped": all_user_orders.filter(status="shipped").count(),
+            "pending": all_user_orders.filter(status="pending").count(),
+            "cancelled": all_user_orders.filter(status="cancelled").count(),
+            "total_spent": float(total_spend_val),
+        }
 
         return Response(
             api_response(
@@ -6234,6 +7815,7 @@ class PrimaryUserProductsTabView(PrimaryUserProfileTabBaseView):
                     "total_count": total_count,
                     "limit": limit,
                     "offset": offset,
+                    "summary": summary,
                     "orders": items,
                 },
             )
