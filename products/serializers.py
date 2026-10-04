@@ -281,6 +281,8 @@ class ProductSerializer(serializers.ModelSerializer):
             'repair_history',
             'is_active',
             'bidding_window',
+            'views_count',
+            'unique_views_count',
         ]
         read_only_fields = [
             'id',
@@ -301,6 +303,8 @@ class ProductSerializer(serializers.ModelSerializer):
             'is_in_cart',
             'is_in_favorite_list',
             'bidding_window',
+            'views_count',
+            'unique_views_count',
         ]
         ref_name = "ProductsProductSerializer"
 
@@ -1020,4 +1024,50 @@ class BidUpdateSerializer(serializers.ModelSerializer):
         if value not in ['accepted', 'rejected']:
             raise serializers.ValidationError("Only 'accepted' or 'rejected' statuses are allowed for updates.")
         return value
+
+
+class ProductViewerCustomerSerializer(serializers.Serializer):
+    """
+    Serializes registered customer info who viewed a product.
+    """
+    id = serializers.UUIDField(source='user.id')
+    name = serializers.SerializerMethodField()
+    email = serializers.EmailField(source='user.email')
+    phone_number = serializers.CharField(source='user.phone_number', default=None)
+    profile_picture = serializers.SerializerMethodField()
+    view_count = serializers.IntegerField()
+    first_viewed_at = serializers.DateTimeField()
+    last_viewed_at = serializers.DateTimeField()
+
+    def get_name(self, obj):
+        user = obj.user
+        if not user:
+            return "Anonymous"
+        full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+        return full_name or user.email
+
+    def get_profile_picture(self, obj):
+        user = obj.user
+        if user and getattr(user, 'profile_picture', None) and hasattr(user.profile_picture, 'url'):
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(user.profile_picture.url)
+            return user.profile_picture.url
+        return None
+
+
+class ProductViewersResponseSerializer(serializers.Serializer):
+    """
+    Response schema for product viewers endpoint.
+    """
+    product_id = serializers.UUIDField()
+    product_name = serializers.CharField()
+    total_views = serializers.IntegerField()
+    unique_viewers_count = serializers.IntegerField()
+    registered_customers_count = serializers.IntegerField()
+    guest_viewers_count = serializers.IntegerField()
+    limit = serializers.IntegerField()
+    offset = serializers.IntegerField()
+    total_registered_viewers = serializers.IntegerField()
+    viewers = ProductViewerCustomerSerializer(many=True)
 

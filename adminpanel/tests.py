@@ -397,3 +397,89 @@ class AdminCategoryAndAccountManagementTests(TestCase):
         self.assertEqual(data["kpis"]["avg_rating"], 5.0)
         self.assertEqual(data["activities"]["type"], "reviews")
         self.assertEqual(len(data["activities"]["reviews"]), 1)
+
+    def test_vehicle_rental_provider_detail(self):
+        from users.models import VehicleRentalProfile
+        from rentals.models import RentalBooking, RentalReview
+        from datetime import date, timedelta
+        from decimal import Decimal
+
+        rental_role, _ = Role.objects.get_or_create(
+            name=Role.VEHICLE_RENTAL, defaults={"description": "Vehicle Rental"}
+        )
+        rental_user = User.objects.create_user(
+            email="rental@test.com",
+            password="RentalPass123!",
+            first_name="Rental",
+            last_name="Operator",
+            phone_number="08099887766",
+        )
+        rental_user.roles.add(rental_role)
+        VehicleRentalProfile.objects.create(
+            user=rental_user,
+            company_name="Swift Car Rentals",
+            location="Lagos, Nigeria",
+            cac_number="RC123456",
+        )
+
+        # Rental product
+        rental_product = Product.objects.create(
+            merchant=rental_user,
+            name="2022 Toyota Prado",
+            price=Decimal("150000.00"),
+            is_rental=True,
+        )
+
+        # Rental booking
+        booking = RentalBooking.objects.create(
+            customer=self.primary_user,
+            product=rental_product,
+            start_date=date.today(),
+            end_date=date.today() + timedelta(days=3),
+            daily_rate=Decimal("150000.00"),
+            total_amount=Decimal("450000.00"),
+            status="completed",
+            pickup_location="Victoria Island",
+            return_location="Victoria Island",
+        )
+
+        # Rental review
+        RentalReview.objects.create(
+            rental=booking,
+            customer=self.primary_user,
+            rating=5,
+            comment="Awesome car rental service!",
+        )
+
+        # Query reviews activity
+        url = f"/api/v1/admin/users/vehicle-rental/{rental_user.id}/detail/?activity=reviews"
+        response = self.client.get(url, **self.headers)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()["data"]
+        self.assertEqual(data["profile"]["company_name"], "Swift Car Rentals")
+        self.assertEqual(data["kpis"]["total_vehicles"], 1)
+        self.assertEqual(data["kpis"]["total_bookings"], 1)
+        self.assertEqual(data["kpis"]["completed_rentals"], 1)
+        self.assertEqual(data["kpis"]["total_earnings"], 450000.0)
+        self.assertEqual(data["kpis"]["avg_rating"], 5.0)
+        self.assertEqual(data["activities"]["type"], "reviews")
+        self.assertEqual(len(data["activities"]["reviews"]), 1)
+
+        # Query bookings activity via alias route
+        url_alias = f"/api/v1/admin/users/rental/{rental_user.id}/detail/?activity=bookings"
+        response_alias = self.client.get(url_alias, **self.headers)
+        self.assertEqual(response_alias.status_code, status.HTTP_200_OK)
+        data_alias = response_alias.json()["data"]
+        self.assertEqual(data_alias["activities"]["type"], "bookings")
+        self.assertEqual(len(data_alias["activities"]["bookings"]), 1)
+        self.assertEqual(data_alias["activities"]["bookings"][0]["product"]["name"], "2022 Toyota Prado")
+
+        # Query vehicles activity
+        url_vehicles = f"/api/v1/admin/users/vehicle-rental/{rental_user.id}/detail/?activity=vehicles"
+        response_vehicles = self.client.get(url_vehicles, **self.headers)
+        self.assertEqual(response_vehicles.status_code, status.HTTP_200_OK)
+        data_vehicles = response_vehicles.json()["data"]
+        self.assertEqual(data_vehicles["activities"]["type"], "vehicles")
+        self.assertEqual(len(data_vehicles["activities"]["vehicles"]), 1)
+        self.assertEqual(data_vehicles["activities"]["vehicles"][0]["name"], "2022 Toyota Prado")
+

@@ -9056,6 +9056,358 @@ class DriverProviderDetailView(BaseProviderDetailView):
         }
 
 
+class VehicleRentalProviderDetailView(BaseProviderDetailView):
+    """
+    Admin detailed view for vehicle rental providers.
+    Shows profile, KPIs, and provider activities.
+    """
+
+    @swagger_auto_schema(
+        operation_summary="Get Vehicle Rental Provider Details",
+        operation_description="""
+        Retrieve detailed information about a vehicle rental provider including profile, KPIs, and activities.
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                "activity",
+                openapi.IN_QUERY,
+                description="Type of activity to return: bookings, vehicles, reviews, activity_logs",
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+            openapi.Parameter(
+                "limit",
+                openapi.IN_QUERY,
+                description="Number of items to return",
+                type=openapi.TYPE_INTEGER,
+                default=50,
+            ),
+            openapi.Parameter(
+                "offset",
+                openapi.IN_QUERY,
+                description="Offset for pagination",
+                type=openapi.TYPE_INTEGER,
+                default=0,
+            ),
+            openapi.Parameter(
+                "from",
+                openapi.IN_QUERY,
+                description="Start date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "to",
+                openapi.IN_QUERY,
+                description="End date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+        ],
+        responses={
+            200: openapi.Response("Vehicle rental provider details"),
+            400: "Bad Request",
+            404: "Not Found",
+        },
+    )
+    def get(self, request, user_id):
+        from users.models import User, VehicleRentalProfile
+        from users.serializers import VehicleRentalProfileSerializer
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                api_response(message="User not found", status=False),
+                status=404,
+            )
+
+        if not (user.roles.filter(name="vehicle_rental").exists() or user.roles.filter(name="rental").exists()):
+            return Response(
+                api_response(message="User is not a vehicle rental provider", status=False),
+                status=400,
+            )
+
+        profile = getattr(user, "vehicle_rental_profile", None)
+        if not profile:
+            return Response(
+                api_response(message="Vehicle rental profile not found", status=False),
+                status=404,
+            )
+
+        # Compute KPIs
+        kpis = self._compute_vehicle_rental_kpis(user)
+
+        # Get activity
+        activity = request.query_params.get("activity")
+        if not activity:
+            return Response(
+                api_response(message="activity query param is required", status=False),
+                status=400,
+            )
+
+        activities_data = self._get_vehicle_rental_activities(user, activity, request)
+
+        # Serialize profile
+        profile_serializer = VehicleRentalProfileSerializer(
+            profile, context={"request": request}
+        )
+
+        return Response(
+            api_response(
+                message="Vehicle rental provider details retrieved successfully",
+                status=True,
+                data={
+                    "profile": profile_serializer.data,
+                    "kpis": kpis,
+                    "activities": activities_data,
+                },
+            )
+        )
+
+    def _compute_vehicle_rental_kpis(self, user):
+        from products.models import Product
+        from rentals.models import RentalBooking, RentalReview
+        from django.db.models import Sum, Avg
+
+        # Total rental vehicles
+        total_vehicles = Product.objects.filter(merchant=user, is_rental=True).count()
+
+        # Bookings for merchant's rental vehicles
+        bookings = RentalBooking.objects.filter(product__merchant=user)
+        total_bookings = bookings.count()
+
+        # Active rentals
+        active_rentals = bookings.filter(status__in=["active", "confirmed"]).count()
+
+        # Completed rentals
+        completed_rentals = bookings.filter(status="completed").count()
+
+        # Total earnings
+        total_earnings = (
+            bookings.filter(status="completed").aggregate(
+                total=Sum("total_amount")
+            )["total"]
+            or 0
+        )
+
+        # Average rating
+        avg_rating = (
+            RentalReview.objects.filter(rental__product__merchant=user).aggregate(
+                avg=Avg("rating")
+            )["avg"]
+            or 0
+        )
+
+        # Last booking date
+        last_booking = bookings.order_by("-booked_at").first()
+        last_booking_date = (
+            last_booking.booked_at.isoformat() if last_booking else None
+        )
+
+        return {
+            "total_vehicles": total_vehicles,
+            "total_bookings": total_bookings,
+            "active_rentals": active_rentals,
+            "completed_rentals": completed_rentals,
+            "total_earnings": float(total_earnings),
+            "avg_rating": float(avg_rating),
+            "last_booking_date": last_booking_date,
+        }
+
+    def _get_vehicle_rental_activities(self, user, activity, request):
+        if activity == "bookings":
+            return self._get_rental_bookings(user, request)
+        elif activity == "vehicles":
+            return self._get_rental_vehicles(user, request)
+        elif activity == "reviews":
+            return self._get_rental_reviews(user, request)
+        elif activity == "activity_logs":
+            return self._get_rental_activity_logs(user, request)
+        else:
+            return {"error": "Invalid activity type"}
+
+    def _get_rental_bookings(self, user, request):
+        from rentals.models import RentalBooking
+
+        queryset = RentalBooking.objects.filter(
+            product__merchant=user
+        ).select_related("customer", "product")
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(booked_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(booked_at__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        bookings = queryset.order_by("-booked_at")[offset : offset + limit]
+
+        bookings_data = []
+        for booking in bookings:
+            customer_user = booking.customer
+            customer_name = f"{customer_user.first_name} {customer_user.last_name}".strip() or customer_user.email
+            bookings_data.append(
+                {
+                    "id": str(booking.id),
+                    "booking_reference": booking.booking_reference,
+                    "customer": {
+                        "id": str(customer_user.id),
+                        "name": customer_name,
+                        "email": customer_user.email,
+                    },
+                    "product": {
+                        "id": str(booking.product.id),
+                        "name": booking.product.name,
+                    },
+                    "start_date": booking.start_date.isoformat() if booking.start_date else None,
+                    "end_date": booking.end_date.isoformat() if booking.end_date else None,
+                    "daily_rate": float(booking.daily_rate) if booking.daily_rate else 0,
+                    "total_amount": float(booking.total_amount) if booking.total_amount else 0,
+                    "status": booking.status,
+                    "booked_at": booking.booked_at.isoformat() if booking.booked_at else None,
+                }
+            )
+
+        return {
+            "type": "bookings",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "bookings": bookings_data,
+        }
+
+    def _get_rental_vehicles(self, user, request):
+        from products.models import Product
+
+        queryset = Product.objects.filter(merchant=user, is_rental=True)
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(created_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(created_at__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        products = queryset.order_by("-created_at")[offset : offset + limit]
+
+        vehicles_data = []
+        for product in products:
+            vehicles_data.append(
+                {
+                    "id": str(product.id),
+                    "name": product.name,
+                    "price": float(product.price),
+                    "availability": product.availability,
+                    "is_active": product.is_active,
+                    "views_count": getattr(product, "views_count", 0),
+                    "unique_views_count": getattr(product, "unique_views_count", 0),
+                    "created_at": product.created_at.isoformat(),
+                }
+            )
+
+        return {
+            "type": "vehicles",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "vehicles": vehicles_data,
+        }
+
+    def _get_rental_reviews(self, user, request):
+        from rentals.models import RentalReview
+
+        queryset = RentalReview.objects.filter(
+            rental__product__merchant=user
+        ).select_related("customer", "rental__product")
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(created_at__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(created_at__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        reviews = queryset.order_by("-created_at")[offset : offset + limit]
+
+        reviews_data = []
+        for review in reviews:
+            customer_user = review.customer
+            customer_name = f"{customer_user.first_name} {customer_user.last_name}".strip() or customer_user.email
+            product = review.rental.product
+            reviews_data.append(
+                {
+                    "id": str(review.id),
+                    "customer": {
+                        "id": str(customer_user.id),
+                        "name": customer_name,
+                        "email": customer_user.email,
+                    },
+                    "product": {
+                        "id": str(product.id),
+                        "name": product.name,
+                    },
+                    "rating": review.rating,
+                    "comment": review.comment,
+                    "created_at": review.created_at.isoformat(),
+                }
+            )
+
+        return {
+            "type": "reviews",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "reviews": reviews_data,
+        }
+
+    def _get_rental_activity_logs(self, user, request):
+        from users.models import UserActivityLog
+
+        queryset = UserActivityLog.objects.filter(user=user)
+
+        # Date filter
+        start_dt, end_dt = self._parse_date_range(request)
+        if start_dt:
+            queryset = queryset.filter(timestamp__gte=start_dt)
+        if end_dt:
+            queryset = queryset.filter(timestamp__lte=end_dt)
+
+        # Pagination
+        limit, offset = self._pagination(request)
+        total_count = queryset.count()
+        logs = queryset.order_by("-timestamp")[offset : offset + limit]
+
+        logs_data = []
+        for log in logs:
+            logs_data.append(
+                {
+                    "id": str(log.id),
+                    "action": log.action,
+                    "category": log.category,
+                    "severity": log.severity,
+                    "success": log.success,
+                    "description": log.description,
+                    "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+                }
+            )
+
+        return {
+            "type": "activity_logs",
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "activity_logs": logs_data,
+        }
+
+
 class PendingKYCView(APIView):
     """
     Admin endpoint to get all users with pending KYC verification across all roles.

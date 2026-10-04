@@ -24,7 +24,8 @@ from .views import (
     BidView,
     UserBidsListView,
     ActiveBiddingProductListView,
-    BidDetailView
+    BidDetailView,
+    ProductViewersView,
 )
 
 app_name = 'products'
@@ -39,6 +40,11 @@ urlpatterns = [
     path('products/', ProductListCreateView.as_view(), name='product-list-create'),
     path('products/<uuid:product_id>/images/upload/', ProductImageCreateView.as_view(), name='product-image-create'),
     path('products/<uuid:id>/', ProductDetailView.as_view(), name='product-detail'),
+    path('products/<uuid:id>/viewers/', ProductViewersView.as_view(), name='product-viewers'),
+    path('products/<uuid:id>/views/', ProductViewersView.as_view(), name='product-views'),
+    path('<uuid:id>/', ProductDetailView.as_view(), name='product-detail-direct'),
+    path('<uuid:id>/viewers/', ProductViewersView.as_view(), name='product-viewers-direct'),
+    path('<uuid:id>/views/', ProductViewersView.as_view(), name='product-views-direct'),
     path('products/<uuid:product_id>/images/', ProductImageListView.as_view(), name='product-image-list'),
     
     # Orders and Cart

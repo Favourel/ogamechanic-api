@@ -335,6 +335,15 @@ class Product(models.Model):
         help_text="Whether the product is currently visible to customers"
     )
 
+    views_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Total number of views this product has received"
+    )
+    unique_views_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Total number of unique viewers for this product"
+    )
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -353,6 +362,7 @@ class Product(models.Model):
             models.Index(fields=['is_rental']),
             models.Index(fields=['stock']),
             models.Index(fields=['contact_info']),
+            models.Index(fields=['views_count']),
             models.Index(fields=['created_at']),
         ]
         ordering = ['-created_at']
@@ -829,3 +839,45 @@ def product_can_be_purchased_by(self, user):
 
 # Attach the method to Product model
 setattr(Product, 'can_be_purchased_by', product_can_be_purchased_by)
+
+
+class ProductView(models.Model):
+    """
+    Model to track product views by registered customers and guest visitors.
+    Allows vendors to know who is viewing their products and track view metrics.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='product_views'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='product_views'
+    )
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True, null=True)
+    view_count = models.PositiveIntegerField(
+        default=1,
+        help_text="Number of times this user/IP has viewed this product"
+    )
+    first_viewed_at = models.DateTimeField(auto_now_add=True)
+    last_viewed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-last_viewed_at']
+        indexes = [
+            models.Index(fields=['product']),
+            models.Index(fields=['user']),
+            models.Index(fields=['product', 'user']),
+            models.Index(fields=['product', 'ip_address']),
+            models.Index(fields=['last_viewed_at']),
+        ]
+
+    def __str__(self):
+        viewer = self.user.email if self.user else f"Guest ({self.ip_address})"
+        return f"{viewer} viewed {self.product.name} ({self.view_count} times)"

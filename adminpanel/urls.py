@@ -52,6 +52,7 @@ from .views import (
     MerchantProviderDetailView,
     MechanicProviderDetailView,
     DriverProviderDetailView,
+    VehicleRentalProviderDetailView,
 )
 
 app_name = 'adminpanel'
@@ -308,4 +309,14 @@ urlpatterns = [
         DriverProviderDetailView.as_view(),
         name='driver-provider-detail',
     ),
+    path(
+        'users/vehicle-rental/<uuid:user_id>/detail/',
+        VehicleRentalProviderDetailView.as_view(),
+        name='vehicle-rental-provider-detail',
+    ),
+    # path(
+    #     'users/rental/<uuid:user_id>/detail/',
+    #     VehicleRentalProviderDetailView.as_view(),
+    #     name='rental-provider-detail',
+    # ),
 ]

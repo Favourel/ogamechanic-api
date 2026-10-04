@@ -797,6 +797,11 @@ class ProductDetailView(APIView):
                     ),
                     status=status.HTTP_404_NOT_FOUND
                 )
+
+        # Record product view (fail-safe: bot filtering, self-view suppression, cooldown)
+        from .view_tracker import record_product_view
+        record_product_view(product, request)
+
         serializer = ProductSerializer(
             product, context={'request': self.request})
         return Response(api_response(
@@ -987,6 +992,156 @@ class ProductDetailView(APIView):
             api_response(
                 message="Product deleted successfully.",
                 status=True
+            ),
+            status=status.HTTP_200_OK
+        )
+
+
+class ProductViewersView(APIView):
+    """
+    Endpoint for vendors/merchants and administrators to view customer activity
+    and viewer statistics for a specific product.
+
+    Security & Privacy:
+    - Only the product owner (merchant) or staff/admin can access this data.
+    - Other users receive a 403 Forbidden.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="Get Product Viewers and View Analytics",
+        operation_description="""
+        Retrieve customer view analytics and the list of registered customers who viewed this product.
+        Only accessible by the product vendor or admin.
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                "limit",
+                openapi.IN_QUERY,
+                description="Number of viewer records to return (default 50)",
+                type=openapi.TYPE_INTEGER,
+                default=50,
+            ),
+            openapi.Parameter(
+                "offset",
+                openapi.IN_QUERY,
+                description="Offset for pagination (default 0)",
+                type=openapi.TYPE_INTEGER,
+                default=0,
+            ),
+            openapi.Parameter(
+                "from",
+                openapi.IN_QUERY,
+                description="Filter viewers seen from this date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "to",
+                openapi.IN_QUERY,
+                description="Filter viewers seen up to this date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+        ],
+        responses={
+            200: openapi.Response("Product viewers and metrics"),
+            400: "Bad Request",
+            403: "Forbidden - You do not own this product",
+            404: "Product not found",
+        }
+    )
+    def get(self, request, id):
+        from uuid import UUID
+        from datetime import datetime
+        from django.utils import timezone
+        from .serializers import ProductViewerCustomerSerializer
+
+        try:
+            product_uuid = UUID(str(id))
+        except Exception:
+            return Response(
+                api_response(message="Invalid product_id.", status=False),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            product = Product.objects.get(id=product_uuid)
+        except Product.DoesNotExist:
+            return Response(
+                api_response(message="Product not found.", status=False),
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Authorization check: only owner or staff
+        if not (request.user.is_staff or product.merchant == request.user):
+            return Response(
+                api_response(
+                    message="You do not have permission to view viewers for this product.",
+                    status=False
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Pagination params
+        try:
+            limit = int(request.query_params.get("limit", 50))
+            offset = int(request.query_params.get("offset", 0))
+        except ValueError:
+            limit = 50
+            offset = 0
+
+        # Date range parsing
+        start_dt = None
+        end_dt = None
+        start_date_str = request.query_params.get("from")
+        end_date_str = request.query_params.get("to")
+        if start_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                start_dt = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+            except ValueError:
+                pass
+        if end_date_str:
+            try:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                end_dt = timezone.make_aware(datetime.combine(end_date, datetime.max.time()))
+            except ValueError:
+                pass
+
+        # Registered customers queryset
+        viewers_qs = product.product_views.filter(user__isnull=False).select_related('user')
+        if start_dt:
+            viewers_qs = viewers_qs.filter(last_viewed_at__gte=start_dt)
+        if end_dt:
+            viewers_qs = viewers_qs.filter(last_viewed_at__lte=end_dt)
+
+        total_registered_viewers = viewers_qs.count()
+        paginated_viewers = viewers_qs.order_by('-last_viewed_at')[offset: offset + limit]
+
+        serializer = ProductViewerCustomerSerializer(
+            paginated_viewers, many=True, context={'request': request}
+        )
+
+        total_views = product.views_count
+        unique_viewers_count = product.unique_views_count
+        registered_customers_count = product.product_views.filter(user__isnull=False).count()
+        guest_viewers_count = product.product_views.filter(user__isnull=True).count()
+
+        return Response(
+            api_response(
+                message="Product viewers retrieved successfully.",
+                status=True,
+                data={
+                    "product_id": str(product.id),
+                    "product_name": product.name,
+                    "total_views": total_views,
+                    "unique_viewers_count": unique_viewers_count,
+                    "registered_customers_count": registered_customers_count,
+                    "guest_viewers_count": guest_viewers_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "total_registered_viewers": total_registered_viewers,
+                    "viewers": serializer.data,
+                }
             ),
             status=status.HTTP_200_OK
         )
@@ -3106,6 +3261,30 @@ class MerchantAnalyticsView(APIView):
         # Product performance
         product_performance = self._get_product_performance(user)
 
+        # Product view analytics
+        total_product_views = Product.objects.filter(merchant=user).aggregate(
+            total=Sum('views_count')
+        )['total'] or 0
+        total_unique_viewers = Product.objects.filter(merchant=user).aggregate(
+            total=Sum('unique_views_count')
+        )['total'] or 0
+        top_viewed_products = [
+            {
+                "id": str(p.id),
+                "name": p.name,
+                "views_count": p.views_count,
+                "unique_views_count": p.unique_views_count,
+                "price": float(p.price),
+                "is_rental": p.is_rental,
+            }
+            for p in Product.objects.filter(merchant=user).order_by('-views_count')[:5]
+        ]
+        view_analytics = {
+            'total_product_views': total_product_views,
+            'total_unique_viewers': total_unique_viewers,
+            'top_viewed_products': top_viewed_products,
+        }
+
         return Response(
             api_response(
                 message="Merchant analytics retrieved successfully.",
@@ -3121,6 +3300,7 @@ class MerchantAnalyticsView(APIView):
                     'rental_analytics': rental_analytics,
                     'customer_insights': customer_insights,
                     'product_performance': product_performance,
+                    'view_analytics': view_analytics,
                 }
             )
         )

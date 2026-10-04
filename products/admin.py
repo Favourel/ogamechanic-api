@@ -108,6 +108,7 @@ class BiddingWindowAdmin(admin.ModelAdmin):
     list_filter = ('is_closed', 'created_at')
     readonly_fields = ('created_at', 'updated_at')
 
+
 @admin.register(models.Bid)
 class BidAdmin(admin.ModelAdmin):
     list_display = ('id', 'bidding_window', 'user', 'amount', 'status', 'created_at')
@@ -115,7 +116,17 @@ class BidAdmin(admin.ModelAdmin):
     list_filter = ('status', 'created_at')
     readonly_fields = ('created_at', 'updated_at')
 
-# Register all other models from mechanics app that are not already registered above  # noqa
+
+@admin.register(models.ProductView)
+class ProductViewAdmin(admin.ModelAdmin):
+    list_display = ('product', 'user', 'ip_address', 'view_count', 'first_viewed_at', 'last_viewed_at')
+    search_fields = ('product__name', 'user__email', 'ip_address')
+    list_filter = ('last_viewed_at', 'first_viewed_at')
+    readonly_fields = ('first_viewed_at', 'last_viewed_at')
+    list_per_page = 30
+
+
+# Register all other models from products app that are not already registered above  # noqa
 already_registered = {
     models.Category,
     models.Product,
@@ -128,6 +139,7 @@ already_registered = {
     models.ProductReview,
     models.BiddingWindow,
     models.Bid,
+    models.ProductView,
 }
 
 for model in vars(models).values():
