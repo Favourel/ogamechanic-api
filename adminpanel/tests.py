@@ -254,3 +254,146 @@ class AdminCategoryAndAccountManagementTests(TestCase):
         data = response.json()["data"]
         self.assertIn("orders", data)
         self.assertIn("summary", data)
+
+    def test_create_category(self):
+        url = "/api/v1/admin/categories/"
+        payload = {
+            "requestType": "inbound",
+            "data": {
+                "name": "Brakes & Suspension",
+                "description": "High performance brake components",
+            },
+        }
+        response = self.client.post(url, data=payload, format="json", **self.headers)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(Category.objects.filter(name="Brakes & Suspension").exists())
+
+    def test_merchant_provider_detail(self):
+        from users.models import MerchantProfile
+        from products.models import ProductReview
+
+        merchant_role, _ = Role.objects.get_or_create(
+            name=Role.MERCHANT, defaults={"description": "Merchant"}
+        )
+        merchant_user = User.objects.create_user(
+            email="merchant@test.com",
+            password="MerchantPass123!",
+            first_name="Store",
+            last_name="Owner",
+            phone_number="08099887766",
+        )
+        merchant_user.roles.add(merchant_role)
+        MerchantProfile.objects.create(
+            user=merchant_user,
+            store_name="Auto Store",
+            cac_number="RC123456",
+        )
+        prod = Product.objects.create(
+            name="Spark Plug",
+            merchant=merchant_user,
+            category=self.category,
+            price=Decimal("5000.00"),
+        )
+        ord1 = Order.objects.create(
+            customer=self.primary_user,
+            status="completed",
+            payment_status="paid",
+            total_amount=Decimal("10000.00"),
+        )
+        OrderItem.objects.create(
+            order=ord1,
+            product=prod,
+            quantity=2,
+            price=Decimal("5000.00"),
+        )
+        ProductReview.objects.create(
+            product=prod,
+            user=self.primary_user,
+            rating=5,
+            comment="Great spark plugs!",
+        )
+
+        # Test activity=products
+        url = f"/api/v1/admin/users/merchant/{merchant_user.id}/detail/?activity=products"
+        response = self.client.get(url, **self.headers)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()["data"]
+        self.assertEqual(data["kpis"]["total_products"], 1)
+        self.assertEqual(data["kpis"]["total_orders"], 1)
+        self.assertEqual(data["kpis"]["total_sales"], 10000.0)
+        self.assertEqual(data["kpis"]["avg_rating"], 5.0)
+        self.assertEqual(data["activities"]["type"], "products")
+        self.assertEqual(len(data["activities"]["products"]), 1)
+
+        # Test activity=orders
+        url = f"/api/v1/admin/users/merchant/{merchant_user.id}/detail/?activity=orders"
+        response = self.client.get(url, **self.headers)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()["data"]
+        self.assertEqual(data["activities"]["type"], "orders")
+        self.assertEqual(len(data["activities"]["orders"]), 1)
+
+        # Test activity=reviews
+        url = f"/api/v1/admin/users/merchant/{merchant_user.id}/detail/?activity=reviews"
+        response = self.client.get(url, **self.headers)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()["data"]
+        self.assertEqual(data["activities"]["type"], "reviews")
+        self.assertEqual(len(data["activities"]["reviews"]), 1)
+
+        # Test activity=activity_logs
+        url = f"/api/v1/admin/users/merchant/{merchant_user.id}/detail/?activity=activity_logs"
+        response = self.client.get(url, **self.headers)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()["data"]
+        self.assertEqual(data["activities"]["type"], "activity_logs")
+
+    def test_mechanic_provider_detail(self):
+        from users.models import MechanicReview
+
+        MechanicReview.objects.create(
+            mechanic=self.mechanic_profile,
+            user=self.primary_user,
+            rating=4,
+            comment="Good mechanic",
+        )
+        url = f"/api/v1/admin/users/mechanic/{self.mechanic_user.id}/detail/?activity=reviews"
+        response = self.client.get(url, **self.headers)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()["data"]
+        self.assertEqual(data["kpis"]["avg_rating"], 4.0)
+        self.assertEqual(data["activities"]["type"], "reviews")
+        self.assertEqual(len(data["activities"]["reviews"]), 1)
+
+    def test_driver_provider_detail(self):
+        from users.models import DriverProfile, DriverReview
+
+        driver_role, _ = Role.objects.get_or_create(
+            name=Role.DRIVER, defaults={"description": "Driver"}
+        )
+        driver_user = User.objects.create_user(
+            email="driver@test.com",
+            password="DriverPass123!",
+            first_name="Speedy",
+            last_name="Driver",
+            phone_number="08011223344",
+        )
+        driver_user.roles.add(driver_role)
+        driver_profile = DriverProfile.objects.create(
+            user=driver_user,
+            vehicle_type="car",
+            license_number="LIC-12345",
+        )
+        DriverReview.objects.create(
+            driver=driver_profile,
+            user=self.primary_user,
+            rating=5,
+            comment="Excellent driving!",
+        )
+        url = f"/api/v1/admin/users/driver/{driver_user.id}/detail/?activity=reviews"
+        response = self.client.get(url, **self.headers)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()["data"]
+        self.assertEqual(data["kpis"]["avg_rating"], 5.0)
+        self.assertEqual(data["activities"]["type"], "reviews")
+        self.assertEqual(len(data["activities"]["reviews"]), 1)

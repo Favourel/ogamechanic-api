@@ -8011,13 +8011,54 @@ class EmailSubscriptionListView(APIView):
         # )
 
 
-class MerchantProviderDetailView(APIView):
+class BaseProviderDetailView(APIView):
+    """
+    Base view for admin provider detail endpoints (Merchant, Mechanic, Driver).
+    Provides common pagination and date filtering helpers.
+    """
+    permission_classes = [IsAdminUser]
+
+    def _pagination(self, request):
+        limit = int(request.query_params.get("limit", 50))
+        offset = int(request.query_params.get("offset", 0))
+        return limit, offset
+
+    def _parse_date_range(self, request):
+        from django.utils import timezone
+        from datetime import datetime
+
+        start_dt = None
+        end_dt = None
+
+        start_date_str = request.query_params.get("from")
+        end_date_str = request.query_params.get("to")
+
+        if start_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                start_dt = timezone.make_aware(
+                    datetime.combine(start_date, datetime.min.time())
+                )
+            except ValueError:
+                pass
+
+        if end_date_str:
+            try:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                end_dt = timezone.make_aware(
+                    datetime.combine(end_date, datetime.max.time())
+                )
+            except ValueError:
+                pass
+
+        return start_dt, end_dt
+
+
+class MerchantProviderDetailView(BaseProviderDetailView):
     """
     Admin detailed view for merchant providers.
     Shows profile, KPIs, and provider activities.
     """
-
-    permission_classes = [IsAdminUser]
 
     @swagger_auto_schema(
         operation_summary="Get Merchant Provider Details",
@@ -8067,7 +8108,8 @@ class MerchantProviderDetailView(APIView):
     )
     def get(self, request, user_id):
         from uuid import UUID
-        from users.models import User, MerchantProfile, Product, Order, MerchantReview
+        from users.models import User, MerchantProfile
+        from products.models import Product, Order, ProductReview
         from users.serializers import MerchantProfileSerializer
         from django.db.models import Sum, Avg
 
@@ -8123,7 +8165,7 @@ class MerchantProviderDetailView(APIView):
         )
 
     def _compute_merchant_kpis(self, user):
-        from users.models import Product, Order, MerchantReview
+        from products.models import Product, Order, ProductReview
         from django.db.models import Sum, Avg
 
         # Total products
@@ -8131,13 +8173,13 @@ class MerchantProviderDetailView(APIView):
 
         # Total orders (distinct orders containing merchant's products)
         total_orders = (
-            Order.objects.filter(orderitem__product__merchant=user).distinct().count()
+            Order.objects.filter(items__product__merchant=user).distinct().count()
         )
 
         # Total sales
         total_sales = (
             Order.objects.filter(
-                orderitem__product__merchant=user,
+                items__product__merchant=user,
                 status__in=["paid", "shipped", "completed"],
             )
             .distinct()
@@ -8147,7 +8189,7 @@ class MerchantProviderDetailView(APIView):
 
         # Average rating
         avg_rating = (
-            MerchantReview.objects.filter(merchant=user).aggregate(
+            ProductReview.objects.filter(product__merchant=user).aggregate(
                 avg=Avg("rating")
             )["avg"]
             or 0
@@ -8155,7 +8197,7 @@ class MerchantProviderDetailView(APIView):
 
         # Last order date
         last_order = (
-            Order.objects.filter(orderitem__product__merchant=user)
+            Order.objects.filter(items__product__merchant=user)
             .order_by("-created_at")
             .first()
         )
@@ -8184,11 +8226,11 @@ class MerchantProviderDetailView(APIView):
             return {"error": "Invalid activity type"}
 
     def _get_merchant_orders(self, user, request):
-        from users.models import Order
+        from products.models import Order
         from django.db.models import Sum
 
         queryset = Order.objects.filter(
-            orderitem__product__merchant=user
+            items__product__merchant=user
         ).distinct()
 
         # Date filter
@@ -8210,7 +8252,7 @@ class MerchantProviderDetailView(APIView):
                     "id": str(order.id),
                     "customer": {
                         "id": str(order.customer.id),
-                        "name": f"{order.customer.first_name} {order.customer.last_name}",
+                        "name": f"{order.customer.first_name} {order.customer.last_name}".strip() or order.customer.email,
                         "email": order.customer.email,
                     },
                     "total_amount": float(order.total_amount),
@@ -8228,7 +8270,7 @@ class MerchantProviderDetailView(APIView):
         }
 
     def _get_merchant_products(self, user, request):
-        from users.models import Product
+        from products.models import Product
 
         queryset = Product.objects.filter(merchant=user)
 
@@ -8265,9 +8307,9 @@ class MerchantProviderDetailView(APIView):
         }
 
     def _get_merchant_reviews(self, user, request):
-        from users.models import MerchantReview
+        from products.models import ProductReview
 
-        queryset = MerchantReview.objects.filter(merchant=user)
+        queryset = ProductReview.objects.filter(product__merchant=user).select_related("user", "product")
 
         # Date filter
         start_dt, end_dt = self._parse_date_range(request)
@@ -8283,16 +8325,22 @@ class MerchantProviderDetailView(APIView):
 
         reviews_data = []
         for review in reviews:
+            customer_user = review.user
+            customer_name = f"{customer_user.first_name} {customer_user.last_name}".strip() or customer_user.email
             reviews_data.append(
                 {
                     "id": str(review.id),
                     "customer": {
-                        "id": str(review.customer.id),
-                        "name": f"{review.customer.first_name} {review.customer.last_name}",
+                        "id": str(customer_user.id),
+                        "name": customer_name,
+                        "email": customer_user.email,
+                    },
+                    "product": {
+                        "id": str(review.product.id),
+                        "name": review.product.name,
                     },
                     "rating": review.rating,
                     "comment": review.comment,
-                    "is_approved": review.is_approved,
                     "created_at": review.created_at.isoformat(),
                 }
             )
@@ -8345,7 +8393,7 @@ class MerchantProviderDetailView(APIView):
         }
 
 
-class MechanicProviderDetailView(APIView):
+class MechanicProviderDetailView(BaseProviderDetailView):
     """
     Admin detailed view for mechanic providers.
     Shows profile, KPIs, and provider activities.
@@ -8474,7 +8522,7 @@ class MechanicProviderDetailView(APIView):
 
         # Average rating
         avg_rating = (
-            MechanicReview.objects.filter(mechanic=user).aggregate(
+            MechanicReview.objects.filter(mechanic__user=user).aggregate(
                 avg=Avg("rating")
             )["avg"]
             or 0
@@ -8536,7 +8584,7 @@ class MechanicProviderDetailView(APIView):
                     "id": str(repair.id),
                     "customer": {
                         "id": str(repair.customer.id),
-                        "name": f"{repair.customer.first_name} {repair.customer.last_name}",
+                        "name": f"{repair.customer.first_name} {repair.customer.last_name}".strip() or repair.customer.email,
                     },
                     "vehicle_make": repair.vehicle_make,
                     "vehicle_model": repair.vehicle_model,
@@ -8560,7 +8608,7 @@ class MechanicProviderDetailView(APIView):
     def _get_mechanic_reviews(self, user, request):
         from users.models import MechanicReview
 
-        queryset = MechanicReview.objects.filter(mechanic=user)
+        queryset = MechanicReview.objects.filter(mechanic__user=user).select_related("user")
 
         # Date filter
         start_dt, end_dt = self._parse_date_range(request)
@@ -8576,16 +8624,18 @@ class MechanicProviderDetailView(APIView):
 
         reviews_data = []
         for review in reviews:
+            customer_user = review.user
+            customer_name = f"{customer_user.first_name} {customer_user.last_name}".strip() or customer_user.email
             reviews_data.append(
                 {
                     "id": str(review.id),
                     "customer": {
-                        "id": str(review.customer.id),
-                        "name": f"{review.customer.first_name} {review.customer.last_name}",
+                        "id": str(customer_user.id),
+                        "name": customer_name,
+                        "email": customer_user.email,
                     },
                     "rating": review.rating,
                     "comment": review.comment,
-                    "is_approved": review.is_approved,
                     "created_at": review.created_at.isoformat(),
                 }
             )
@@ -8648,13 +8698,11 @@ class MechanicProviderDetailView(APIView):
         }
 
 
-class DriverProviderDetailView(APIView):
+class DriverProviderDetailView(BaseProviderDetailView):
     """
     Admin detailed view for driver providers.
     Shows profile, KPIs, and provider activities.
     """
-
-    permission_classes = [IsAdminUser]
 
     @swagger_auto_schema(
         operation_summary="Get Driver Provider Details",
@@ -8758,41 +8806,6 @@ class DriverProviderDetailView(APIView):
             )
         )
 
-    def _pagination(self, request):
-        limit = int(request.query_params.get("limit", 50))
-        offset = int(request.query_params.get("offset", 0))
-        return limit, offset
-
-    def _parse_date_range(self, request):
-        from django.utils import timezone
-        from datetime import datetime
-
-        start_dt = None
-        end_dt = None
-
-        start_date_str = request.query_params.get("from")
-        end_date_str = request.query_params.get("to")
-
-        if start_date_str:
-            try:
-                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-                start_dt = timezone.make_aware(
-                    datetime.combine(start_date, datetime.min.time())
-                )
-            except ValueError:
-                pass
-
-        if end_date_str:
-            try:
-                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-                end_dt = timezone.make_aware(
-                    datetime.combine(end_date, datetime.max.time())
-                )
-            except ValueError:
-                pass
-
-        return start_dt, end_dt
-
     def _compute_driver_kpis(self, user):
         from rides.models import Ride
         from couriers.models import DeliveryRequest
@@ -8824,7 +8837,7 @@ class DriverProviderDetailView(APIView):
 
         # Average rating
         avg_rating = (
-            DriverReview.objects.filter(driver=user).aggregate(
+            DriverReview.objects.filter(driver__user=user).aggregate(
                 avg=Avg("rating")
             )["avg"]
             or 0
@@ -8898,7 +8911,7 @@ class DriverProviderDetailView(APIView):
                     "id": str(ride.id),
                     "customer": {
                         "id": str(ride.customer.id),
-                        "name": f"{ride.customer.first_name} {ride.customer.last_name}",
+                        "name": f"{ride.customer.first_name} {ride.customer.last_name}".strip() or ride.customer.email,
                     },
                     "fare": float(ride.fare) if ride.fare else 0,
                     "status": ride.status,
@@ -8941,7 +8954,7 @@ class DriverProviderDetailView(APIView):
                     "id": str(delivery.id),
                     "customer": {
                         "id": str(delivery.customer.id),
-                        "name": f"{delivery.customer.first_name} {delivery.customer.last_name}",
+                        "name": f"{delivery.customer.first_name} {delivery.customer.last_name}".strip() or delivery.customer.email,
                     },
                     "total_fare": float(delivery.total_fare) if delivery.total_fare else 0,
                     "status": delivery.status,
@@ -8963,7 +8976,7 @@ class DriverProviderDetailView(APIView):
     def _get_driver_reviews(self, user, request):
         from users.models import DriverReview
 
-        queryset = DriverReview.objects.filter(driver=user)
+        queryset = DriverReview.objects.filter(driver__user=user).select_related("user")
 
         # Date filter
         start_dt, end_dt = self._parse_date_range(request)
@@ -8979,16 +8992,18 @@ class DriverProviderDetailView(APIView):
 
         reviews_data = []
         for review in reviews:
+            customer_user = review.user
+            customer_name = f"{customer_user.first_name} {customer_user.last_name}".strip() or customer_user.email
             reviews_data.append(
                 {
                     "id": str(review.id),
                     "customer": {
-                        "id": str(review.customer.id),
-                        "name": f"{review.customer.first_name} {review.customer.last_name}",
+                        "id": str(customer_user.id),
+                        "name": customer_name,
+                        "email": customer_user.email,
                     },
                     "rating": review.rating,
                     "comment": review.comment,
-                    "is_approved": review.is_approved,
                     "created_at": review.created_at.isoformat(),
                 }
             )

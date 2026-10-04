@@ -132,24 +132,9 @@ urlpatterns = [
         name='admin-category-list',
     ),
     path(
-        'categories/create/',
-        AdminCategoryCreateView.as_view(),
-        name='admin-category-create',
-    ),
-    path(
         'categories/<int:pk>/',
         AdminCategoryDetailView.as_view(),
         name='admin-category-detail',
-    ),
-    path(
-        'categories/<int:pk>/update/',
-        AdminCategoryDetailView.as_view(),
-        name='admin-category-update',
-    ),
-    path(
-        'categories/<int:pk>/delete/',
-        AdminCategoryDetailView.as_view(),
-        name='admin-category-delete',
     ),
     path(
         'mechanics/specializations/',
