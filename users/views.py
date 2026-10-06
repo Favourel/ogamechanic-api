@@ -197,7 +197,6 @@ MERCHANT_KYC_REQUIRED_FIELDS = [
     # "cac_document",
     "selfie",
     "nin_number",
-    "nin_document",
 ]
 
 VEHICLE_RENTAL_KYC_REQUIRED_FIELDS = [
@@ -207,7 +206,6 @@ VEHICLE_RENTAL_KYC_REQUIRED_FIELDS = [
     # "cac_document",
     "selfie",
     "nin_number",
-    "nin_document",
 ]
 
 MECHANIC_KYC_REQUIRED_FIELDS = [
@@ -216,7 +214,6 @@ MECHANIC_KYC_REQUIRED_FIELDS = [
     "longitude",
     "selfie",
     "nin_number",
-    "nin_document",
     # "vehicle_expertise",
 ]
 
@@ -251,7 +248,6 @@ DRIVER_KYC_REQUIRED_FIELDS = [
     "vehicle_registration_number",
     "insurance_document",
     "nin_number",
-    "nin_document",
 ]
 
 RIDER_KYC_REQUIRED_FIELDS = [
@@ -270,7 +266,6 @@ RIDER_KYC_REQUIRED_FIELDS = [
     "government_id_front",
     "government_id_back",
     "nin_number",
-    "nin_document",
 ]
 
 User = get_user_model()

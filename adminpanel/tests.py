@@ -465,11 +465,11 @@ class AdminCategoryAndAccountManagementTests(TestCase):
         self.assertEqual(data["activities"]["type"], "reviews")
         self.assertEqual(len(data["activities"]["reviews"]), 1)
 
-        # Query bookings activity via alias route
-        url_alias = f"/api/v1/admin/users/rental/{rental_user.id}/detail/?activity=bookings"
-        response_alias = self.client.get(url_alias, **self.headers)
-        self.assertEqual(response_alias.status_code, status.HTTP_200_OK)
-        data_alias = response_alias.json()["data"]
+        # Query bookings activity
+        url_bookings = f"/api/v1/admin/users/vehicle-rental/{rental_user.id}/detail/?activity=bookings"
+        response_bookings = self.client.get(url_bookings, **self.headers)
+        self.assertEqual(response_bookings.status_code, status.HTTP_200_OK)
+        data_alias = response_bookings.json()["data"]
         self.assertEqual(data_alias["activities"]["type"], "bookings")
         self.assertEqual(len(data_alias["activities"]["bookings"]), 1)
         self.assertEqual(data_alias["activities"]["bookings"][0]["product"]["name"], "2022 Toyota Prado")

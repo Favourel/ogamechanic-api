@@ -139,7 +139,6 @@ class RiderProfileSerializer(serializers.ModelSerializer):
             "disapproved",
             "disapproval_reason",
             "nin_number",
-            "nin_document",
             "nin_is_verified",
             "nin_verified_at",
             "created_at",
@@ -243,7 +242,6 @@ class RiderProfileSerializer(serializers.ModelSerializer):
             'selfie',
             "government_id_front",
             "government_id_back",
-            "nin_document",
         ]
         for field_name in file_fields:
             value = getattr(instance, field_name, None)
@@ -490,7 +488,6 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
             "has_reached_product_limit",
             "active_product_count",
             "nin_number",
-            "nin_document",
             "nin_is_verified",
             "nin_verified_at",
             "created_at",
@@ -557,7 +554,7 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
 
     def to_internal_value(self, data):
         # Handle file fields sent as strings (URLs) - happens on frontend updates
-        file_fields = ['cac_document', 'selfie', 'nin_document']
+        file_fields = ['cac_document', 'selfie']
         for field in file_fields:
             if field in data and isinstance(data.get(field), str):
                 if not isinstance(data, dict):
@@ -579,7 +576,7 @@ class MerchantProfileSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get('request', None)
-        for field_name in ['cac_document', 'selfie', 'nin_document']:
+        for field_name in ['cac_document', 'selfie']:
             value = getattr(instance, field_name, None)
             if value and hasattr(value, 'url'):
                 data[field_name] = self._get_absolute_url(value.url, request)
@@ -667,7 +664,7 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
                     pass
                     
         # Handle file fields sent as strings (URLs) - happens on frontend updates
-        file_fields = ['cac_document', 'selfie', 'government_id_front', 'government_id_back', 'nin_document', 'certificate_of_learning']
+        file_fields = ['cac_document', 'selfie', 'government_id_front', 'government_id_back', 'certificate_of_learning']
         for field in file_fields:
             if field in data and isinstance(data.get(field), str):
                 # If it's a string, it's likely the URL from the previous response
@@ -695,7 +692,6 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
             "cac_document",
             "selfie",
             "nin_number",
-            "nin_document",
             "nin_is_verified",
             "nin_verified_at",
             "certificate_of_learning",
@@ -812,7 +808,7 @@ class MechanicProfileSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get('request', None)
-        for field_name in ['cac_document', 'selfie', 'government_id_front', 'government_id_back', 'nin_document', 'certificate_of_learning']:
+        for field_name in ['cac_document', 'selfie', 'government_id_front', 'government_id_back', 'certificate_of_learning']:
             value = getattr(instance, field_name, None)
             if value and hasattr(value, 'url'):
                 data[field_name] = self._get_absolute_url(value.url, request)
@@ -846,7 +842,6 @@ class VehicleRentalProfileSerializer(serializers.ModelSerializer):
             "cac_document",
             "selfie",
             "nin_number",
-            "nin_document",
             "nin_is_verified",
             "nin_verified_at",
             "is_approved",
@@ -878,7 +873,7 @@ class VehicleRentalProfileSerializer(serializers.ModelSerializer):
 
     def to_internal_value(self, data):
         # Handle file fields sent as strings (URLs) - happens on frontend updates
-        file_fields = ['cac_document', 'selfie', 'nin_document']
+        file_fields = ['cac_document', 'selfie']
         for field in file_fields:
             if field in data and isinstance(data.get(field), str):
                 if not isinstance(data, dict):
@@ -930,7 +925,7 @@ class VehicleRentalProfileSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get('request', None)
-        file_fields = ['cac_document', 'selfie', 'nin_document']
+        file_fields = ['cac_document', 'selfie']
         for field_name in file_fields:
             value = getattr(instance, field_name, None)
             if value and hasattr(value, 'url'):
@@ -994,7 +989,6 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "insurance_document",
             "driver_license",
             "nin_number",
-            "nin_document",
             "nin_is_verified",
             "nin_verified_at",
             "rating",
@@ -1070,8 +1064,7 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             'government_id_back',
             'driver_license',
             'insurance_document',
-            'selfie',
-            'nin_document'
+            'selfie'
         ]
         for field in file_fields:
             if field in data and isinstance(data.get(field), str):
@@ -1795,7 +1788,6 @@ class StepFourDriverDetailsSerializer(serializers.Serializer):
 
     # Identification
     nin_number = serializers.CharField(max_length=20, required=False)
-    nin_document = serializers.FileField(required=False)
 
 
 class StepFourMerchantDetailsSerializer(serializers.Serializer):
@@ -1807,7 +1799,6 @@ class StepFourMerchantDetailsSerializer(serializers.Serializer):
     cac_document = serializers.FileField(required=True)
     selfie = serializers.ImageField(required=True)
     nin_number = serializers.CharField(max_length=20, required=False)
-    nin_document = serializers.FileField(required=False)
 
 
 class StepFourVehicleRentalDetailsSerializer(serializers.Serializer):
@@ -1820,7 +1811,6 @@ class StepFourVehicleRentalDetailsSerializer(serializers.Serializer):
     cac_document = serializers.FileField(required=True)
     selfie = serializers.ImageField(required=True)
     nin_number = serializers.CharField(max_length=20, required=False)
-    nin_document = serializers.FileField(required=False)
 
 
 class StepFourMechanicDetailsSerializer(serializers.Serializer):
@@ -1844,7 +1834,6 @@ class StepFourMechanicDetailsSerializer(serializers.Serializer):
     government_id_front = serializers.FileField(required=False)
     government_id_back = serializers.FileField(required=False)
     nin_number = serializers.CharField(max_length=20, required=False)
-    nin_document = serializers.FileField(required=False)
     certificate_of_learning = serializers.FileField(required=False)
 
     # Vehicle expertise fields

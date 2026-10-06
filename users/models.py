@@ -508,11 +508,6 @@ class MerchantProfile(models.Model):
         help_text="Live photo of merchant"
     )
     nin_number = models.CharField(max_length=20, blank=True, null=True)
-    nin_document = models.FileField(
-        upload_to='merchant/nin_documents/',
-        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
-        blank=True, null=True
-    )
     nin_is_verified = models.BooleanField(default=False)
     nin_verified_at = models.DateTimeField(null=True, blank=True)
 
@@ -588,11 +583,6 @@ class MechanicProfile(models.Model):
         help_text="Live photo of mechanic"
     )
     nin_number = models.CharField(max_length=20, blank=True, null=True)
-    nin_document = models.FileField(
-        upload_to='mechanic/nin_documents/',
-        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
-        blank=True, null=True
-    )
     nin_is_verified = models.BooleanField(default=False)
     nin_verified_at = models.DateTimeField(null=True, blank=True)
     certificate_of_learning = models.FileField(
@@ -727,11 +717,6 @@ class DriverProfile(models.Model):
         help_text="Live photo of driver"
     )
     nin_number = models.CharField(max_length=20, blank=True, null=True)
-    nin_document = models.FileField(
-        upload_to='driver/nin_documents/',
-        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
-        blank=True, null=True
-    )
     nin_is_verified = models.BooleanField(default=False)
     nin_verified_at = models.DateTimeField(null=True, blank=True)
 
@@ -941,11 +926,6 @@ class RiderProfile(models.Model):
         help_text="Live photo of rider"
     )
     nin_number = models.CharField(max_length=20, blank=True, null=True)
-    nin_document = models.FileField(
-        upload_to='rider/nin_documents/',
-        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
-        blank=True, null=True
-    )
     nin_is_verified = models.BooleanField(default=False)
     nin_verified_at = models.DateTimeField(null=True, blank=True)
 
@@ -1594,11 +1574,6 @@ class VehicleRentalProfile(models.Model):
         help_text="Live photo of the rental operator"
     )
     nin_number = models.CharField(max_length=20, blank=True, null=True)
-    nin_document = models.FileField(
-        upload_to='vehicle_rental/nin_documents/',
-        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'pdf'])],
-        blank=True, null=True
-    )
     nin_is_verified = models.BooleanField(default=False)
     nin_verified_at = models.DateTimeField(null=True, blank=True)
 
