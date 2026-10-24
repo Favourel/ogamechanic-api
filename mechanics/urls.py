@@ -42,6 +42,21 @@ urlpatterns = [
         views.SettlementDetailView.as_view(),
         name="repair-request-settlement",
     ),
+    path(
+        "repair-requests/<uuid:repair_id>/pay/",
+        views.InitiateRepairPaymentView.as_view(),
+        name="repair-request-pay",
+    ),
+    path(
+        "repair-requests/<uuid:repair_id>/verify-payment/",
+        views.VerifyRepairPaymentView.as_view(),
+        name="repair-request-verify-payment",
+    ),
+    path(
+        "repair-requests/<uuid:repair_id>/rate/",
+        views.RateMechanicView.as_view(),
+        name="repair-request-rate",
+    ),
     # Available Mechanics
     path(
         "available-mechanics/",

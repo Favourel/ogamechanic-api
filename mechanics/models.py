@@ -28,6 +28,17 @@ class RepairRequest(models.Model):
         ("rejected", "Rejected"),
     ]
 
+    PAYMENT_METHOD_CHOICES = [
+        ("online", "Online (Paystack)"),
+        ("cash_on_delivery", "Cash on Delivery"),
+    ]
+
+    PAYMENT_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("paid", "Paid"),
+        ("failed", "Failed"),
+    ]
+
     PRIORITY_CHOICES = [
         ("low", "Low"),
         ("medium", "Medium"),
@@ -154,12 +165,31 @@ class RepairRequest(models.Model):
         help_text="True if the mechanic successfully submitted the OTP to start the repair"
     )
 
+    # Payment fields
+    payment_method = models.CharField(
+        max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True, null=True
+    )
+    payment_status = models.CharField(
+        max_length=20, choices=PAYMENT_STATUS_CHOICES, default="pending"
+    )
+    payment_reference = models.CharField(
+        max_length=128, blank=True, null=True
+    )
+    paid_at = models.DateTimeField(null=True, blank=True)
+    platform_commission = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0.00
+    )
+    net_earnings = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0.00
+    )
+
     class Meta:
         ordering = ["-requested_at"]
         indexes = [
             models.Index(fields=["customer"]),
             models.Index(fields=["mechanic"]),
             models.Index(fields=["status"]),
+            models.Index(fields=["payment_status"]),
             models.Index(fields=["priority"]),
             models.Index(fields=["requested_at"]),
         ]
@@ -287,6 +317,68 @@ class RepairRequest(models.Model):
             self.save()
             return True
         return False
+
+    def calculate_commission(self, commission_rate=None):
+        """
+        Calculate platform commission (default 10%) and net earnings from actual_cost.
+        """
+        from decimal import Decimal
+        from django.conf import settings
+        if commission_rate is None:
+            commission_rate = getattr(settings, 'PLATFORM_COMMISSION_RATE', Decimal('0.10'))
+
+        cost = self.actual_cost or Decimal('0.00')
+        self.platform_commission = round(Decimal(str(cost)) * Decimal(str(commission_rate)), 2)
+        self.net_earnings = round(Decimal(str(cost)) - self.platform_commission, 2)
+        return self.platform_commission, self.net_earnings
+
+    def complete_payment(self, payment_method, reference=None):
+        """
+        Finalize payment for a completed repair:
+        - Calculates platform commission
+        - For 'online': credits net earnings to mechanic wallet
+        - For 'cash_on_delivery': debits platform commission from mechanic wallet
+        - Transitions status to 'verify_completed'
+        - Updates timestamps & saves
+        """
+        from users.models import Wallet
+        from decimal import Decimal
+
+        now = timezone.now()
+        self.payment_method = payment_method
+        self.payment_status = 'paid'
+        self.paid_at = now
+        if reference:
+            self.payment_reference = reference
+
+        self.calculate_commission()
+
+        if self.mechanic:
+            wallet, _ = Wallet.objects.get_or_create(user=self.mechanic)
+            if payment_method == 'online':
+                if self.net_earnings > Decimal('0.00'):
+                    wallet.credit(
+                        self.net_earnings,
+                        description=(
+                            f"Earnings for Repair #{str(self.id)[:8]} "
+                            f"(10% commission deducted: {self.platform_commission} NGN)"
+                        )
+                    )
+            elif payment_method == 'cash_on_delivery':
+                if self.platform_commission > Decimal('0.00'):
+                    wallet.debit(
+                        self.platform_commission,
+                        description=(
+                            f"Platform commission for Repair #{str(self.id)[:8]} "
+                            f"(Cash collected: {self.actual_cost} NGN)"
+                        ),
+                        allow_negative=True
+                    )
+
+        self.status = 'verify_completed'
+        self.verify_completed_at = now
+        self.save()
+        return True
 
     def save(self, *args, **kwargs):
         """

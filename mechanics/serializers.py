@@ -66,7 +66,13 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             'notes',
             'cancellation_reason', 'actual_cost', 'is_active',
             'can_be_cancelled', 'notified_mechanics', 'can_accept', 'otp_code',
-            'is_otp_verified'
+            'is_otp_verified',
+            'payment_method',
+            'payment_status',
+            'payment_reference',
+            'paid_at',
+            'platform_commission',
+            'net_earnings'
         ]
         read_only_fields = [
             'id', 'customer', 'mechanic',
@@ -84,7 +90,11 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             'verify_completed_at',
             'is_active',
             'can_be_cancelled', 'notified_mechanics', 'can_accept',
-            'is_otp_verified'
+            'is_otp_verified',
+            'paid_at',
+            'platform_commission',
+            'net_earnings',
+            'payment_reference'
         ]
 
     def get_can_accept(self, obj):
@@ -316,6 +326,12 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
             'otp_code',
             'is_otp_verified',
             'user_vehicle',
+            'payment_method',
+            'payment_status',
+            'payment_reference',
+            'paid_at',
+            'platform_commission',
+            'net_earnings',
         ]
 
     def to_representation(self, instance):

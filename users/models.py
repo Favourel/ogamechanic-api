@@ -1207,12 +1207,12 @@ class Wallet(models.Model):
             status='completed'
         )
 
-    def debit(self, amount, description="Wallet debit"):
+    def debit(self, amount, description="Wallet debit", allow_negative=False):
         """Debit the wallet by a given amount."""
         if amount <= 0:
             raise ValueError("Amount must be positive")
 
-        if self.balance < amount:
+        if not allow_negative and self.balance < amount:
             raise ValueError("Insufficient balance")
 
         self.balance = models.F('balance') - amount
@@ -1220,10 +1220,11 @@ class Wallet(models.Model):
         self.refresh_from_db(fields=['balance'])
 
         # Create transaction record
+        tx_type = 'fee' if 'commission' in description.lower() else 'debit'
         Transaction.objects.create(
             wallet=self,
             amount=amount,
-            transaction_type='debit',
+            transaction_type=tx_type,
             description=description,
             status='completed'
         )

@@ -86,20 +86,20 @@ CORS_ALLOW_HEADERS = [
 # Email settings for development
 # EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-# Debug toolbar settings
-INSTALLED_APPS += ['debug_toolbar'] # noqa
-MIDDLEWARE += [ # noqa
-    'debug_toolbar.middleware.DebugToolbarMiddleware',
-]
+import sys
 
-INTERNAL_IPS = ['127.0.0.1']
-
-# Debug Toolbar Configuration
-DEBUG_TOOLBAR_CONFIG = {
-    'SHOW_TOOLBAR_CALLBACK': lambda request: True,
-    'INTERCEPT_REDIRECTS': False,
-    'IS_RUNNING_TESTS': False,
-}
+# Debug toolbar settings (only when not running tests)
+if 'test' not in sys.argv:
+    INSTALLED_APPS += ['debug_toolbar']  # noqa
+    MIDDLEWARE += [  # noqa
+        'debug_toolbar.middleware.DebugToolbarMiddleware',
+    ]
+    INTERNAL_IPS = ['127.0.0.1']
+    DEBUG_TOOLBAR_CONFIG = {
+        'SHOW_TOOLBAR_CALLBACK': lambda request: True,
+        'INTERCEPT_REDIRECTS': False,
+        'IS_RUNNING_TESTS': False,
+    }
 
 REDIS_HOST = 'localhost'
 REDIS_PORT = 6379

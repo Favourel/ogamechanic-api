@@ -561,14 +561,23 @@ class RepairRequestDetailView(APIView):
                     ),
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            if repair_request.status == "completed" and new_status != "verify_completed":
-                return Response(
-                    api_response(
-                        message="This repair is completed. You can only transition it to 'verify_completed'.",
-                        status=False,
-                    ),
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+            if repair_request.status == "completed":
+                if new_status != "verify_completed":
+                    return Response(
+                        api_response(
+                            message="This repair is completed. You can only transition it to 'verify_completed'.",
+                            status=False,
+                        ),
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                if repair_request.payment_status != "paid":
+                    return Response(
+                        api_response(
+                            message="Payment is required before verifying completion. Please initiate payment via the pay endpoint.",
+                            status=False,
+                        ),
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
         serializer = RepairRequestSerializer(
             repair_request, data=data, partial=False,
@@ -674,14 +683,23 @@ class RepairRequestDetailView(APIView):
                     ),
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            if repair_request.status == "completed" and new_status != "verify_completed":
-                return Response(
-                    api_response(
-                        message="This repair is completed. You can only transition it to 'verify_completed'.",
-                        status=False,
-                    ),
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+            if repair_request.status == "completed":
+                if new_status != "verify_completed":
+                    return Response(
+                        api_response(
+                            message="This repair is completed. You can only transition it to 'verify_completed'.",
+                            status=False,
+                        ),
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                if repair_request.payment_status != "paid":
+                    return Response(
+                        api_response(
+                            message="Payment is required before verifying completion. Please initiate payment via the pay endpoint.",
+                            status=False,
+                        ),
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
         serializer = RepairRequestSerializer(
             repair_request, data=data, partial=True,
@@ -2316,4 +2334,434 @@ class SettlementDetailView(APIView):
             return Response(api_response("Settlement calculated successfully", True, serializer.data), status=status.HTTP_200_OK)
             
         return Response(api_response("Invalid data", False, serializer.errors), status=status.HTTP_400_BAD_REQUEST)
+
+
+class InitiateRepairPaymentView(APIView):
+    """
+    Initiate payment for a completed repair request.
+    Options:
+    - 'online' (Paystack): Initializes Paystack transaction, returns authorization URL.
+    - 'cash_on_delivery': Confirms cash payment to mechanic, debits platform commission from mechanic wallet.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="Initiate or Confirm Repair Payment",
+        operation_description=(
+            "Customer initiates payment for a completed repair.\n"
+            "- Option 'online': Initializes Paystack payment and returns authorization URL.\n"
+            "- Option 'cash_on_delivery': Confirms cash paid in hand, debits platform commission from mechanic wallet, and marks repair verified.\n"
+        ),
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['payment_method'],
+            properties={
+                'payment_method': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    enum=['online', 'cash_on_delivery'],
+                    description="Payment method: 'online' (Paystack) or 'cash_on_delivery'"
+                ),
+                'mobile_callback_url': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Optional deep link or callback URL for mobile app redirect after online payment"
+                )
+            }
+        ),
+        responses={200: openapi.Schema(type=openapi.TYPE_OBJECT)}
+    )
+    def post(self, request, repair_id):
+        import uuid
+        import requests
+        from decimal import Decimal
+        from django.conf import settings
+
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(api_response(message=data, status=False), status=status.HTTP_400_BAD_REQUEST)
+
+        repair_request = get_object_or_404(RepairRequest, id=repair_id)
+
+        # Only customer can pay
+        if repair_request.customer != request.user:
+            return Response(
+                api_response(message="Only the customer who requested this repair can initiate payment.", status=False),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Must be in completed status (mechanic finished work and submitted bill)
+        if repair_request.status != "completed":
+            if repair_request.status == "verify_completed" and repair_request.payment_status == "paid":
+                return Response(
+                    api_response(message="This repair request has already been paid and verified.", status=False),
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            return Response(
+                api_response(
+                    message=f"Cannot initiate payment for repair in '{repair_request.status}' status. Mechanic must mark job 'completed' first.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Actual cost must be set
+        if not repair_request.actual_cost or repair_request.actual_cost <= Decimal('0.00'):
+            return Response(
+                api_response(message="Repair final actual_cost has not been submitted by the mechanic yet.", status=False),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        payment_method = data.get('payment_method')
+        if payment_method not in ['online', 'cash_on_delivery']:
+            return Response(
+                api_response(message="Invalid payment_method. Must be 'online' or 'cash_on_delivery'.", status=False),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # --- OPTION B: Cash on Delivery ---
+        if payment_method == 'cash_on_delivery':
+            repair_request.complete_payment('cash_on_delivery')
+
+            # Notify mechanic & customer
+            if repair_request.mechanic:
+                NotificationService.create_notification(
+                    user=repair_request.mechanic,
+                    title="Cash Payment Confirmed",
+                    message=(
+                        f"Customer confirmed cash payment of {repair_request.actual_cost} NGN for Repair #{str(repair_request.id)[:8]}. "
+                        f"Platform commission of {repair_request.platform_commission} NGN has been debited from your wallet."
+                    ),
+                    notification_type='success',
+                    related_object=repair_request,
+                    related_object_type='RepairRequest'
+                )
+
+            NotificationService.create_notification(
+                user=repair_request.customer,
+                title="Repair Completed & Verified",
+                message=(
+                    f"Cash payment of {repair_request.actual_cost} NGN for Repair #{str(repair_request.id)[:8]} confirmed. "
+                    f"Your order is verified and completed. Please rate your mechanic!"
+                ),
+                notification_type='success',
+                related_object=repair_request,
+                related_object_type='RepairRequest'
+            )
+
+            # Trigger real-time status update
+            MechanicNotificationService.repair_status_updated(repair_request)
+
+            return Response(
+                api_response(
+                    message="Cash payment confirmed successfully. Platform commission deducted from mechanic wallet. Order is now verified.",
+                    status=True,
+                    data=RepairRequestSerializer(repair_request, context={'request': request}).data
+                ),
+                status=status.HTTP_200_OK
+            )
+
+        # --- OPTION A: Online via Paystack ---
+        reference = f"REPAIR_{uuid.uuid4().hex[:8].upper()}_{repair_request.id.hex[:8].upper()}"
+        repair_request.payment_method = 'online'
+        repair_request.payment_reference = reference
+        repair_request.save(update_fields=['payment_method', 'payment_reference'])
+
+        paystack_secret = getattr(settings, 'PAYSTACK_SECRET_KEY', '')
+        callback_url = getattr(settings, 'PAYSTACK_CALLBACK_URL', '')
+
+        mobile_callback = data.get('mobile_callback_url')
+        if mobile_callback:
+            callback_url = mobile_callback.format(
+                reference=reference,
+                repair_id=str(repair_request.id)
+            )
+
+        headers = {
+            'Authorization': f'Bearer {paystack_secret}',
+            'Content-Type': 'application/json',
+        }
+
+        payload = {
+            'email': repair_request.customer.email,
+            'amount': int(Decimal(str(repair_request.actual_cost)) * 100),  # in kobo
+            'reference': reference,
+            'callback_url': callback_url,
+            'metadata': {
+                'repair_request_id': str(repair_request.id),
+                'customer_id': str(repair_request.customer.id),
+                'mechanic_id': str(repair_request.mechanic.id) if repair_request.mechanic else None,
+                'payment_type': 'repair_request',
+            }
+        }
+
+        try:
+            resp = requests.post(
+                'https://api.paystack.co/transaction/initialize',
+                json=payload,
+                headers=headers,
+                timeout=15
+            )
+            resp_data = resp.json()
+            if resp.status_code == 200 and resp_data.get('status'):
+                return Response(
+                    api_response(
+                        message="Payment initialized successfully.",
+                        status=True,
+                        data={
+                            'authorization_url': resp_data['data']['authorization_url'],
+                            'access_code': resp_data['data']['access_code'],
+                            'reference': reference,
+                            'amount': float(repair_request.actual_cost),
+                            'currency': 'NGN',
+                            'repair_request_id': str(repair_request.id),
+                        }
+                    ),
+                    status=status.HTTP_200_OK
+                )
+            else:
+                logger.error(f"Paystack initialization failed for Repair {repair_request.id}: {resp.text}")
+                return Response(
+                    api_response(
+                        message=resp_data.get('message', 'Failed to initialize payment with Paystack.'),
+                        status=False
+                    ),
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except Exception as e:
+            logger.exception(f"Error initializing Paystack payment: {e}")
+            return Response(
+                api_response(message="An error occurred while connecting to payment provider.", status=False),
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class VerifyRepairPaymentView(APIView):
+    """
+    Verify Paystack payment for a repair request after customer completes transaction.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="Verify Online Repair Payment",
+        operation_description="Verify Paystack online payment for repair request, credit net earnings to mechanic wallet (minus commission), and transition status to 'verify_completed'.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'reference': openapi.Schema(type=openapi.TYPE_STRING, description="Paystack transaction reference (optional if already stored on repair request)")
+            }
+        ),
+        responses={200: RepairRequestSerializer()}
+    )
+    def post(self, request, repair_id):
+        import requests
+        from decimal import Decimal
+        from django.conf import settings
+
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(api_response(message=data, status=False), status=status.HTTP_400_BAD_REQUEST)
+
+        repair_request = get_object_or_404(RepairRequest, id=repair_id)
+
+        # Check permissions: customer or mechanic or staff
+        if request.user not in [repair_request.customer, repair_request.mechanic] and not request.user.is_staff:
+            return Response(
+                api_response(message="You do not have permission to verify this repair payment.", status=False),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Already paid
+        if repair_request.payment_status == 'paid' and repair_request.status == 'verify_completed':
+            return Response(
+                api_response(
+                    message="Payment already verified and completed.",
+                    status=True,
+                    data=RepairRequestSerializer(repair_request, context={'request': request}).data
+                ),
+                status=status.HTTP_200_OK
+            )
+
+        reference = data.get('reference') or repair_request.payment_reference
+        if not reference:
+            return Response(
+                api_response(message="Payment reference is required to verify payment.", status=False),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        paystack_secret = getattr(settings, 'PAYSTACK_SECRET_KEY', '')
+        headers = {
+            'Authorization': f'Bearer {paystack_secret}',
+            'Content-Type': 'application/json',
+        }
+
+        try:
+            resp = requests.get(
+                f'https://api.paystack.co/transaction/verify/{reference}',
+                headers=headers,
+                timeout=15
+            )
+            resp_data = resp.json()
+
+            if resp.status_code == 200 and resp_data.get('status') and resp_data.get('data', {}).get('status') == 'success':
+                txn_data = resp_data['data']
+                amount_paid = Decimal(str(txn_data.get('amount', 0))) / Decimal('100')
+                expected_amount = Decimal(str(repair_request.actual_cost or 0))
+
+                if amount_paid < expected_amount:
+                    return Response(
+                        api_response(
+                            message=f"Amount paid ({amount_paid} NGN) is less than required repair cost ({expected_amount} NGN).",
+                            status=False
+                        ),
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                # Execute completion
+                repair_request.complete_payment('online', reference=reference)
+
+                # Send notifications
+                if repair_request.mechanic:
+                    NotificationService.create_notification(
+                        user=repair_request.mechanic,
+                        title="Repair Earnings Credited",
+                        message=(
+                            f"Payment received for Repair #{str(repair_request.id)[:8]}. "
+                            f"Net earnings of {repair_request.net_earnings} NGN credited to your wallet "
+                            f"(10% commission: {repair_request.platform_commission} NGN)."
+                        ),
+                        notification_type='success',
+                        related_object=repair_request,
+                        related_object_type='RepairRequest'
+                    )
+
+                NotificationService.create_notification(
+                    user=repair_request.customer,
+                    title="Repair Payment Confirmed",
+                    message=(
+                        f"Payment of {repair_request.actual_cost} NGN for Repair #{str(repair_request.id)[:8]} completed successfully. "
+                        f"Your order is verified and completed. Please rate your mechanic!"
+                    ),
+                    notification_type='success',
+                    related_object=repair_request,
+                    related_object_type='RepairRequest'
+                )
+
+                # Real-time WebSocket update
+                MechanicNotificationService.repair_status_updated(repair_request)
+
+                return Response(
+                    api_response(
+                        message="Payment verified successfully. Net earnings credited to mechanic wallet. Repair order completed.",
+                        status=True,
+                        data=RepairRequestSerializer(repair_request, context={'request': request}).data
+                    ),
+                    status=status.HTTP_200_OK
+                )
+            else:
+                gateway_msg = resp_data.get('data', {}).get('gateway_response') or resp_data.get('message', 'Payment verification failed.')
+                return Response(
+                    api_response(message=f"Payment verification failed: {gateway_msg}", status=False),
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except Exception as e:
+            logger.exception(f"Error verifying Paystack payment: {e}")
+            return Response(
+                api_response(message="An error occurred while verifying payment with provider.", status=False),
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class RateMechanicView(APIView):
+    """
+    Rate and review the mechanic after repair request is verify_completed.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="Rate Mechanic for Repair",
+        operation_description="Customer submits rating (1-5) and review comment for the mechanic on a completed repair request.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['rating'],
+            properties={
+                'rating': openapi.Schema(type=openapi.TYPE_INTEGER, minimum=1, maximum=5, description="Rating from 1 to 5 stars"),
+                'comment': openapi.Schema(type=openapi.TYPE_STRING, description="Optional feedback / review comment")
+            }
+        ),
+        responses={200: openapi.Schema(type=openapi.TYPE_OBJECT)}
+    )
+    def post(self, request, repair_id):
+        from users.models import MechanicReview
+        from users.serializers import MechanicReviewSerializer
+
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(api_response(message=data, status=False), status=status.HTTP_400_BAD_REQUEST)
+
+        repair_request = get_object_or_404(RepairRequest, id=repair_id)
+
+        # Only customer can rate
+        if repair_request.customer != request.user:
+            return Response(
+                api_response(message="Only the customer can rate the mechanic for this repair.", status=False),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not repair_request.mechanic:
+            return Response(
+                api_response(message="No mechanic assigned to this repair request.", status=False),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if repair_request.status not in ['verify_completed', 'completed']:
+            return Response(
+                api_response(message="You can only rate the mechanic after the repair job is completed.", status=False),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        mechanic_profile = getattr(repair_request.mechanic, 'mechanic_profile', None)
+        if not mechanic_profile:
+            return Response(
+                api_response(message="Assigned mechanic does not have a mechanic profile.", status=False),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        rating = data.get('rating')
+        if not rating or not str(rating).isdigit() or int(rating) < 1 or int(rating) > 5:
+            return Response(
+                api_response(message="Rating must be an integer between 1 and 5.", status=False),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        comment = data.get('comment', '').strip()
+
+        # Create or update review
+        review, created = MechanicReview.objects.update_or_create(
+            mechanic=mechanic_profile,
+            user=request.user,
+            defaults={
+                'rating': int(rating),
+                'comment': comment
+            }
+        )
+
+        # Send notification to mechanic
+        customer_name = request.user.get_full_name() or request.user.email
+        NotificationService.create_notification(
+            user=repair_request.mechanic,
+            title="New Review Received",
+            message=f"{customer_name} rated you {rating} stars for Repair #{str(repair_request.id)[:8]}: '{comment}'",
+            notification_type='info',
+            related_object=repair_request,
+            related_object_type='RepairRequest'
+        )
+
+        return Response(
+            api_response(
+                message="Mechanic rated successfully.",
+                status=True,
+                data=MechanicReviewSerializer(review, context={'request': request}).data
+            ),
+            status=status.HTTP_200_OK if not created else status.HTTP_201_CREATED
+        )
+
 

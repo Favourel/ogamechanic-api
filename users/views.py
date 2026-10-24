@@ -6525,17 +6525,22 @@ class UserEarningsView(APIView):
         if "mechanic" in roles:
             completed_repairs = RepairRequest.objects.filter(
                 mechanic=user,
-                status="completed"
+                status__in=["verify_completed", "completed"],
+                payment_status="paid"
             )
             
             total_earnings = completed_repairs.aggregate(
-                total=Sum("actual_cost")
+                total=Sum("net_earnings")
             )["total"] or 0
+            if total_earnings == 0:
+                total_earnings = completed_repairs.aggregate(
+                    total=Sum("actual_cost")
+                )["total"] or 0
             
             pending_repairs = RepairRequest.objects.filter(
                 mechanic=user,
-                status__in=["accepted", "in_transit", "arrived", "in_progress", "verify_completed"]
-            )
+                status__in=["accepted", "in_transit", "arrived", "in_progress", "completed"]
+            ).exclude(payment_status="paid")
             
             pending_earnings = pending_repairs.aggregate(
                 total=Sum("actual_cost")
@@ -7091,6 +7096,9 @@ class PaystackWebhookView(APIView):
                     # Handle subscription payment
                     elif reference.startswith("SUB_"):
                         self._handle_subscription_payment(data)
+                    # Handle repair payment
+                    elif reference.startswith("REPAIR_"):
+                        self._handle_repair_payment(data)
                     # Handle order payment
                     else:
                         self._handle_order_payment(data)
@@ -7207,6 +7215,62 @@ class PaystackWebhookView(APIView):
                 order.save()
         except Order.DoesNotExist:
             pass
+
+    def _handle_repair_payment(self, data):
+        """Handle repair request payment webhook."""
+        from mechanics.models import RepairRequest
+        from users.services import NotificationService, MechanicNotificationService
+        from decimal import Decimal
+
+        reference = data.get("reference")
+        metadata = data.get("metadata", {})
+        repair_id = metadata.get("repair_request_id")
+
+        try:
+            if repair_id:
+                repair_request = RepairRequest.objects.select_for_update().get(id=repair_id)
+            else:
+                repair_request = RepairRequest.objects.select_for_update().get(payment_reference=reference)
+
+            if repair_request.payment_status != "paid":
+                amount_paid = Decimal(str(data.get("amount", 0))) / Decimal("100")
+                expected_cost = Decimal(str(repair_request.actual_cost or 0))
+
+                if amount_paid >= expected_cost:
+                    repair_request.complete_payment('online', reference=reference)
+
+                    if repair_request.mechanic:
+                        NotificationService.create_notification(
+                            user=repair_request.mechanic,
+                            title="Repair Earnings Credited",
+                            message=(
+                                f"Payment received for Repair #{str(repair_request.id)[:8]}. "
+                                f"Net earnings of {repair_request.net_earnings} NGN credited to your wallet "
+                                f"(10% commission: {repair_request.platform_commission} NGN)."
+                            ),
+                            notification_type="success",
+                            related_object=repair_request,
+                            related_object_type="RepairRequest"
+                        )
+
+                    NotificationService.create_notification(
+                        user=repair_request.customer,
+                        title="Repair Payment Confirmed",
+                        message=(
+                            f"Payment of {repair_request.actual_cost} NGN for Repair #{str(repair_request.id)[:8]} completed successfully. "
+                            f"Your order is verified and completed. Please rate your mechanic!"
+                        ),
+                        notification_type="success",
+                        related_object=repair_request,
+                        related_object_type="RepairRequest"
+                    )
+
+                    MechanicNotificationService.repair_status_updated(repair_request)
+        except RepairRequest.DoesNotExist:
+            pass
+        except Exception as e:
+            from django.utils.log import logger
+            logger.error(f"Error processing repair payment webhook for {reference}: {e}")
 
     def _send_topup_notification(self, transaction):
         """Send top-up notification to user."""

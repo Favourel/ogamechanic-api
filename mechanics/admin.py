@@ -18,7 +18,7 @@ class RepairRequestServiceInline(admin.TabularInline):
 class RepairRequestAdmin(admin.ModelAdmin):
     list_display = [
         'id', 'customer', 'mechanic', 'service_type', 'vehicle_make',
-        'vehicle_model', 'status', 'priority', 'requested_at',
+        'vehicle_model', 'status', 'payment_status', 'actual_cost', 'priority', 'requested_at',
         'notified_mechanics_count'
     ]
     inlines = [RepairProblemResolveInline, RepairRequestServiceInline]
@@ -29,17 +29,18 @@ class RepairRequestAdmin(admin.ModelAdmin):
     notified_mechanics_count.short_description = "Notified Mechanics"
 
     list_filter = [
-        'status', 'priority', 'service_type', 'preferred_time_slot',
+        'status', 'payment_status', 'payment_method', 'priority', 'service_type', 'preferred_time_slot',
         'requested_at', 'accepted_at', 'completed_at'
     ]
     search_fields = [
         'customer__email', 'mechanic__email', 'service_type',
-        'vehicle_make', 'vehicle_model', 'problem_description'
+        'vehicle_make', 'vehicle_model', 'problem_description', 'payment_reference'
     ]
     readonly_fields = [
         'id', 'requested_at', 'accepted_at', 'started_at',
         'completed_at', 'cancelled_at', 'created_at', 'updated_at',
-        'in_transit_at', 'in_progress_at'
+        'in_transit_at', 'in_progress_at', 'paid_at', 'platform_commission',
+        'net_earnings', 'payment_reference'
     ]
     date_hierarchy = 'requested_at'
     list_per_page = 25
@@ -49,6 +50,12 @@ class RepairRequestAdmin(admin.ModelAdmin):
             'fields': (
                 'id', 'customer', 'mechanic', 'notified_mechanics',
                 'status', 'priority'
+            )
+        }),
+        ('Payment Information', {
+            'fields': (
+                'payment_method', 'payment_status', 'payment_reference',
+                'actual_cost', 'platform_commission', 'net_earnings', 'paid_at'
             )
         }),
         ('Vehicle & Service Summary', {
@@ -82,7 +89,7 @@ class RepairRequestAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
         ('Additional Information', {
-            'fields': ('notes', 'cancellation_reason', 'actual_cost'),
+            'fields': ('notes', 'cancellation_reason'),
             'classes': ('collapse',)
         }),
     )
