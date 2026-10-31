@@ -2212,11 +2212,38 @@ class RepairProblemResolveView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_description="Add a problem resolution to a repair request",
+        operation_summary="List Problem Resolutions for Repair",
+        operation_description="Retrieve all problem resolutions/add-ons for a repair request.",
+        responses={200: RepairProblemResolveSerializer(many=True)}
+    )
+    def get(self, request, repair_id):
+        repair_request = get_object_or_404(RepairRequest, id=repair_id)
+        if repair_request.customer != request.user and repair_request.mechanic != request.user and not request.user.is_staff:
+            return Response(
+                api_response(message="You don't have permission to view resolutions for this request.", status=False),
+                status=status.HTTP_403_FORBIDDEN
+            )
+        resolutions = repair_request.problem_resolutions.all().order_by('created_at')
+        return Response(
+            api_response(
+                message="Problem resolutions retrieved successfully.",
+                status=True,
+                data=RepairProblemResolveSerializer(resolutions, many=True).data
+            ),
+            status=status.HTTP_200_OK
+        )
+
+    @swagger_auto_schema(
+        operation_summary="Add Problem Resolution or Add-on Item",
+        operation_description=(
+            "Add a problem resolution or itemized add-on to a repair request.\n"
+            "If submitted by the mechanic with additional_cost > 0, status is 'pending' customer approval."
+        ),
         request_body=RepairProblemResolveSerializer,
         responses={201: RepairProblemResolveSerializer()},
     )
     def post(self, request, repair_id):
+        from decimal import Decimal
         status_, data = incoming_request_checks(request)
         if not status_:
             return Response(
@@ -2231,11 +2258,11 @@ class RepairProblemResolveView(APIView):
         active_role_name = active_role.name if active_role else None
 
         user_is_customer = (
-            active_role_name == "primary_user" and
+            (active_role_name == "primary_user" or repair_request.customer == request.user) and
             repair_request.customer == request.user
         )
         user_is_mechanic = (
-            active_role_name == "mechanic" and
+            (active_role_name == "mechanic" or repair_request.mechanic == request.user) and
             repair_request.mechanic == request.user
         )
 
@@ -2250,12 +2277,47 @@ class RepairProblemResolveView(APIView):
 
         serializer = RepairProblemResolveSerializer(data=data)
         if serializer.is_valid():
-            serializer.save(repair_request=repair_request)
+            additional_cost = serializer.validated_data.get('additional_cost') or Decimal('0.00')
+
+            # Determine initial status
+            if user_is_customer or additional_cost <= Decimal('0.00'):
+                initial_status = "approved"
+            else:
+                initial_status = "pending"
+
+            resolution = serializer.save(repair_request=repair_request, status=initial_status)
+
+            # If customer added with cost, update estimated_cost directly
+            if user_is_customer and additional_cost > Decimal('0.00'):
+                repair_request.estimated_cost = (
+                    repair_request.estimated_cost or Decimal('0.00')
+                ) + additional_cost
+                repair_request.save(update_fields=['estimated_cost'])
+
+            # If mechanic added with cost, notify customer for approval
+            if user_is_mechanic and additional_cost > Decimal('0.00'):
+                NotificationService.create_notification(
+                    user=repair_request.customer,
+                    title="Repair Add-on Approval Required",
+                    message=(
+                        f"Mechanic added an add-on item: '{resolution.description}' "
+                        f"costing {resolution.additional_cost} NGN. Please review and approve."
+                    ),
+                    notification_type='action_required',
+                    related_object=repair_request,
+                    related_object_type='RepairRequest'
+                )
+                MechanicNotificationService.repair_status_updated(repair_request)
+
             return Response(
                 api_response(
-                    message="Problem resolution added successfully.",
+                    message=(
+                        "Problem resolution added and awaiting customer approval."
+                        if initial_status == "pending"
+                        else "Problem resolution added successfully."
+                    ),
                     status=True,
-                    data=serializer.data,
+                    data=RepairProblemResolveSerializer(resolution).data,
                 ),
                 status=status.HTTP_201_CREATED,
             )
@@ -2264,6 +2326,136 @@ class RepairProblemResolveView(APIView):
             api_response(message=serializer.errors, status=False),
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+
+class RespondProblemResolveView(APIView):
+    """
+    Customer approves or rejects an itemized add-on / problem resolution.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="Approve or Reject Problem Resolution Add-on",
+        operation_description=(
+            "Customer approves or rejects an itemized problem resolution add-on requested by the mechanic.\n"
+            "Approving increases the approved estimated_cost budget."
+        ),
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['action'],
+            properties={
+                'action': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    enum=['approve', 'reject'],
+                    description="Action: 'approve' or 'reject'"
+                )
+            }
+        ),
+        responses={200: openapi.Schema(type=openapi.TYPE_OBJECT)}
+    )
+    def post(self, request, repair_id, resolve_id):
+        from decimal import Decimal
+        status_, data = incoming_request_checks(request)
+        if not status_:
+            return Response(api_response(message=data, status=False), status=status.HTTP_400_BAD_REQUEST)
+
+        action = data.get('action')
+        if action not in ['approve', 'reject']:
+            return Response(
+                api_response(message="Invalid action. Must be 'approve' or 'reject'.", status=False),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        repair_request = get_object_or_404(RepairRequest, id=repair_id)
+        resolution = get_object_or_404(RepairProblemResolve, id=resolve_id, repair_request=repair_request)
+
+        # Only customer can approve/reject
+        if repair_request.customer != request.user:
+            return Response(
+                api_response(message="Only the customer can approve or reject add-ons.", status=False),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if resolution.status != 'pending':
+            return Response(
+                api_response(
+                    message=f"This problem resolution has already been {resolution.status}.",
+                    status=False
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        now = timezone.now()
+        if action == 'approve':
+            resolution.status = 'approved'
+            resolution.approved_at = now
+            resolution.save(update_fields=['status', 'approved_at'])
+
+            # Increase the approved estimated_cost
+            if resolution.additional_cost and resolution.additional_cost > Decimal('0.00'):
+                repair_request.estimated_cost = (
+                    repair_request.estimated_cost or Decimal('0.00')
+                ) + resolution.additional_cost
+                repair_request.save(update_fields=['estimated_cost'])
+
+            # Notify mechanic
+            if repair_request.mechanic:
+                NotificationService.create_notification(
+                    user=repair_request.mechanic,
+                    title="Add-on Approved",
+                    message=(
+                        f"Customer approved add-on '{resolution.description}' (+{resolution.additional_cost} NGN). "
+                        f"New estimated cost is {repair_request.estimated_cost} NGN."
+                    ),
+                    notification_type='success',
+                    related_object=repair_request,
+                    related_object_type='RepairRequest'
+                )
+            MechanicNotificationService.repair_status_updated(repair_request)
+
+            return Response(
+                api_response(
+                    message="Problem resolution approved successfully. Estimated budget updated.",
+                    status=True,
+                    data={
+                        "resolution": RepairProblemResolveSerializer(resolution).data,
+                        "new_estimated_cost": str(repair_request.estimated_cost),
+                        "max_allowed_cost": str(repair_request.get_max_allowed_cost())
+                    }
+                ),
+                status=status.HTTP_200_OK
+            )
+        else:
+            resolution.status = 'rejected'
+            resolution.rejected_at = now
+            resolution.save(update_fields=['status', 'rejected_at'])
+
+            # Notify mechanic
+            if repair_request.mechanic:
+                NotificationService.create_notification(
+                    user=repair_request.mechanic,
+                    title="Add-on Declined",
+                    message=(
+                        f"Customer declined add-on '{resolution.description}' (+{resolution.additional_cost} NGN)."
+                    ),
+                    notification_type='warning',
+                    related_object=repair_request,
+                    related_object_type='RepairRequest'
+                )
+            MechanicNotificationService.repair_status_updated(repair_request)
+
+            return Response(
+                api_response(
+                    message="Problem resolution rejected.",
+                    status=True,
+                    data={
+                        "resolution": RepairProblemResolveSerializer(resolution).data,
+                        "current_estimated_cost": str(repair_request.estimated_cost),
+                        "max_allowed_cost": str(repair_request.get_max_allowed_cost())
+                    }
+                ),
+                status=status.HTTP_200_OK
+            )
 
 
 class IsAdminOrReadOnly(permissions.BasePermission):

@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -98,6 +99,10 @@ class RepairRequest(models.Model):
     # symptoms = models.TextField(blank=True)
     estimated_cost = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    initial_estimated_cost = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Initial baseline estimated cost before approved add-ons"
     )
 
     # Location and scheduling
@@ -332,6 +337,27 @@ class RepairRequest(models.Model):
         self.net_earnings = round(Decimal(str(cost)) - self.platform_commission, 2)
         return self.platform_commission, self.net_earnings
 
+    def get_max_allowed_cost(self):
+        """
+        Return the maximum allowable actual_cost based on estimated_cost
+        plus the configured variance percentage (default 30%).
+        """
+        from decimal import Decimal
+        from django.conf import settings
+
+        if not self.estimated_cost or self.estimated_cost <= Decimal("0.00"):
+            return None
+        variance_pct = Decimal(str(getattr(settings, "REPAIR_COST_MAX_VARIANCE_PERCENTAGE", 30)))
+        return round(self.estimated_cost * (Decimal("1") + (variance_pct / Decimal("100"))), 2)
+
+    def get_total_approved_resolutions_cost(self):
+        """Sum of all customer-approved problem resolution add-on costs"""
+        from decimal import Decimal
+        from django.db.models import Sum
+
+        total = self.problem_resolutions.filter(status="approved").aggregate(total=Sum("additional_cost"))["total"]
+        return total or Decimal("0.00")
+
     def complete_payment(self, payment_method, reference=None):
         """
         Finalize payment for a completed repair:
@@ -390,6 +416,10 @@ class RepairRequest(models.Model):
             import random
             self.otp_code = f"{random.randint(100000, 999999)}"
 
+        # Preserve initial estimated cost baseline
+        if self._state.adding and not self.initial_estimated_cost and self.estimated_cost:
+            self.initial_estimated_cost = self.estimated_cost
+
         # Track if this is an update (has pk) or new instance
         is_update = not self._state.adding
 
@@ -438,6 +468,12 @@ class RepairProblemResolve(models.Model):
     Model for problem resolutions linked to a repair request.
     Allows multiple resolutions per request.
     """
+    STATUS_CHOICES = [
+        ("pending", "Pending Customer Approval"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     repair_request = models.ForeignKey(
         RepairRequest,
@@ -445,6 +481,20 @@ class RepairProblemResolve(models.Model):
         related_name="problem_resolutions"
     )
     description = models.TextField()
+    additional_cost = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text="Additional cost for this problem resolution, parts, or extra labor"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="pending",
+        help_text="Approval status of this itemized resolution/add-on"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -454,7 +504,15 @@ class RepairProblemResolve(models.Model):
         verbose_name_plural = "Repair Problem Resolutions"
 
     def __str__(self):
-        return f"Resolution for Repair #{str(self.repair_request.id)[:8]}"
+        return f"Resolution for Repair #{str(self.repair_request.id)[:8]} ({self.status})"
+
+    def save(self, *args, **kwargs):
+        from decimal import Decimal
+        if self.additional_cost is None:
+            self.additional_cost = Decimal("0.00")
+        if self._state.adding and self.additional_cost <= Decimal("0.00") and not self.status:
+            self.status = "approved"
+        super().save(*args, **kwargs)
 
 
 class TrainingSession(models.Model):

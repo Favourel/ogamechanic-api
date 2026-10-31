@@ -319,3 +319,189 @@ class MechanicRequestFlowIntegrationTest(APITestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("Payment is required", resp.data['message'])
+
+    def test_actual_cost_exceeding_variance_threshold_is_rejected(self):
+        """
+        Mechanic cannot set actual_cost exceeding estimated_cost by more than
+        the configured variance threshold (default 30%) without customer-approved add-ons.
+        """
+        repair = RepairRequest.objects.create(
+            customer=self.customer,
+            mechanic=self.mechanic,
+            vehicle_make="Toyota",
+            vehicle_model="Corolla",
+            vehicle_year=2020,
+            problem_description="Clutch issue",
+            estimated_cost=Decimal('20000.00'),
+            service_address="Victoria Island, Lagos",
+            service_latitude=Decimal('6.4281'),
+            service_longitude=Decimal('3.4219'),
+            status="in_progress",
+            is_otp_verified=True
+        )
+
+        self.client.force_authenticate(user=self.mechanic)
+
+        # Attempt to set actual_cost to 35,000 NGN (+75%, max allowed is 26,000 NGN)
+        resp = self.patch_inbound(
+            f"/api/v1/mechanics/repair-requests/{repair.id}/",
+            {
+                "actual_cost": 35000.00,
+                "status": "completed"
+            }
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("exceeds the maximum allowed estimate", str(resp.data))
+
+    def test_actual_cost_within_variance_threshold_is_accepted(self):
+        """
+        Mechanic can complete repair when actual_cost is within the 30% variance threshold.
+        """
+        repair = RepairRequest.objects.create(
+            customer=self.customer,
+            mechanic=self.mechanic,
+            vehicle_make="Toyota",
+            vehicle_model="Corolla",
+            vehicle_year=2020,
+            problem_description="Clutch issue",
+            estimated_cost=Decimal('20000.00'),
+            service_address="Victoria Island, Lagos",
+            service_latitude=Decimal('6.4281'),
+            service_longitude=Decimal('3.4219'),
+            status="in_progress",
+            is_otp_verified=True
+        )
+
+        self.client.force_authenticate(user=self.mechanic)
+
+        # 24,000 is +20% (well within 30% threshold of 26,000)
+        resp = self.patch_inbound(
+            f"/api/v1/mechanics/repair-requests/{repair.id}/",
+            {
+                "actual_cost": 24000.00,
+                "status": "completed"
+            }
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        repair.refresh_from_db()
+        self.assertEqual(repair.status, "completed")
+        self.assertEqual(repair.actual_cost, Decimal('24000.00'))
+
+    def test_itemized_addon_approval_flow_expands_allowed_cost(self):
+        """
+        Test Approach C:
+        1. Mechanic finds extra fault, adds itemized resolution with cost (+25,000 NGN).
+        2. Resolution starts as 'pending'.
+        3. Customer reviews and approves resolution.
+        4. estimated_cost expands from 20,000 to 45,000 NGN.
+        5. Mechanic can now complete the job at 45,000 NGN successfully.
+        """
+        repair = RepairRequest.objects.create(
+            customer=self.customer,
+            mechanic=self.mechanic,
+            vehicle_make="Honda",
+            vehicle_model="Civic",
+            vehicle_year=2020,
+            problem_description="Engine overheating",
+            estimated_cost=Decimal('20000.00'),
+            service_address="Lekki Phase 1, Lagos",
+            service_latitude=Decimal('6.4474'),
+            service_longitude=Decimal('3.4723'),
+            status="in_progress",
+            is_otp_verified=True
+        )
+
+        # 1. Mechanic submits add-on resolution
+        self.client.force_authenticate(user=self.mechanic)
+        resp = self.post_inbound(
+            f"/api/v1/mechanics/repair-requests/{repair.id}/problem-resolves/",
+            {
+                "description": "Cracked radiator replacement",
+                "additional_cost": 25000.00
+            }
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        resolve_id = resp.data['data']['id']
+        self.assertEqual(resp.data['data']['status'], 'pending')
+
+        # 2. Customer lists resolutions
+        self.client.force_authenticate(user=self.customer)
+        get_resp = self.get_inbound(f"/api/v1/mechanics/repair-requests/{repair.id}/problem-resolves/")
+        self.assertEqual(get_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(get_resp.data['data']), 1)
+        self.assertEqual(get_resp.data['data'][0]['status'], 'pending')
+
+        # 3. Customer approves add-on
+        resp_approve = self.post_inbound(
+            f"/api/v1/mechanics/repair-requests/{repair.id}/problem-resolves/{resolve_id}/respond/",
+            {"action": "approve"}
+        )
+        self.assertEqual(resp_approve.status_code, status.HTTP_200_OK)
+        repair.refresh_from_db()
+        self.assertEqual(repair.estimated_cost, Decimal('45000.00'))  # 20,000 + 25,000
+
+        # 4. Mechanic can now complete at 45,000 NGN
+        self.client.force_authenticate(user=self.mechanic)
+        resp_complete = self.patch_inbound(
+            f"/api/v1/mechanics/repair-requests/{repair.id}/",
+            {
+                "actual_cost": 45000.00,
+                "status": "completed"
+            }
+        )
+        self.assertEqual(resp_complete.status_code, status.HTTP_200_OK)
+        repair.refresh_from_db()
+        self.assertEqual(repair.status, "completed")
+        self.assertEqual(repair.actual_cost, Decimal('45000.00'))
+
+    def test_customer_can_reject_itemized_addon(self):
+        """
+        Customer rejects an add-on; estimated_cost is unchanged and inflated cost is blocked.
+        """
+        repair = RepairRequest.objects.create(
+            customer=self.customer,
+            mechanic=self.mechanic,
+            vehicle_make="Honda",
+            vehicle_model="Civic",
+            vehicle_year=2020,
+            problem_description="Engine check",
+            estimated_cost=Decimal('20000.00'),
+            service_address="Lekki Phase 1, Lagos",
+            service_latitude=Decimal('6.4474'),
+            service_longitude=Decimal('3.4723'),
+            status="in_progress",
+            is_otp_verified=True
+        )
+
+        # Mechanic adds expensive add-on
+        self.client.force_authenticate(user=self.mechanic)
+        resp = self.post_inbound(
+            f"/api/v1/mechanics/repair-requests/{repair.id}/problem-resolves/",
+            {
+                "description": "Entire ECU unit replacement",
+                "additional_cost": 80000.00
+            }
+        )
+        resolve_id = resp.data['data']['id']
+
+        # Customer rejects
+        self.client.force_authenticate(user=self.customer)
+        resp_reject = self.post_inbound(
+            f"/api/v1/mechanics/repair-requests/{repair.id}/problem-resolves/{resolve_id}/respond/",
+            {"action": "reject"}
+        )
+        self.assertEqual(resp_reject.status_code, status.HTTP_200_OK)
+        repair.refresh_from_db()
+        self.assertEqual(repair.estimated_cost, Decimal('20000.00'))  # Unchanged
+
+        # Mechanic tries to set actual_cost to 100,000 NGN -> blocked!
+        self.client.force_authenticate(user=self.mechanic)
+        resp_fail = self.patch_inbound(
+            f"/api/v1/mechanics/repair-requests/{repair.id}/",
+            {
+                "actual_cost": 100000.00,
+                "status": "completed"
+            }
+        )
+        self.assertEqual(resp_fail.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("exceeds the maximum allowed estimate", str(resp_fail.data))

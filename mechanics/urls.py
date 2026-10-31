@@ -33,6 +33,11 @@ urlpatterns = [
         name="repair-problem-resolves",
     ),
     path(
+        "repair-requests/<uuid:repair_id>/problem-resolves/<uuid:resolve_id>/respond/",
+        views.RespondProblemResolveView.as_view(),
+        name="respond-problem-resolve",
+    ),
+    path(
         "repair-requests/<uuid:repair_id>/verify-otp/",
         views.VerifyRepairOTPView.as_view(),
         name="verify-repair-otp",

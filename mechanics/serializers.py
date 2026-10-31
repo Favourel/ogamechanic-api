@@ -22,8 +22,17 @@ class UserSerializer(serializers.ModelSerializer):
 class RepairProblemResolveSerializer(serializers.ModelSerializer):
     class Meta:
         model = RepairProblemResolve
-        fields = ['id', 'description', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        fields = [
+            'id', 'description', 'additional_cost', 'status',
+            'approved_at', 'rejected_at', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'status', 'approved_at', 'rejected_at', 'created_at', 'updated_at']
+
+    def validate_additional_cost(self, value):
+        from decimal import Decimal
+        if value is not None and value < Decimal('0.00'):
+            raise serializers.ValidationError("Additional cost cannot be negative.")
+        return value
 
 
 class RepairRequestSerializer(serializers.ModelSerializer):
@@ -37,6 +46,8 @@ class RepairRequestSerializer(serializers.ModelSerializer):
         many=True, queryset=ServiceType.objects.all(), required=False
     )
     can_accept = serializers.SerializerMethodField()
+    max_allowed_cost = serializers.SerializerMethodField()
+    approved_resolutions_cost = serializers.SerializerMethodField()
 
     class Meta:
         model = RepairRequest
@@ -49,7 +60,9 @@ class RepairRequestSerializer(serializers.ModelSerializer):
             'vehicle_vin',
             'problem_description',
             'problem_resolutions',
-            'estimated_cost', 'service_address', 'service_latitude',
+            'estimated_cost', 'initial_estimated_cost',
+            'max_allowed_cost', 'approved_resolutions_cost',
+            'service_address', 'service_latitude',
             'service_longitude', 'schedule', 'preferred_date', 'preferred_time_slot',
             'status',
             'priority',
@@ -76,6 +89,9 @@ class RepairRequestSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'customer', 'mechanic',
+            'initial_estimated_cost',
+            'max_allowed_cost',
+            'approved_resolutions_cost',
             'requested_at',
             'accepted_at',
             'started_at',
@@ -105,6 +121,12 @@ class RepairRequestSerializer(serializers.ModelSerializer):
                 return obj.can_mechanic_accept(request.user)
         return False
 
+    def get_max_allowed_cost(self, obj):
+        return obj.get_max_allowed_cost()
+
+    def get_approved_resolutions_cost(self, obj):
+        return obj.get_total_approved_resolutions_cost()
+
     def to_representation(self, instance):
         ret = super().to_representation(instance)
         request = self.context.get('request')
@@ -120,31 +142,69 @@ class RepairRequestSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        # If it's a partial update (PATCH), and these fields are not in attrs, they are not being changed.
-        # We only need to validate if at least one of them is present in attrs OR if it's a creation.
-        
-        is_update = self.instance is not None
-        
-        # In case of update, if neither field is being updated, we assume the existing state is valid.
-        if is_update and 'service_categories' not in attrs and 'service_type' not in attrs:
-            return attrs
-            
-        # For creation or if at least one is being updated
-        service_categories = attrs.get('service_categories')
-        service_type = attrs.get('service_type')
-        
-        # If it's an update, we might be clearing one field while the other still has a value
-        if is_update:
-            if 'service_categories' not in attrs:
-                # We need to check the actual relationship for service categories
-                service_categories = self.instance.service_categories.exists()
-            if 'service_type' not in attrs:
-                service_type = self.instance.service_type
+        from decimal import Decimal
+        from django.conf import settings
 
-        if not service_categories and not service_type:
-            raise serializers.ValidationError(
-                "Either 'service_categories' (IDs) or 'service_type' (name) must be provided."
-            )
+        is_update = self.instance is not None
+
+        # 1. Service validation
+        if not is_update or ('service_categories' in attrs or 'service_type' in attrs):
+            service_categories = attrs.get('service_categories')
+            service_type = attrs.get('service_type')
+            if is_update:
+                if 'service_categories' not in attrs:
+                    service_categories = self.instance.service_categories.exists()
+                if 'service_type' not in attrs:
+                    service_type = self.instance.service_type
+
+            if not service_categories and not service_type:
+                raise serializers.ValidationError(
+                    "Either 'service_categories' (IDs) or 'service_type' (name) must be provided."
+                )
+
+        # 2. Cost and Variance Threshold Validation
+        if is_update:
+            new_status = attrs.get('status')
+            new_cost = attrs.get('actual_cost')
+            target_cost = new_cost if new_cost is not None else self.instance.actual_cost
+
+            # If transitioning to completed, actual_cost is strictly required and must be > 0
+            if new_status == 'completed':
+                if target_cost is None or target_cost <= Decimal('0.00'):
+                    raise serializers.ValidationError({
+                        "actual_cost": "Actual cost must be specified and greater than 0 when completing a repair."
+                    })
+
+            # If actual_cost is being set/updated
+            if new_cost is not None:
+                if new_cost <= Decimal('0.00'):
+                    raise serializers.ValidationError({
+                        "actual_cost": "Actual cost must be greater than 0."
+                    })
+
+                # Validate variance threshold against estimated_cost
+                est_cost = self.instance.estimated_cost
+                if est_cost and est_cost > Decimal('0.00'):
+                    max_allowed = self.instance.get_max_allowed_cost()
+                    if max_allowed is not None and new_cost > max_allowed:
+                        variance_pct = getattr(settings, 'REPAIR_COST_MAX_VARIANCE_PERCENTAGE', 30)
+                        pending_resolutions = self.instance.problem_resolutions.filter(
+                            status='pending', additional_cost__gt=Decimal('0.00')
+                        )
+                        if pending_resolutions.exists():
+                            msg = (
+                                f"Actual cost ({new_cost} NGN) exceeds the maximum allowed estimate of "
+                                f"{max_allowed} NGN (+{variance_pct}% variance threshold). "
+                                f"There are itemized add-on problem resolutions waiting for customer approval."
+                            )
+                        else:
+                            msg = (
+                                f"Actual cost ({new_cost} NGN) exceeds the maximum allowed estimate of "
+                                f"{max_allowed} NGN (+{variance_pct}% variance threshold). "
+                                f"Please submit an itemized problem resolution for customer approval before completing the repair at this price."
+                            )
+                        raise serializers.ValidationError({"actual_cost": msg})
+
         return attrs
 
     def create(self, validated_data):
@@ -270,10 +330,13 @@ class RepairRequestSerializer(serializers.ModelSerializer):
 
         # Handle problem_resolutions if provided
         if resolutions_data is not None:
-            # Delete existing resolutions and create new ones
-            instance.problem_resolutions.all().delete()
+            from decimal import Decimal
+            # Delete pending resolutions, keeping approved ones intact
+            instance.problem_resolutions.filter(status='pending').delete()
             for res_data in resolutions_data:
-                RepairProblemResolve.objects.create(repair_request=instance, **res_data)
+                cost = res_data.get('additional_cost') or Decimal('0.00')
+                status = 'approved' if cost <= Decimal('0.00') else 'pending'
+                RepairProblemResolve.objects.create(repair_request=instance, status=status, **res_data)
 
         return instance
 
@@ -286,6 +349,8 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
     problem_resolutions = RepairProblemResolveSerializer(many=True, read_only=True)
     notified_mechanics = UserSerializer(many=True, read_only=True)
     service_categories = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    max_allowed_cost = serializers.SerializerMethodField()
+    approved_resolutions_cost = serializers.SerializerMethodField()
 
     class Meta:
         model = RepairRequest
@@ -304,6 +369,9 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
             'problem_description',
             'problem_resolutions',
             'estimated_cost',
+            'initial_estimated_cost',
+            'max_allowed_cost',
+            'approved_resolutions_cost',
             'service_address',
             'service_latitude',
             'service_longitude',
@@ -333,6 +401,12 @@ class RepairRequestListSerializer(serializers.ModelSerializer):
             'platform_commission',
             'net_earnings',
         ]
+
+    def get_max_allowed_cost(self, obj):
+        return obj.get_max_allowed_cost()
+
+    def get_approved_resolutions_cost(self, obj):
+        return obj.get_total_approved_resolutions_cost()
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)

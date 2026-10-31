@@ -414,3 +414,7 @@ DIDIT_API_KEY = os.getenv('DIDIT_API_KEY', '')
 DIDIT_API_URL = os.getenv('DIDIT_API_URL', 'https://verification.didit.me')
 DIDIT_MOCK_SUCCESS = os.getenv('DIDIT_MOCK_SUCCESS', 'False').lower() in ('true', '1', 't')
 
+# Repair Request & Settlement Rules
+PLATFORM_COMMISSION_PERCENTAGE = int(os.getenv('PLATFORM_COMMISSION_PERCENTAGE', 10))
+REPAIR_COST_MAX_VARIANCE_PERCENTAGE = int(os.getenv('REPAIR_COST_MAX_VARIANCE_PERCENTAGE', 30))
+

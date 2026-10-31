@@ -5,7 +5,9 @@ from . import models
 # Custom admin for key models
 class RepairProblemResolveInline(admin.TabularInline):
     model = models.RepairProblemResolve
-    extra = 1
+    extra = 0
+    fields = ['description', 'additional_cost', 'status', 'approved_at', 'rejected_at', 'created_at']
+    readonly_fields = ['created_at', 'approved_at', 'rejected_at']
 
 
 class RepairRequestServiceInline(admin.TabularInline):
@@ -37,7 +39,7 @@ class RepairRequestAdmin(admin.ModelAdmin):
         'vehicle_make', 'vehicle_model', 'problem_description', 'payment_reference'
     ]
     readonly_fields = [
-        'id', 'requested_at', 'accepted_at', 'started_at',
+        'id', 'initial_estimated_cost', 'requested_at', 'accepted_at', 'started_at',
         'completed_at', 'cancelled_at', 'created_at', 'updated_at',
         'in_transit_at', 'in_progress_at', 'paid_at', 'platform_commission',
         'net_earnings', 'payment_reference'
@@ -65,7 +67,7 @@ class RepairRequestAdmin(admin.ModelAdmin):
             )
         }),
         ('Problem Description', {
-            'fields': ('problem_description', 'estimated_cost')
+            'fields': ('problem_description', 'initial_estimated_cost', 'estimated_cost')
         }),
         ('Location & Scheduling', {
             'fields': (
