@@ -70,6 +70,25 @@ class RepairRequestTrackingConsumer(AsyncWebsocketConsumer):
             'repair_request': event['repair_request']
         }))
 
+    async def repair_request_addon_requested(self, event):
+        """Send add-on approval request to WebSocket"""
+        await self.send(text_data=json.dumps({
+            'type': 'repair_request.addon_requested',
+            'resolution': event['resolution'],
+            'repair_id': event['repair_id']
+        }))
+
+    async def repair_request_addon_decided(self, event):
+        """Send add-on decision to WebSocket"""
+        await self.send(text_data=json.dumps({
+            'type': 'repair_request.addon_decided',
+            'resolution_id': event['resolution_id'],
+            'action': event['action'],
+            'new_estimated_cost': event.get('new_estimated_cost'),
+            'max_allowed_cost': event.get('max_allowed_cost'),
+            'repair_id': event['repair_id']
+        }))
+
     @database_sync_to_async
     def can_access_repair(self):
         """Check if user can access this repair request"""

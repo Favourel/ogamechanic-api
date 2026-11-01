@@ -52,7 +52,7 @@ class NotificationService:
     @staticmethod
     def create_notification(user, title, message, notification_type='info',
                           related_object=None, related_object_type=None,
-                          role=None): # noqa
+                          role=None, extra_data=None): # noqa
         """
         Create an in-app notification for a user.
         
@@ -94,7 +94,7 @@ class NotificationService:
         if hasattr(NotificationService, 'send_realtime_notification'):
             try:
                 NotificationService.send_realtime_notification(
-                    user, notification
+                    user, notification, extra_data=extra_data
                 )
             except Exception:
                 pass  # Fail silently for real-time notifications
@@ -114,12 +114,15 @@ class NotificationService:
         if hasattr(user, 'devices'):
             try:
                 if user.devices.filter(is_active=True).exists():
+                    push_data = {
+                        "related_object_id": str(notification.related_object_id) if notification.related_object_id else None,
+                        "related_object_type": notification.related_object_type
+                    }
+                    if extra_data and isinstance(extra_data, dict):
+                        push_data.update(extra_data)
                     send_expo_push_notification.delay(
                         user.id, title, message, notification_type,
-                        data={
-                            "related_object_id": str(notification.related_object_id) if notification.related_object_id else None,
-                            "related_object_type": notification.related_object_type
-                        }
+                        data=push_data
                     )
             except Exception:
                 pass  # Fail silently for push notifications
@@ -183,7 +186,7 @@ class NotificationService:
         return notifications
 
     @staticmethod
-    def send_realtime_notification(user, notification):
+    def send_realtime_notification(user, notification, extra_data=None):
         """
         Send real-time notification via WebSocket
         """
@@ -192,20 +195,24 @@ class NotificationService:
             from asgiref.sync import async_to_sync
 
             channel_layer = get_channel_layer()
+            msg_payload = {
+                "id": str(notification.id),
+                "title": notification.title,
+                "message": notification.message,
+                "notification_type": notification.notification_type,
+                "related_object_id": str(notification.related_object_id) if notification.related_object_id else None,
+                "related_object_type": notification.related_object_type,
+                "created_at": notification.created_at.isoformat() if notification.created_at else None,
+                "is_read": notification.is_read
+            }
+            if extra_data and isinstance(extra_data, dict):
+                msg_payload["extra_data"] = extra_data
+
             async_to_sync(channel_layer.group_send)(
                 f"notifications_{user.id}",
                 {
                     "type": "notification.message",
-                    "message": {
-                        "id": str(notification.id),
-                        "title": notification.title,
-                        "message": notification.message,
-                        "notification_type": notification.notification_type,
-                        "related_object_id": str(notification.related_object_id) if notification.related_object_id else None,
-                        "related_object_type": notification.related_object_type,
-                        "created_at": notification.created_at.isoformat() if notification.created_at else None,
-                        "is_read": notification.is_read
-                    }
+                    "message": msg_payload
                 }
             )
         except Exception as e:
