@@ -65,9 +65,19 @@ class RepairRequestTrackingConsumer(AsyncWebsocketConsumer):
 
     async def repair_request_update(self, event):
         """Send repair request update to WebSocket"""
+        repair_data = dict(event['repair_request'])
+        customer_id = event.get('customer_id')
+        otp_code = event.get('otp_code')
+
+        # Only reveal OTP if the connected user is the customer
+        if customer_id and str(self.user.id) == str(customer_id) and otp_code:
+            repair_data['otp_code'] = otp_code
+        else:
+            repair_data.pop('otp_code', None)
+
         await self.send(text_data=json.dumps({
             'type': 'repair_request.update',
-            'repair_request': event['repair_request']
+            'repair_request': repair_data
         }))
 
     async def repair_request_addon_requested(self, event):
@@ -112,7 +122,7 @@ class RepairRequestTrackingConsumer(AsyncWebsocketConsumer):
         try:
             repair = RepairRequest.objects.get(id=self.repair_id)
             from mechanics.serializers import RepairRequestSerializer
-            serializer = RepairRequestSerializer(repair, context={})
+            serializer = RepairRequestSerializer(repair, context={'user': self.user})
             return serializer.data
         except RepairRequest.DoesNotExist:
             return None

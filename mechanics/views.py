@@ -2320,14 +2320,20 @@ class RepairProblemResolveView(APIView):
                     from asgiref.sync import async_to_sync
                     channel_layer = get_channel_layer()
                     if channel_layer:
+                        addon_event = {
+                            "type": "repair_request.addon_requested",
+                            "resolution": RepairProblemResolveSerializer(resolution).data,
+                            "repair_id": str(repair_request.id)
+                        }
                         async_to_sync(channel_layer.group_send)(
                             f"repair_request_{repair_request.id}",
-                            {
-                                "type": "repair_request.addon_requested",
-                                "resolution": RepairProblemResolveSerializer(resolution).data,
-                                "repair_id": str(repair_request.id)
-                            }
+                            addon_event
                         )
+                        if repair_request.customer_id:
+                            async_to_sync(channel_layer.group_send)(
+                                f"notifications_{repair_request.customer_id}",
+                                addon_event
+                            )
                 except Exception as e:
                     logger.warning(f"Failed to broadcast repair add-on websocket event: {e}")
 
@@ -2439,17 +2445,23 @@ class RespondProblemResolveView(APIView):
                 from asgiref.sync import async_to_sync
                 channel_layer = get_channel_layer()
                 if channel_layer:
+                    decided_event = {
+                        "type": "repair_request.addon_decided",
+                        "resolution_id": str(resolution.id),
+                        "action": "approve",
+                        "new_estimated_cost": str(repair_request.estimated_cost),
+                        "max_allowed_cost": str(repair_request.get_max_allowed_cost()),
+                        "repair_id": str(repair_request.id)
+                    }
                     async_to_sync(channel_layer.group_send)(
                         f"repair_request_{repair_request.id}",
-                        {
-                            "type": "repair_request.addon_decided",
-                            "resolution_id": str(resolution.id),
-                            "action": "approve",
-                            "new_estimated_cost": str(repair_request.estimated_cost),
-                            "max_allowed_cost": str(repair_request.get_max_allowed_cost()),
-                            "repair_id": str(repair_request.id)
-                        }
+                        decided_event
                     )
+                    if repair_request.mechanic_id:
+                        async_to_sync(channel_layer.group_send)(
+                            f"notifications_{repair_request.mechanic_id}",
+                            decided_event
+                        )
             except Exception as e:
                 logger.warning(f"Failed to broadcast addon approval websocket event: {e}")
 
@@ -2488,17 +2500,23 @@ class RespondProblemResolveView(APIView):
                 from asgiref.sync import async_to_sync
                 channel_layer = get_channel_layer()
                 if channel_layer:
+                    decided_event = {
+                        "type": "repair_request.addon_decided",
+                        "resolution_id": str(resolution.id),
+                        "action": "reject",
+                        "new_estimated_cost": str(repair_request.estimated_cost),
+                        "max_allowed_cost": str(repair_request.get_max_allowed_cost()),
+                        "repair_id": str(repair_request.id)
+                    }
                     async_to_sync(channel_layer.group_send)(
                         f"repair_request_{repair_request.id}",
-                        {
-                            "type": "repair_request.addon_decided",
-                            "resolution_id": str(resolution.id),
-                            "action": "reject",
-                            "new_estimated_cost": str(repair_request.estimated_cost),
-                            "max_allowed_cost": str(repair_request.get_max_allowed_cost()),
-                            "repair_id": str(repair_request.id)
-                        }
+                        decided_event
                     )
+                    if repair_request.mechanic_id:
+                        async_to_sync(channel_layer.group_send)(
+                            f"notifications_{repair_request.mechanic_id}",
+                            decided_event
+                        )
             except Exception as e:
                 logger.warning(f"Failed to broadcast addon rejection websocket event: {e}")
 

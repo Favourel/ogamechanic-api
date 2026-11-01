@@ -99,6 +99,32 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             'unread_count': event['unread_count']
         }))
 
+    async def repair_request_update(self, event):
+        """Send real-time repair request status update to user's notification stream"""
+        await self.send(text_data=json.dumps({
+            'type': 'repair_request.update',
+            'repair_request': event['repair_request']
+        }))
+
+    async def repair_request_addon_requested(self, event):
+        """Send real-time add-on approval request to user's notification stream"""
+        await self.send(text_data=json.dumps({
+            'type': 'repair_request.addon_requested',
+            'resolution': event['resolution'],
+            'repair_id': event['repair_id']
+        }))
+
+    async def repair_request_addon_decided(self, event):
+        """Send real-time add-on decision to user's notification stream"""
+        await self.send(text_data=json.dumps({
+            'type': 'repair_request.addon_decided',
+            'resolution_id': event['resolution_id'],
+            'action': event['action'],
+            'new_estimated_cost': event.get('new_estimated_cost'),
+            'max_allowed_cost': event.get('max_allowed_cost'),
+            'repair_id': event['repair_id']
+        }))
+
     @database_sync_to_async
     def get_unread_notifications_count(self, category=None):
         """Get count of unread notifications for user, active role, and category"""

@@ -505,3 +505,63 @@ class MechanicRequestFlowIntegrationTest(APITestCase):
         )
         self.assertEqual(resp_fail.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("exceeds the maximum allowed estimate", str(resp_fail.data))
+
+    def test_repair_request_websocket_status_updates(self):
+        """
+        Verify that status changes broadcast real-time events over WebSocket:
+        - Broadcasts to tracking group (repair_request_{id})
+        - Broadcasts to customer notifications group (notifications_{customer_id}) with OTP
+        - Broadcasts to mechanic notifications group (notifications_{mechanic_id}) without OTP
+        """
+        repair = RepairRequest.objects.create(
+            customer=self.customer,
+            mechanic=self.mechanic,
+            vehicle_make="Toyota",
+            vehicle_model="Corolla",
+            vehicle_year=2021,
+            problem_description="Brake squeal",
+            estimated_cost=Decimal('25000.00'),
+            service_address="Victoria Island, Lagos",
+            service_latitude=Decimal('6.4281'),
+            service_longitude=Decimal('3.4219'),
+            status="pending"
+        )
+
+        from unittest.mock import AsyncMock
+
+        with patch("mechanics.signals.get_channel_layer") as mock_get_channel_layer:
+            mock_layer = MagicMock()
+            mock_layer.group_send = AsyncMock()
+            mock_get_channel_layer.return_value = mock_layer
+
+            # 1. Mechanic marks arrived -> OTP generated/active
+            repair.status = "arrived"
+            repair.otp_code = "654321"
+            repair.save()
+
+            # Check group_send calls
+            sent_groups = [call.args[0] for call in mock_layer.group_send.call_args_list]
+            self.assertIn(f"repair_request_{repair.id}", sent_groups)
+            self.assertIn(f"notifications_{self.customer.id}", sent_groups)
+            self.assertIn(f"notifications_{self.mechanic.id}", sent_groups)
+
+            # Inspect payload sent to customer's personal stream: OTP must be present
+            customer_call = next(
+                call for call in mock_layer.group_send.call_args_list
+                if call.args[0] == f"notifications_{self.customer.id}"
+            )
+            customer_payload = customer_call.args[1]
+            self.assertEqual(customer_payload['type'], 'repair_request.update')
+            self.assertEqual(customer_payload['repair_request']['status'], 'arrived')
+            self.assertEqual(customer_payload['repair_request']['otp_code'], '654321')
+
+            # Inspect payload sent to mechanic's personal stream: OTP must NOT be present
+            mechanic_call = next(
+                call for call in mock_layer.group_send.call_args_list
+                if call.args[0] == f"notifications_{self.mechanic.id}"
+            )
+            mechanic_payload = mechanic_call.args[1]
+            self.assertEqual(mechanic_payload['type'], 'repair_request.update')
+            self.assertEqual(mechanic_payload['repair_request']['status'], 'arrived')
+            self.assertNotIn('otp_code', mechanic_payload['repair_request'])
+

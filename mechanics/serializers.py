@@ -130,8 +130,12 @@ class RepairRequestSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         ret = super().to_representation(instance)
         request = self.context.get('request')
+        user = getattr(request, 'user', None) if request else None
+        if not user:
+            user = self.context.get('user')
+
         # Only reveal OTP if the authenticated user is the customer
-        if not (request and request.user.is_authenticated and instance.customer_id == request.user.id):
+        if not (user and getattr(user, 'is_authenticated', False) and instance.customer_id == getattr(user, 'id', None)):
             ret.pop('otp_code', None)
         return ret
 
